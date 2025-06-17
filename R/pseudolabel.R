@@ -601,7 +601,7 @@ as.data.frame.pseudolabels <- function(x, ...) {
       # Extract the cluster submatrix once and compute row means efficiently
       cluster_submatrix <- sim_matrix[cluster_members, cluster_members, drop = FALSE]
       
-      # For small clusters (≤ 5000 members), use dense slice for speed
+      # For small clusters (<=5000 members), use dense slice for speed
       if (length(cluster_members) <= 5000) {
         # Convert to dense for faster row operations on small matrices
         dense_submatrix <- as.matrix(cluster_submatrix)
@@ -756,7 +756,7 @@ as.data.frame.pseudolabels <- function(x, ...) {
 #' Advanced diversity selection with farthest-first traversal
 #'
 #' OPTIMIZED: Implements efficient farthest-first traversal (FFS) for diversity
-#' selection with improved O(k²) complexity through early termination and 
+#' selection with improved O(k^2) complexity through early termination and 
 #' sparse matrix optimizations.
 #'
 #' @param sim_matrix Similarity matrix
@@ -990,7 +990,7 @@ high_sim_pseudolabels <- function(strata,
         if (dist_val > pi) {
           if (expected_angular_distance) {
             warning("Unexpected distance value (", round(dist_val, 4), 
-                   " > π) from RcppAnnoy. This may indicate version incompatibility. ",
+                   " > pi) from RcppAnnoy. This may indicate version incompatibility. ",
                    "Expected squared angular distance, got raw distance.")
             expected_angular_distance <- FALSE  # Only warn once
           }
