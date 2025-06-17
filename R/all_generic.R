@@ -162,11 +162,11 @@ kema <- function(data, y, ...) {
 #' library(multidesign)
 #' 
 #' # Create example domains with partial task overlap
-#' d1_data <- matrix(rnorm(50), 10, 5)
+#' d1_data <- matrix(rnorm(50), 5, 10)  # 5 tasks x 10 features
 #' d1_design <- data.frame(task = factor(c("A", "B", "C", "D", "E")))
 #' d1 <- multidesign(d1_data, d1_design)
 #' 
-#' d2_data <- matrix(rnorm(40), 10, 4) 
+#' d2_data <- matrix(rnorm(40), 4, 10)  # 4 tasks x 10 features
 #' d2_design <- data.frame(task = factor(c("A", "C", "D", "F")))
 #' d2 <- multidesign(d2_data, d2_design)
 #' 

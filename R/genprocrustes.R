@@ -527,13 +527,13 @@ generalized_procrustes <- function(
 #' # Create example hyperdesign data
 #' library(multidesign)
 #' 
-#' # Domain 1: 10 features x 5 tasks
-#' d1_data <- matrix(rnorm(50), 10, 5)
+#' # Domain 1: 5 tasks x 10 features
+#' d1_data <- matrix(rnorm(50), 5, 10)
 #' d1_design <- data.frame(task = factor(c("A", "B", "C", "D", "E")))
 #' d1 <- multidesign(d1_data, d1_design)
 #' 
-#' # Domain 2: 10 features x 4 tasks (partial overlap)
-#' d2_data <- matrix(rnorm(40), 10, 4) 
+#' # Domain 2: 4 tasks x 10 features (partial overlap)
+#' d2_data <- matrix(rnorm(40), 4, 10) 
 #' d2_design <- data.frame(task = factor(c("A", "C", "D", "F")))
 #' d2 <- multidesign(d2_data, d2_design)
 #' 
@@ -545,7 +545,7 @@ generalized_procrustes <- function(
 #' 
 #' # Access results
 #' print(result$converged)
-#' print(dim(result$A_est))  # 10 features x 6 tasks
+#' print(dim(result$A_est))  # 10 features x 6 total tasks
 #' }
 #' @export
 generalized_procrustes.hyperdesign <- function(data, y,

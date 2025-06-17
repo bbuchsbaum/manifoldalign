@@ -2,6 +2,7 @@
 *.tar.gz
 *.tgz
 ..Rcheck/
+*.Rcheck/
 .Rproj.user/
 .Rhistory
 .RData

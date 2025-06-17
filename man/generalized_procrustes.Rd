@@ -186,11 +186,11 @@ even if input matrices contain explicit zeros.
 library(multidesign)
 
 # Create example domains with partial task overlap
-d1_data <- matrix(rnorm(50), 10, 5)
+d1_data <- matrix(rnorm(50), 5, 10)  # 5 tasks × 10 features
 d1_design <- data.frame(task = factor(c("A", "B", "C", "D", "E")))
 d1 <- multidesign(d1_data, d1_design)
 
-d2_data <- matrix(rnorm(40), 10, 4) 
+d2_data <- matrix(rnorm(40), 4, 10)  # 4 tasks × 10 features
 d2_design <- data.frame(task = factor(c("A", "C", "D", "F")))
 d2 <- multidesign(d2_data, d2_design)
 
@@ -232,13 +232,13 @@ print(dim(result$A_est))  # Should be 3x5
 # Create example hyperdesign data
 library(multidesign)
 
-# Domain 1: 10 features x 5 tasks
-d1_data <- matrix(rnorm(50), 10, 5)
+# Domain 1: 5 tasks x 10 features
+d1_data <- matrix(rnorm(50), 5, 10)
 d1_design <- data.frame(task = factor(c("A", "B", "C", "D", "E")))
 d1 <- multidesign(d1_data, d1_design)
 
-# Domain 2: 10 features x 4 tasks (partial overlap)
-d2_data <- matrix(rnorm(40), 10, 4) 
+# Domain 2: 4 tasks x 10 features (partial overlap)
+d2_data <- matrix(rnorm(40), 4, 10) 
 d2_design <- data.frame(task = factor(c("A", "C", "D", "F")))
 d2 <- multidesign(d2_data, d2_design)
 
@@ -250,7 +250,7 @@ result <- generalized_procrustes(hd, task)
 
 # Access results
 print(result$converged)
-print(dim(result$A_est))  # 10 features x 6 tasks
+print(dim(result$A_est))  # 10 features x 6 total tasks
 }
 }
 \references{
