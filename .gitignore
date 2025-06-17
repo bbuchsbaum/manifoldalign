@@ -1,0 +1,36 @@
+# R package build artifacts
+*.tar.gz
+*.tgz
+..Rcheck/
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# IDE files
+.vscode/
+.idea/
+*.Rproj
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*~
+*.tmp
+*.bak
+
+# Documentation build artifacts  
+docs/
+_site/
+inst/doc/
+
+# Compiled code
+*.so
+*.dll
+*.o
+*.a
+
+# Log files
+*.log 

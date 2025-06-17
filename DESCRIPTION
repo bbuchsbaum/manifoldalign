@@ -1,0 +1,40 @@
+Package: manifoldalign
+Type: Package
+Title: Manifold Alignment for Multi-Domain Data
+Version: 0.1.0
+Author: Brad Buchsbaum
+Maintainer: Brad Buchsbaum <brad.buchsbaum@gmail.com>
+Authors@R: person("Brad", "Buchsbaum", email = "brad.buchsbaum@gmail.com", role = c("aut", "cre"))
+Description: Provides tools for manifold alignment and domain adaptation across multiple data domains. Implements Kernel Manifold Alignment (KEMA) and related algorithms for aligning data manifolds while preserving local structure and class relationships. Features include semi-supervised learning support, efficient sparse matrix operations, and pseudolabeling for unsupervised domain adaptation. The package enables alignment of heterogeneous data types through kernel-based methods while maintaining computational efficiency for large-scale datasets.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+    Matrix,
+    PRIMME,
+    glmnet,
+    multivarious,
+    neighborweights,
+    cluster,
+    kernlab,
+    chk,
+    rlang,
+    purrr,
+    dplyr,
+    coop,
+    igraph,
+    methods,
+    magrittr,
+    genpca,
+    irlba,
+    RANN
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    RcppAnnoy,
+    multidesign,
+    tibble
+Depends:
+    R (>= 3.5.0)
+RoxygenNote: 7.3.2.9000

@@ -1,0 +1,13 @@
+^.*.Rproj$
+^.Rproj\.user$
+^experimental$
+^data-raw$
+^.git$
+^.gitignore$
+^README.Rmd$
+^README.md$
+^CLAUDE.md$
+^KEMA_TEST_STATUS.md$
+^ruleset.md$
+^repomix-output.xml$
+^TODO\.md$
