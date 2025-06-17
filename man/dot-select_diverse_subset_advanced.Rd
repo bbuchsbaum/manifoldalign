@@ -34,7 +34,7 @@ Vector of selected representative indices
 }
 \description{
 OPTIMIZED: Implements efficient farthest-first traversal (FFS) for diversity
-selection with improved O(k²) complexity through early termination and 
+selection with improved O(k^2) complexity through early termination and 
 sparse matrix optimizations.
 }
 \keyword{internal}
