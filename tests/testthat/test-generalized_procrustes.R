@@ -221,3 +221,41 @@ test_that("vectorized operations maintain mathematical correctness", {
     expect_true(abs(abs(det(O)) - 1) < 1e-3)  # |det| = 1 (proper or improper rotation)
   })
 }) 
+# ------------------------------------------------
+# 11. hyperdesign method basic functionality
+quick_hd_gp <- function(Xlist, tasklist) {
+  md_list <- Map(function(x, t) {
+    multidesign::multidesign(x, data.frame(task = factor(t)))
+  }, Xlist, tasklist)
+  names(md_list) <- paste0("domain", seq_along(md_list))
+  multidesign::hyperdesign(md_list)
+}
+
+test_that("generalized_procrustes works with hyperdesign objects", {
+  skip_if_not_installed("multidesign")
+  set.seed(123)
+  X1 <- matrix(rnorm(9), 3, 3)
+  X2 <- matrix(rnorm(9), 3, 3)
+  hd <- quick_hd_gp(list(X1, X2), list(c("A","B","C"), c("B","C","D")))
+
+  res <- generalized_procrustes(hd, task, max_iter = 50)
+  expect_true(res$converged)
+  expect_equal(length(res$O_mats), 2)
+  expect_equal(dim(res$A_est), c(3,4))
+  lapply(res$O_mats, function(O) expect_equal(crossprod(O), diag(3), tolerance = 1e-4))
+})
+
+# ------------------------------------------------
+# 12. hyperdesign input validation
+
+test_that("hyperdesign method detects missing task column", {
+  skip_if_not_installed("multidesign")
+  X1 <- matrix(rnorm(6), 2, 3)
+  X2 <- matrix(rnorm(6), 2, 3)
+  hd_bad <- multidesign::hyperdesign(list(
+    domain1 = list(x = X1, design = data.frame(tk = factor(c("A","B")))),
+    domain2 = list(x = X2, design = data.frame(task = factor(c("A","B"))))
+  ))
+  expect_error(generalized_procrustes(hd_bad, task), "not found")
+})
+
