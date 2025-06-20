@@ -12,6 +12,7 @@ LazyData: true
 Imports:
     Matrix,
     PRIMME,
+    RSpectra,
     glmnet,
     multivarious,
     neighborweights,
@@ -27,7 +28,11 @@ Imports:
     magrittr,
     genpca,
     irlba,
-    RANN
+    RANN,
+    Rcpp,
+    RcppArmadillo,
+    roptim,
+    clue
 Suggests:
     testthat (>= 3.0.0),
     knitr,
@@ -37,4 +42,8 @@ Suggests:
     tibble
 Depends:
     R (>= 3.5.0)
+LinkingTo:
+    Rcpp,
+    RcppArmadillo,
+    roptim
 RoxygenNote: 7.3.2.9000

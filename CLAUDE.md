@@ -78,6 +78,24 @@ Critical packages that must be available:
 - multivarious (multi-block data structures)
 - neighborweights (graph construction)
 
+#### External Package Information
+For reference when working with this codebase:
+
+**multivarious package**: Multi-block data analysis and dimensionality reduction
+- Location: ~/code/multivarious/R or Context7 ID: /bbuchsbaum/multivarious
+- Core concepts: projectors (dimensionality reduction), bi_projectors (two-way mappings), hyperdesign objects
+- Key classes: projector, bi_projector, cross_projector, multiblock_projector
+- Data format: "samples x features" convention (rows=samples, cols=features)
+- Preprocessing: Sophisticated pipeline with forward/apply/reverse methods
+- Caching: Expensive computations cached in projector .cache environment
+
+**multidesign package**: Complex experimental design and multi-block data management  
+- Location: ~/code/multidesign/R or Context7 (no exact match found)
+- Purpose: Tools for managing complex experimental designs and multi-block data
+- Core concepts: design matrix manipulation, cross-validation, data splitting
+- Integrates with tidyverse ecosystem (tibble, dplyr)
+- Supports lazy evaluation and memory-efficient processing
+
 ### Testing Strategy
 - Comprehensive test suite in tests/testthat/
 - Validation framework in R/kema-validation.R compares implementations against reference results

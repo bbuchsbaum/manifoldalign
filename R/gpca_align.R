@@ -20,6 +20,7 @@
 #'
 #' @return A multiblock_biprojector object containing the GPCA alignment
 #' @importFrom genpca genpca
+#' @importFrom multivarious prep init_transform
 #' @export
 gpca_align.hyperdesign <- function(data, y, 
                     preproc=center(), 
@@ -183,12 +184,38 @@ gpca_align.hyperdesign <- function(data, y,
   ninstances <- length(labels)
   nsets <- length(data)
   
-  pdata <- multivarious::init_transform(data, preproc) 
-  proclist <- attr(pdata, "preproc")
+  # Handle preprocessing broadcasting
+  if (!is.null(preproc)) {
+    if (is.function(preproc) || inherits(preproc, "prepper")) {
+      # Single preprocessing function/object provided - replicate for all domains
+      preproc <- rep(list(preproc), nsets)
+      message("Replicating single preprocessing function for all ", nsets, " domains")
+    } else if (is.list(preproc) && length(preproc) != nsets) {
+      stop("Number of preprocessing functions (", length(preproc), 
+           ") must match number of domains (", nsets, ")")
+    }
+  }
   
-  # Synchronize names between proclist and pdata
-  names(proclist) <- names(pdata)
+  # Manually apply preprocessing to each domain
+  pdata <- data
+  proclist <- list()
   
+  for (i in seq_along(data)) {
+    if (!is.null(preproc) && !is.null(preproc[[i]])) {
+      proc_template <- multivarious::prep(preproc[[i]])
+      transformed_x <- multivarious::init_transform(proc_template, data[[i]]$x)
+      pdata[[i]]$x <- transformed_x
+      # Store the processor - use the attribute if available, otherwise use the template
+      proc_attr <- attr(transformed_x, "preproc")
+      proclist[[i]] <- if (is.null(proc_attr)) proc_template else proc_attr
+    } else {
+      # No preprocessing
+      pdata[[i]]$x <- data[[i]]$x
+      proclist[[i]] <- NULL
+    }
+  }
+  names(proclist) <- names(data)
+
   # Get sample block indices using the exported function
   sample_block_idx <- block_indices(pdata)
   
