@@ -12,7 +12,7 @@ solve_sylvester_rwr(
   gamma = 0.1,
   tol = 1e-06,
   max_iter = 50,
-  use_rcpp = NULL
+  use_cpp = FALSE
 )
 }
 \arguments{
@@ -30,7 +30,7 @@ solve_sylvester_rwr(
 
 \item{max_iter}{Maximum iterations}
 
-\item{use_rcpp}{Whether to use C++ implementation}
+\item{use_cpp}{Whether to use C++ implementation}
 }
 \description{
 Solve Sylvester Equation for Cross-Graph RWR Cost (Dispatcher)

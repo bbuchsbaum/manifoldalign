@@ -167,7 +167,6 @@ grasp_fit <- function(strata, proc, ncomp, q_descriptors, sigma, lambda,
 #' @param use_laplacian Whether to use Laplacian normalization
 #' @return List of spectral bases for each domain
 #' @keywords internal
-#' @importFrom RSpectra eigs_sym
 compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
   # Validate input
   if (!is.list(strata) || length(strata) == 0) {
@@ -493,4 +492,11 @@ compute_grasp_assignment <- function(basis1, basis2, desc1, desc2, M,
 #' @export
 grasp <- function(data, ...) {
   UseMethod("grasp")
+}
+
+#' @export
+grasp.default <- function(data, ...) {
+  stop("grasp() requires a hyperdesign object. ",
+       "Got: ", paste(class(data), collapse = ", "), 
+       ". See ?grasp for usage examples.", call. = FALSE)
 }

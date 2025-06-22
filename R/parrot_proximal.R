@@ -177,15 +177,12 @@ compute_edge_gradient_r <- function(S, networks) {
 #' 
 #' @param S Current transport plan
 #' @param networks Network structures
-#' @param use_rcpp Whether to use C++ implementation
+#' @param use_cpp Whether to use C++ implementation
 #' @return Gradient matrix
 #' @keywords internal
-compute_edge_gradient <- function(S, networks, use_rcpp = NULL) {
-  if (is.null(use_rcpp)) {
-    use_rcpp <- get_parrot_use_rcpp()
-  }
+compute_edge_gradient <- function(S, networks, use_cpp = FALSE) {
   
-  if (use_rcpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
     # Extract components for C++ function
     A1 <- networks[[1]]$adjacency
     A2 <- networks[[2]]$adjacency
@@ -532,31 +529,27 @@ solve_sinkhorn_stabilized_r <- function(C, tau, max_iter, tol) {
 #' Log-domain Stabilized Sinkhorn Algorithm (Dispatcher)
 #' 
 #' Implements numerically stable Sinkhorn in log domain.
-#' Routes to either R or C++ implementation based on use_rcpp flag.
+#' Routes to either R or C++ implementation based on use_cpp flag.
 #' 
 #' @param C Cost matrix
 #' @param tau Entropy regularization parameter
 #' @param max_iter Maximum iterations
 #' @param tol Convergence tolerance
-#' @param use_rcpp Whether to use C++ implementation
+#' @param use_cpp Whether to use C++ implementation
 #' @return Transport plan matrix
 #' @keywords internal
-solve_sinkhorn_stabilized <- function(C, tau, max_iter, tol, use_rcpp = NULL) {
-  # Determine whether to use C++
-  if (is.null(use_rcpp)) {
-    use_rcpp <- get_parrot_use_rcpp()
-  }
+solve_sinkhorn_stabilized <- function(C, tau, max_iter, tol, use_cpp = FALSE) {
   
-  if (use_rcpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
     # Ensure C is a regular matrix for C++
     if (inherits(C, "Matrix")) {
       C <- as.matrix(C)
     }
     
-    # Call C++ implementation (does not take use_rcpp)
+    # Call C++ implementation (does not take use_cpp)
     solve_sinkhorn_stabilized_cpp(C, tau, max_iter, tol)
   } else {
-    # Use existing R implementation (does not take use_rcpp)
+    # Use existing R implementation (does not take use_cpp)
     solve_sinkhorn_stabilized_r(C, tau, max_iter, tol)
   }
 }

@@ -4,7 +4,7 @@
 \alias{solve_sinkhorn_stabilized}
 \title{Log-domain Stabilized Sinkhorn Algorithm (Dispatcher)}
 \usage{
-solve_sinkhorn_stabilized(C, tau, max_iter, tol, use_rcpp = NULL)
+solve_sinkhorn_stabilized(C, tau, max_iter, tol, use_cpp = FALSE)
 }
 \arguments{
 \item{C}{Cost matrix}
@@ -15,13 +15,13 @@ solve_sinkhorn_stabilized(C, tau, max_iter, tol, use_rcpp = NULL)
 
 \item{tol}{Convergence tolerance}
 
-\item{use_rcpp}{Whether to use C++ implementation (NULL = check global option)}
+\item{use_cpp}{Whether to use C++ implementation}
 }
 \value{
 Transport plan matrix
 }
 \description{
 Implements numerically stable Sinkhorn in log domain.
-Routes to either R or C++ implementation based on use_rcpp flag.
+Routes to either R or C++ implementation based on use_cpp flag.
 }
 \keyword{internal}

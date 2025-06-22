@@ -625,24 +625,21 @@ solve_sylvester_rwr_r <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1, tol 
 #' Solve Sylvester Equation for Cross-Graph RWR Cost (Dispatcher)
 #'
 #' @inheritParams solve_sylvester_rwr_r
-#' @param use_rcpp Whether to use C++ implementation
+#' @param use_cpp Whether to use C++ implementation
 #' @keywords internal
 solve_sylvester_rwr <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1, 
-                                tol = 1e-6, max_iter = 50, use_rcpp = NULL) {
-  if (is.null(use_rcpp)) {
-    use_rcpp <- get_parrot_use_rcpp()
-  }
+                                tol = 1e-6, max_iter = 50, use_cpp = FALSE) {
   
-  if (use_rcpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
     # Ensure matrices are regular for C++
     if (inherits(W1, "Matrix")) W1 <- as.matrix(W1)
     if (inherits(W2T, "Matrix")) W2T <- as.matrix(W2T)
     if (inherits(Cnode, "Matrix")) Cnode <- as.matrix(Cnode)
     
-    # Call C++ implementation (no use_rcpp arg)
+    # Call C++ implementation (no use_cpp arg)
     solve_sylvester_rwr_cpp(W1, W2T, Cnode, beta, gamma, tol, max_iter)
   } else {
-    # Use R implementation (no use_rcpp arg)
+    # Use R implementation (no use_cpp arg)
     solve_sylvester_rwr_r(W1, W2T, Cnode, beta, gamma, tol, max_iter)
   }
 }
@@ -736,15 +733,12 @@ compute_parrot_cost_r <- function(networks, rwr_features, anchor_info, alpha = 0
 #' Compute Position-Aware Cost Matrix (Dispatcher)
 #' 
 #' @inheritParams compute_parrot_cost_r
-#' @param use_rcpp Whether to use C++ implementation
+#' @param use_cpp Whether to use C++ implementation
 #' @keywords internal
 compute_parrot_cost <- function(networks, rwr_features, anchor_info, alpha = 0.5, 
-                                sigma = 0.15, gamma = 0.1, use_rcpp = NULL) {
-  if (is.null(use_rcpp)) {
-    use_rcpp <- get_parrot_use_rcpp()
-  }
+                                sigma = 0.15, gamma = 0.1, use_cpp = FALSE) {
   
-  if (use_rcpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
     # Extract components for C++
     X1 <- networks[[1]]$features
     X2 <- networks[[2]]$features
@@ -907,6 +901,39 @@ solve_sinkhorn_transport <- function(cost_matrix, tau, max_iter, tol) {
   solve_sinkhorn_stabilized(cost_matrix, tau, max_iter, tol)
 }
 
+#' Compute Squared Euclidean Distance Matrix (R implementation)
+#' 
+#' @param X1 First matrix (n1 x d)
+#' @param X2 Second matrix (n2 x d)
+#' @return Distance matrix (n1 x n2)
+#' @keywords internal
+compute_squared_distances_r <- function(X1, X2) {
+  X1_sq <- rowSums(X1^2)
+  X2_sq <- rowSums(X2^2)
+  outer(X1_sq, X2_sq, "+") - 2 * (X1 %*% t(X2))
+}
+
+#' Compute Squared Euclidean Distance Matrix (Dispatcher)
+#' 
+#' @param X1 First matrix (n1 x d)
+#' @param X2 Second matrix (n2 x d)
+#' @param use_cpp Whether to use C++ implementation
+#' @return Distance matrix (n1 x n2)
+#' @keywords internal
+compute_squared_distances <- function(X1, X2, use_cpp = FALSE) {
+  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
+    # Ensure matrices are regular for C++
+    if (inherits(X1, "Matrix")) X1 <- as.matrix(X1)
+    if (inherits(X2, "Matrix")) X2 <- as.matrix(X2)
+    
+    # Call C++ implementation
+    compute_squared_distances_cpp(X1, X2)
+  } else {
+    # Use R implementation
+    compute_squared_distances_r(X1, X2)
+  }
+}
+
 #' Compute PARROT Embeddings
 #' 
 #' @param networks List of network structures
@@ -941,21 +968,11 @@ compute_parrot_embeddings <- function(networks, transport_plan, ncomp) {
   scores
 }
 
-.parrot_globals <- new.env(parent = emptyenv())
-.parrot_globals$use_rcpp <- FALSE
-
-#' Set whether to use Rcpp implementations in PARROT
-#' 
-#' @param use_rcpp Logical, whether to use Rcpp
-#' @export
-set_parrot_use_rcpp <- function(use_rcpp = TRUE) {
-  .parrot_globals$use_rcpp <- use_rcpp
-}
 
 #' Get whether to use Rcpp implementations in PARROT
 #' 
 #' @return Logical, whether to use Rcpp
 #' @export
-get_parrot_use_rcpp <- function() {
-  .parrot_globals$use_rcpp
+get_parrot_use_cpp <- function() {
+  .parrot_globals$use_cpp
 }

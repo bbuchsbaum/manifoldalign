@@ -128,5 +128,5 @@ probabilistic knowledge transfer. In Proceedings of the European Conference
 on Computer Vision (pp. 268-284).
 }
 \seealso{
-\code{\link{predict.simembed}}, \code{\link{plot.simembed}}
+\code{\link{predict.simembed}}
 }

@@ -83,20 +83,33 @@ r is the number of landmarks.
 \donttest{
 # Example with hyperdesign data
 library(multivarious)
+library(multidesign)
 
 # Create synthetic multi-domain data
-domain1 <- list(x = matrix(rnorm(100), 50, 2), 
-               labels = sample(c("A", "B"), 50, TRUE))
-domain2 <- list(x = matrix(rnorm(100), 50, 2), 
-               labels = sample(c("A", "B"), 50, TRUE))
-hd <- list(domain1 = domain1, domain2 = domain2)
+set.seed(123)
+X1 <- matrix(rnorm(100), 50, 2)
+X2 <- matrix(rnorm(100), 50, 2)
+labels <- sample(c("A", "B"), 50, TRUE)
+
+# Create design data frames
+design1 <- data.frame(labels = labels)
+design2 <- data.frame(labels = labels)
+
+# Create multidesign objects
+md1 <- multidesign(X1, design1)
+md2 <- multidesign(X2, design2)
+
+# Create hyperdesign
+hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
 
 # Run KEMA with default settings
 result <- kema(hd, y = labels, ncomp = 2)
 
 # Semi-supervised learning with missing labels
-domain1$labels[1:10] <- NA  # Mark some samples as unlabeled
-result_semi <- kema(hd, y = labels, ncomp = 2)
+design1$labels[1:10] <- NA  # Mark some samples as unlabeled
+md1_semi <- multidesign(X1, design1)
+hd_semi <- hyperdesign(list(domain1 = md1_semi, domain2 = md2))
+result_semi <- kema(hd_semi, y = labels, ncomp = 2)
 
 # Use exact solver for highest accuracy
 result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)

@@ -5,29 +5,7 @@
 \alias{generalized_procrustes.hyperdesign}
 \title{Generalized Orthogonal Procrustes Alignment}
 \usage{
-generalized_procrustes(
-  A_list,
-  task_labels_list,
-  L,
-  max_iter = 100,
-  tol = 1e-06,
-  tol_type = c("relative", "absolute"),
-  verbose = FALSE,
-  svd_method = c("irlba", "base"),
-  svd_opts = list()
-)
-
-generalized_procrustes(
-  A_list,
-  task_labels_list,
-  L,
-  max_iter = 100,
-  tol = 1e-06,
-  tol_type = c("relative", "absolute"),
-  verbose = FALSE,
-  svd_method = c("irlba", "base"),
-  svd_opts = list()
-)
+generalized_procrustes(data, ...)
 
 \method{generalized_procrustes}{hyperdesign}(
   data,
@@ -43,16 +21,14 @@ generalized_procrustes(
 )
 }
 \arguments{
-\item{A_list}{A list of length \eqn{n}, where each element \eqn{A_i} is a 
-\eqn{d x li} numeric matrix representing the observed data for subject 
-\eqn{i}. Each subject might have different \eqn{li < L}.}
+\item{data}{A hyperdesign object containing multiple data domains}
 
-\item{task_labels_list}{A list of length \eqn{n}, where 
-\eqn{task_labels_list[[i]]} is an integer (or numeric) vector of length 
-\eqn{li}, specifying which global tasks each column of \eqn{A_i} 
-corresponds to (in \eqn{1..L}).}
+\item{...}{Additional arguments (currently unused)}
 
-\item{L}{Integer. The total number of distinct tasks across all subjects.}
+\item{y}{Name of the task/label variable to use for alignment}
+
+\item{preproc}{Preprocessing function to apply to the data (default: 
+\code{center()})}
 
 \item{max_iter}{Maximum number of iterations (default: 100)}
 
@@ -65,15 +41,6 @@ corresponds to (in \eqn{1..L}).}
 \item{svd_method}{SVD method to use (default: "irlba")}
 
 \item{svd_opts}{Options for SVD method (default: empty list)}
-
-\item{data}{A hyperdesign object containing multiple data domains}
-
-\item{y}{Name of the task/label variable to use for alignment}
-
-\item{preproc}{Preprocessing function to apply to the data (default: 
-\code{center()})}
-
-\item{...}{Additional arguments (currently unused)}
 }
 \value{
 The return value depends on the specific method:
@@ -83,24 +50,11 @@ The return value depends on the specific method:
   \item For direct matrix input: A list with transformation matrices and 
     alignment results
 }
-
-A list with:
-\item{O_mats}{List of \eqn{n} orthogonal \eqn{d \times d} matrices.}
-\item{A_est}{A \eqn{d \times L} consensus matrix. Columns corresponding to 
-  tasks observed by no subjects will contain \code{NA}.}
-\item{iterations}{Number of iterations performed.}
-\item{converged}{Logical indicating whether the GPM converged.}
-\item{final_diff}{The final difference value (`sqrt(diff_sq)`) used for the 
-  convergence check.}
 }
 \description{
 Performs Generalized Orthogonal Procrustes alignment to find orthogonal 
 transformations. Aligns data from multiple domains by minimizing squared 
 differences between corresponding task observations.
-
-Extends Generalized Orthogonal Procrustes to handle partial task 
-observations. Uses efficient sparse matrix operations and robust 
-initialization.
 }
 \details{
 This method extends classical Procrustes analysis to handle partial task 
@@ -136,49 +90,6 @@ Key features:
   \item Optional tightness certificate for global optimality validation
   \item Flexible preprocessing and multiple input formats
 }
-
-\strong{Sparse Construction of D}:
-We form a large sparse matrix \eqn{D \in R^{(n d) \times L}} using 
-\code{Matrix::sparseMatrix}. Triplet indices (row, column, value) are 
-collected efficiently.
-
-\strong{Robust Initialization}:
-Initialization uses the top \eqn{d} left singular vectors of \eqn{D}, typically 
-computed via \code{irlba::irlba}. If \code{irlba} fails or returns a rank 
-deficient result (less than \eqn{d} vectors), it falls back to initializing 
-with random orthogonal matrices to ensure robustness.
-
-\strong{Vectorized GPM Iteration}:
-The core iteration avoids \eqn{O(n^2)} complexity by computing the update 
-term \eqn{CO} using two efficient sparse matrix multiplications:
-\enumerate{
-  \item \eqn{Y <- D^T * stack(O_{old})}
-  \item \eqn{CO_{stack} <- D * Y}
-}
-where \eqn{stack(O)} reshapes the \eqn{d \times d \times n} array of 
-rotation matrices into an \eqn{(nd) \times d} matrix. The resulting 
-\eqn{(nd) \times d} matrix \eqn{CO_{stack}} is then unstacked back into 
-a \eqn{d \times d \times n} array.
-
-\strong{Efficient Projection}:
-Each \eqn{d \times d} slice of the unstacked update is projected onto the 
-orthogonal group O(d). An efficient projection method (\code{.projO}) is used, 
-switching between an eigenvalue-based method for small \eqn{d} and an 
-SVD-based method for larger \eqn{d}.
-
-\strong{Convergence Check}:
-Convergence is assessed by comparing the Frobenius norm of the difference 
-between consecutive projected iterates \eqn{O_{new}} and 
-\eqn{O_{old}}. For relative tolerance, this difference is scaled by the 
-Frobenius norm of the initial \eqn{O} matrices (calculated once).
-
-\strong{Final Consensus A_est}:
-After convergence, the consensus matrix \eqn{A_{est}} is computed. 
-For each task \eqn{j}, we average the transformed data 
-\eqn{O_i^T A_i(*, j_i)} only over subjects \eqn{i} in \eqn{S_j} that observed 
-task \eqn{j}. Task counts (number of subjects observing each task \eqn{j}) are 
-computed by directly iterating over \code{task_labels_list}, ensuring correctness 
-even if input matrices contain explicit zeros.
 }
 \examples{
 \donttest{
@@ -203,29 +114,6 @@ result <- generalized_procrustes(hd, task)
 # Check convergence and results
 print(result$converged)
 print(dim(result$A_est))  # Features x total tasks
-}
-
-\donttest{
-# Simple example with 2 subjects and 3 tasks
-A1 <- matrix(rnorm(12), 3, 4)  # Subject 1: 3 features x 4 tasks
-A2 <- matrix(rnorm(9), 3, 3)   # Subject 2: 3 features x 3 tasks
-
-# Task labels (partial overlap)
-task_labels1 <- c(1, 2, 3, 4)  # Subject 1 observes tasks 1,2,3,4
-task_labels2 <- c(1, 3, 5)     # Subject 2 observes tasks 1,3,5
-
-# Run alignment
-result <- generalized_procrustes(
-  A_list = list(A1, A2),
-  task_labels_list = list(task_labels1, task_labels2),
-  L = 5,  # Total of 5 unique tasks
-  max_iter = 50,
-  verbose = FALSE
-)
-
-# Check results
-print(result$converged)
-print(dim(result$A_est))  # Should be 3x5
 }
 
 \donttest{

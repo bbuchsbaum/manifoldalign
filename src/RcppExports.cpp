@@ -11,6 +11,19 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// debug_network_simplex
+arma::mat debug_network_simplex(arma::mat cost, arma::vec a, arma::vec b);
+RcppExport SEXP _manifoldalign_debug_network_simplex(SEXP costSEXP, SEXP aSEXP, SEXP bSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type a(aSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type b(bSEXP);
+    rcpp_result_gen = Rcpp::wrap(debug_network_simplex(cost, a, b));
+    return rcpp_result_gen;
+END_RCPP
+}
 // linear_sim_embed_cpp
 Rcpp::List linear_sim_embed_cpp(const arma::mat& X, const arma::mat& T, const arma::mat& M, double sigma_P, int ncomp, double alpha_p, int maxit, double tol);
 RcppExport SEXP _manifoldalign_linear_sim_embed_cpp(SEXP XSEXP, SEXP TSEXP, SEXP MSEXP, SEXP sigma_PSEXP, SEXP ncompSEXP, SEXP alpha_pSEXP, SEXP maxitSEXP, SEXP tolSEXP) {
@@ -26,6 +39,35 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
     Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
     rcpp_result_gen = Rcpp::wrap(linear_sim_embed_cpp(X, T, M, sigma_P, ncomp, alpha_p, maxit, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// network_simplex_ot_cpp
+Rcpp::NumericMatrix network_simplex_ot_cpp(Rcpp::NumericMatrix cost_r, Rcpp::NumericVector a_r, Rcpp::NumericVector b_r, double eps);
+RcppExport SEXP _manifoldalign_network_simplex_ot_cpp(SEXP cost_rSEXP, SEXP a_rSEXP, SEXP b_rSEXP, SEXP epsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type cost_r(cost_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type a_r(a_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type b_r(b_rSEXP);
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(network_simplex_ot_cpp(cost_r, a_r, b_r, eps));
+    return rcpp_result_gen;
+END_RCPP
+}
+// partial_ot_mass_rcpp
+Rcpp::NumericMatrix partial_ot_mass_rcpp(Rcpp::NumericMatrix cost_r, Rcpp::NumericVector a_r, Rcpp::NumericVector b_r, double mass, double eps);
+RcppExport SEXP _manifoldalign_partial_ot_mass_rcpp(SEXP cost_rSEXP, SEXP a_rSEXP, SEXP b_rSEXP, SEXP massSEXP, SEXP epsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type cost_r(cost_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type a_r(a_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type b_r(b_rSEXP);
+    Rcpp::traits::input_parameter< double >::type mass(massSEXP);
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(partial_ot_mass_rcpp(cost_r, a_r, b_r, mass, eps));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -83,44 +125,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::vec& >::type anchor_vals2(anchor_vals2SEXP);
     Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
     rcpp_result_gen = Rcpp::wrap(compute_anchor_gradient_cpp(S_prev, anchor_idx1, anchor_idx2, anchor_vals1, anchor_vals2, eps));
-    return rcpp_result_gen;
-END_RCPP
-}
-// log_sum_exp_cols
-arma::vec log_sum_exp_cols(const arma::mat& log_K, const arma::vec& log_u);
-RcppExport SEXP _manifoldalign_log_sum_exp_cols(SEXP log_KSEXP, SEXP log_uSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type log_K(log_KSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type log_u(log_uSEXP);
-    rcpp_result_gen = Rcpp::wrap(log_sum_exp_cols(log_K, log_u));
-    return rcpp_result_gen;
-END_RCPP
-}
-// log_sum_exp_rows
-arma::vec log_sum_exp_rows(const arma::mat& log_K, const arma::vec& log_v);
-RcppExport SEXP _manifoldalign_log_sum_exp_rows(SEXP log_KSEXP, SEXP log_vSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type log_K(log_KSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type log_v(log_vSEXP);
-    rcpp_result_gen = Rcpp::wrap(log_sum_exp_rows(log_K, log_v));
-    return rcpp_result_gen;
-END_RCPP
-}
-// solve_sinkhorn_stabilized_cpp
-arma::mat solve_sinkhorn_stabilized_cpp(const arma::mat& C_in, double tau, int max_iter, double tol);
-RcppExport SEXP _manifoldalign_solve_sinkhorn_stabilized_cpp(SEXP C_inSEXP, SEXP tauSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type C_in(C_inSEXP);
-    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
-    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
-    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(solve_sinkhorn_stabilized_cpp(C_in, tau, max_iter, tol));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -202,21 +206,106 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sinkhorn_unified
+arma::mat sinkhorn_unified(const arma::mat& cost, const arma::vec& a, const arma::vec& b, double epsilon, int max_iter, double tol, bool stabilized);
+RcppExport SEXP _manifoldalign_sinkhorn_unified(SEXP costSEXP, SEXP aSEXP, SEXP bSEXP, SEXP epsilonSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP stabilizedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type a(aSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< bool >::type stabilized(stabilizedSEXP);
+    rcpp_result_gen = Rcpp::wrap(sinkhorn_unified(cost, a, b, epsilon, max_iter, tol, stabilized));
+    return rcpp_result_gen;
+END_RCPP
+}
+// solve_sinkhorn_stabilized_cpp
+arma::mat solve_sinkhorn_stabilized_cpp(const arma::mat& C_in, double tau, int max_iter, double tol);
+RcppExport SEXP _manifoldalign_solve_sinkhorn_stabilized_cpp(SEXP C_inSEXP, SEXP tauSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type C_in(C_inSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(solve_sinkhorn_stabilized_cpp(C_in, tau, max_iter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sinkhorn_ot_cpp
+Rcpp::NumericMatrix sinkhorn_ot_cpp(Rcpp::NumericMatrix cost_r, Rcpp::NumericVector a_r, Rcpp::NumericVector b_r, double epsilon, int max_iter, double tol);
+RcppExport SEXP _manifoldalign_sinkhorn_ot_cpp(SEXP cost_rSEXP, SEXP a_rSEXP, SEXP b_rSEXP, SEXP epsilonSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type cost_r(cost_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type a_r(a_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type b_r(b_rSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(sinkhorn_ot_cpp(cost_r, a_r, b_r, epsilon, max_iter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// has_lemon_network_simplex
+bool has_lemon_network_simplex();
+RcppExport SEXP _manifoldalign_has_lemon_network_simplex() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(has_lemon_network_simplex());
+    return rcpp_result_gen;
+END_RCPP
+}
+// test_network_simplex_minimal
+arma::mat test_network_simplex_minimal();
+RcppExport SEXP _manifoldalign_test_network_simplex_minimal() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(test_network_simplex_minimal());
+    return rcpp_result_gen;
+END_RCPP
+}
+// apply_tv_proximal_cpp
+arma::mat apply_tv_proximal_cpp(const arma::mat& Y, double lambda);
+RcppExport SEXP _manifoldalign_apply_tv_proximal_cpp(SEXP YSEXP, SEXP lambdaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    rcpp_result_gen = Rcpp::wrap(apply_tv_proximal_cpp(Y, lambda));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_manifoldalign_debug_network_simplex", (DL_FUNC) &_manifoldalign_debug_network_simplex, 3},
     {"_manifoldalign_linear_sim_embed_cpp", (DL_FUNC) &_manifoldalign_linear_sim_embed_cpp, 8},
+    {"_manifoldalign_network_simplex_ot_cpp", (DL_FUNC) &_manifoldalign_network_simplex_ot_cpp, 4},
+    {"_manifoldalign_partial_ot_mass_rcpp", (DL_FUNC) &_manifoldalign_partial_ot_mass_rcpp, 5},
     {"_manifoldalign_compute_edge_distances_cpp", (DL_FUNC) &_manifoldalign_compute_edge_distances_cpp, 2},
     {"_manifoldalign_compute_edge_gradient_cpp", (DL_FUNC) &_manifoldalign_compute_edge_gradient_cpp, 5},
     {"_manifoldalign_compute_neighborhood_gradient_cpp", (DL_FUNC) &_manifoldalign_compute_neighborhood_gradient_cpp, 4},
     {"_manifoldalign_compute_anchor_gradient_cpp", (DL_FUNC) &_manifoldalign_compute_anchor_gradient_cpp, 6},
-    {"_manifoldalign_log_sum_exp_cols", (DL_FUNC) &_manifoldalign_log_sum_exp_cols, 2},
-    {"_manifoldalign_log_sum_exp_rows", (DL_FUNC) &_manifoldalign_log_sum_exp_rows, 2},
-    {"_manifoldalign_solve_sinkhorn_stabilized_cpp", (DL_FUNC) &_manifoldalign_solve_sinkhorn_stabilized_cpp, 4},
     {"_manifoldalign_normalize_doubly_stochastic_cpp", (DL_FUNC) &_manifoldalign_normalize_doubly_stochastic_cpp, 5},
     {"_manifoldalign_compute_squared_distances_cpp", (DL_FUNC) &_manifoldalign_compute_squared_distances_cpp, 2},
     {"_manifoldalign_solve_sylvester_rwr_cpp", (DL_FUNC) &_manifoldalign_solve_sylvester_rwr_cpp, 7},
     {"_manifoldalign_compute_rwr_vectorized_cpp", (DL_FUNC) &_manifoldalign_compute_rwr_vectorized_cpp, 5},
     {"_manifoldalign_compute_parrot_cost_cpp", (DL_FUNC) &_manifoldalign_compute_parrot_cost_cpp, 9},
+    {"_manifoldalign_sinkhorn_unified", (DL_FUNC) &_manifoldalign_sinkhorn_unified, 7},
+    {"_manifoldalign_solve_sinkhorn_stabilized_cpp", (DL_FUNC) &_manifoldalign_solve_sinkhorn_stabilized_cpp, 4},
+    {"_manifoldalign_sinkhorn_ot_cpp", (DL_FUNC) &_manifoldalign_sinkhorn_ot_cpp, 6},
+    {"_manifoldalign_has_lemon_network_simplex", (DL_FUNC) &_manifoldalign_has_lemon_network_simplex, 0},
+    {"_manifoldalign_test_network_simplex_minimal", (DL_FUNC) &_manifoldalign_test_network_simplex_minimal, 0},
+    {"_manifoldalign_apply_tv_proximal_cpp", (DL_FUNC) &_manifoldalign_apply_tv_proximal_cpp, 2},
     {NULL, NULL, 0}
 };
 

@@ -20,6 +20,7 @@
   solver = c("sinkhorn", "exact"),
   max_iter = 100,
   tol = 1e-06,
+  use_cpp = FALSE,
   ...
 )
 }
@@ -54,6 +55,8 @@ lambda_e, lambda_n, lambda_p separately for fine control}
 \item{max_iter}{Maximum number of iterations (default: 100)}
 
 \item{tol}{Convergence tolerance (default: 1e-6)}
+
+\item{use_cpp}{Whether to use C++ optimizations (default: FALSE)}
 
 \item{...}{Additional arguments (currently unused)}
 }

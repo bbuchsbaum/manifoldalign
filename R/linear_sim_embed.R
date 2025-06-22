@@ -43,6 +43,7 @@ predict.simembed <- function(object, newdata, ...) {
 #' Print Method for Similarity Embedding
 #' @param x A simembed object
 #' @param ... Additional arguments
+#' @method print simembed
 #' @export
 print.simembed <- function(x, ...) {
   cat("Linear Similarity Embedding\n")
@@ -368,10 +369,6 @@ print.simembed <- function(x, ...) {
 # Existing Helper Functions (updated for consistency)
 # -------------------------------------------------------------------
 
-#' Calculate Pairwise Squared Euclidean Distances Efficiently
-#' @param Z Matrix (n x m)
-#' @return n x n matrix of squared distances
-#' @keywords internal
 # This function is now defined in cone_align.R and should be used from there.
 # pairwise_sqdist <- function(Z) {
 #   ...
@@ -476,7 +473,9 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 # -------------------------------------------------------------------
 
 #' Null-default operator
+#' @name grapes-or-or-grapes
 #' @keywords internal
+#' @noRd
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
 #' Linear Similarity Embedding using Optimal Transport
@@ -567,7 +566,7 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 #' probabilistic knowledge transfer. In Proceedings of the European Conference 
 #' on Computer Vision (pp. 268-284).
 #'
-#' @seealso \code{\link{predict.simembed}}, \code{\link{plot.simembed}}
+#' @seealso \code{\link{predict.simembed}}
 #' @export
 linear_sim_embed <- function(X, T = NULL, M = NULL,
                              sigma_P = "auto", ncomp = 2,

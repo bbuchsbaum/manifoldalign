@@ -4,17 +4,19 @@
 \alias{solve_procrustes_cone}
 \title{Solve Procrustes Problem for CONE-Align}
 \usage{
-solve_procrustes_cone(source, target, lambda)
+solve_procrustes_cone(Z1, Z2, P, lambda)
 }
 \arguments{
-\item{source}{Source embedding matrix}
+\item{Z1}{Source embedding matrix}
 
-\item{target}{Target embedding matrix}
+\item{Z2}{Target embedding matrix}
 
-\item{lambda}{Regularization parameter}
+\item{P}{Permutation matrix (or vector of indices)}
+
+\item{lambda}{Regularization parameter for Procrustes problem}
 }
 \value{
-Orthogonal rotation matrix
+Orthogonal transformation matrix Q
 }
 \description{
 Solve Procrustes Problem for CONE-Align

@@ -341,10 +341,12 @@ run_kema_validation_suite <- function(verbose = TRUE) {
     data <- generate_spiral_validation_data(n_per_domain = 50, seed = 456)
     
     # Test both solvers
-    hd <- list(
-      domain1 = data$domain1,
-      domain2 = data$domain2
-    )
+    # Create multidesign objects
+    md1 <- multidesign(data$domain1$x, data.frame(labels = data$domain1$labels))
+    md2 <- multidesign(data$domain2$x, data.frame(labels = data$domain2$labels))
+    
+    # Create hyperdesign
+    hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
     
     kema_exact <- kema.hyperdesign(
       data = hd, y = labels, ncomp = 2, solver = "exact",

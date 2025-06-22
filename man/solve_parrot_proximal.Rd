@@ -18,7 +18,8 @@ solve_parrot_proximal(
   solver,
   max_iter,
   max_outer = 10,
-  tol
+  tol,
+  use_cpp = FALSE
 )
 }
 \arguments{

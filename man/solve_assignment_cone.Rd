@@ -4,17 +4,19 @@
 \alias{solve_assignment_cone}
 \title{Solve Assignment Problem for CONE-Align}
 \usage{
-solve_assignment_cone(embed1, embed2, solver)
+solve_assignment_cone(Z1, Z2, Q, solver)
 }
 \arguments{
-\item{embed1}{First embedding matrix}
+\item{Z1}{First embedding matrix}
 
-\item{embed2}{Second embedding matrix}
+\item{Z2}{Second embedding matrix}
 
-\item{solver}{Assignment solver method}
+\item{Q}{Orthogonal transformation matrix}
+
+\item{solver}{Assignment algorithm ("linear" or "auction")}
 }
 \value{
-Assignment vector (1-based indexing)
+Vector of assignment indices
 }
 \description{
 Solve Assignment Problem for CONE-Align

@@ -4,7 +4,7 @@
 \alias{print.simembed}
 \title{Print Method for Similarity Embedding}
 \usage{
-print.simembed(x, ...)
+\method{print}{simembed}(x, ...)
 }
 \arguments{
 \item{x}{A simembed object}

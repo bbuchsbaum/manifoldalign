@@ -43,17 +43,16 @@ benchmark_parrot_scalability <- function(sizes = c(50, 100, 200, 500, 1000),
       anchors1[anchor_idx] <- anchor_idx
       anchors2[anchor_idx] <- anchor_idx
       
+      # Create hyperdesign using proper constructors
+      design1 <- data.frame(node_id = 1:n, anchors = anchors1)
+      design2 <- data.frame(node_id = 1:n, anchors = anchors2)
+      
+      # Create multidesign objects
+      md1 <- multidesign(X1, design1)
+      md2 <- multidesign(X2, design2)
+      
       # Create hyperdesign
-      domain1 <- list(
-        x = X1,
-        design = data.frame(node_id = 1:n, anchors = anchors1)
-      )
-      domain2 <- list(
-        x = X2,
-        design = data.frame(node_id = 1:n, anchors = anchors2)
-      )
-      hd <- list(domain1 = domain1, domain2 = domain2)
-      class(hd) <- c("hyperdesign", "list")
+      hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
       
       # Time different components
       timings <- list()
@@ -169,16 +168,16 @@ profile_parrot_memory <- function(n_nodes = 100) {
   anchors1[anchor_idx] <- anchor_idx
   anchors2[anchor_idx] <- anchor_idx
   
-  domain1 <- list(
-    x = X1,
-    design = data.frame(node_id = 1:n_nodes, anchors = anchors1)
-  )
-  domain2 <- list(
-    x = X2,
-    design = data.frame(node_id = 1:n_nodes, anchors = anchors2)
-  )
-  hd <- list(domain1 = domain1, domain2 = domain2)
-  class(hd) <- c("hyperdesign", "list")
+  # Create design data frames
+  design1 <- data.frame(node_id = 1:n_nodes, anchors = anchors1)
+  design2 <- data.frame(node_id = 1:n_nodes, anchors = anchors2)
+  
+  # Create multidesign objects
+  md1 <- multidesign(X1, design1)
+  md2 <- multidesign(X2, design2)
+  
+  # Create hyperdesign
+  hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
   
   # Memory after data creation
   mem_data <- pryr::mem_used()

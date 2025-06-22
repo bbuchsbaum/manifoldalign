@@ -711,9 +711,15 @@ solve_assignment_cone <- function(Z1, Z2, Q, solver) {
   as.integer(assignment)
 }
 
-#' @param Y Second matrix
-#' @return A matrix of squared Euclidean distances
+#' Compute Pairwise Squared Distances
+#' 
+#' Compute squared Euclidean distances between rows of two matrices
+#' 
+#' @param X First matrix (n x d)
+#' @param Y Second matrix (m x d)
+#' @return A matrix of squared Euclidean distances (n x m)
 #' @keywords internal
+#' @noRd
 pairwise_sqdist <- function(X, Y) {
   # Fast squared Euclidean distance computation
   nx <- nrow(X)

@@ -1874,4 +1874,11 @@ assess_regression_quality <- function(Y_mat, Y_hat_mat, method_name = "regressio
   subspace_quality
 }
 
+#' @export
+kema.default <- function(data, ...) {
+  stop("kema() requires either a hyperdesign or multidesign object. ",
+       "Got: ", paste(class(data), collapse = ", "), 
+       ". See ?kema for usage examples.", call. = FALSE)
+}
+
   

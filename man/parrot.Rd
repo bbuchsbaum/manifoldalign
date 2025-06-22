@@ -16,7 +16,7 @@ parrot(data, anchors, ...)
 \item{...}{Additional arguments passed to specific methods. See 
 \code{\link{parrot.hyperdesign}} for details on method-specific parameters 
 such as \code{preproc}, \code{ncomp}, \code{sigma}, \code{lambda}, 
-\code{tau}, \code{solver}, \code{max_iter}, and \code{tol}}
+\code{tau}, \code{solver}, \code{max_iter}, \code{tol}, and \code{use_cpp}}
 }
 \value{
 A \code{multiblock_biprojector} object containing:

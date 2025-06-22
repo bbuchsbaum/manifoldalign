@@ -113,8 +113,8 @@
 #' @importFrom dplyr select pull
 #' @importFrom multivarious init_transform center
 #' @importFrom irlba irlba
-#' @export
-generalized_procrustes <- function(
+#' @keywords internal
+.generalized_procrustes_impl <- function(
     A_list,
     task_labels_list,
     L,
@@ -161,7 +161,7 @@ generalized_procrustes <- function(
       # Check for negative eigenvalues due to numerical issues?
       ev$values[ev$values < 0] <- 0 # Clamp small negative values
       # P^(-1/2) = V D^(-1/2) V^T
-      # ROBUSTNESS FIX: Guard against overflow with stronger clamping for singular AtA
+      # Robustness fix: Guard against overflow with stronger clamping for singular AtA
       P_inv_sqrt <- ev$vectors %*% diag(1/sqrt(pmax(ev$values, 1e-8)), nrow=d_) %*% t(ev$vectors)
       O <- A %*% P_inv_sqrt
     } else { # Larger d: SVD-based projection U V^T is generally robust
@@ -659,7 +659,7 @@ generalized_procrustes.hyperdesign <- function(data, y,
   }
   
   # Call the core generalized_procrustes function
-  result <- generalized_procrustes(
+  result <- .generalized_procrustes_impl(
     A_list = A_list,
     task_labels_list = task_labels_int_list,
     L = L,
@@ -682,4 +682,17 @@ generalized_procrustes.hyperdesign <- function(data, y,
   if (verbose) message("Generalized Procrustes alignment completed.")
   
   return(result)
+}
+
+#' @export
+generalized_procrustes.default <- function(data, ...) {
+  if (is.list(data) && all(sapply(data, is.matrix))) {
+    # If data is a list of matrices, call the implementation directly
+    # This maintains backward compatibility
+    .generalized_procrustes_impl(A_list = data, ...)
+  } else {
+    stop("generalized_procrustes() requires either a hyperdesign object or a list of matrices. ",
+         "Got: ", paste(class(data), collapse = ", "), 
+         ". See ?generalized_procrustes for usage examples.", call. = FALSE)
+  }
 }

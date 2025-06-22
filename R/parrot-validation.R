@@ -88,27 +88,25 @@ generate_parrot_validation_data <- function(n_nodes = 100,
   anchors1[anchor_idx] <- anchor_idx
   anchors2[perm[anchor_idx]] <- anchor_idx
   
-  # Create hyperdesign structure
-  domain1 <- list(
-    x = X1,
-    design = data.frame(
-      node_id = 1:n_nodes,
-      anchors = anchors1,
-      true_labels = 1:n_nodes  # Ground truth node IDs
-    )
+  # Create hyperdesign structure using proper constructors
+  design1 <- data.frame(
+    node_id = 1:n_nodes,
+    anchors = anchors1,
+    true_labels = 1:n_nodes  # Ground truth node IDs
   )
   
-  domain2 <- list(
-    x = X2,
-    design = data.frame(
-      node_id = 1:n_nodes,
-      anchors = anchors2,
-      true_labels = perm  # Permuted ground truth
-    )
+  design2 <- data.frame(
+    node_id = 1:n_nodes,
+    anchors = anchors2,
+    true_labels = perm  # Permuted ground truth
   )
   
-  hd <- list(domain1 = domain1, domain2 = domain2)
-  class(hd) <- c("hyperdesign", "list")
+  # Create multidesign objects
+  md1 <- multidesign(X1, design1)
+  md2 <- multidesign(X2, design2)
+  
+  # Create hyperdesign
+  hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
   
   list(
     data = hd,

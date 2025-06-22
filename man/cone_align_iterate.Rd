@@ -9,7 +9,7 @@ cone_align_iterate(embeddings, solver, max_iter, tol, lambda)
 \arguments{
 \item{embeddings}{List of embedding matrices}
 
-\item{solver}{Assignment solver method}
+\item{solver}{Assignment solver}
 
 \item{max_iter}{Maximum iterations}
 
@@ -18,7 +18,7 @@ cone_align_iterate(embeddings, solver, max_iter, tol, lambda)
 \item{lambda}{Regularization parameter}
 }
 \value{
-List with final rotations and assignment
+List with final rotation, permutation, and iteration count
 }
 \description{
 Iterative CONE-Align Algorithm

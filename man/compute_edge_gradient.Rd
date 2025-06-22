@@ -4,14 +4,14 @@
 \alias{compute_edge_gradient}
 \title{Compute Gradient of Edge Consistency Regularizer (Dispatcher)}
 \usage{
-compute_edge_gradient(S, networks, use_rcpp = NULL)
+compute_edge_gradient(S, networks, use_cpp = FALSE)
 }
 \arguments{
 \item{S}{Current transport plan}
 
 \item{networks}{Network structures}
 
-\item{use_rcpp}{Whether to use C++ implementation}
+\item{use_cpp}{Whether to use C++ implementation}
 }
 \value{
 Gradient matrix

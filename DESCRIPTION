@@ -39,7 +39,10 @@ Suggests:
     rmarkdown,
     RcppAnnoy,
     multidesign,
-    tibble
+    tibble,
+    lpSolve,
+    profvis,
+    microbenchmark
 Depends:
     R (>= 3.5.0)
 LinkingTo:

@@ -10,7 +10,7 @@ compute_parrot_rwr(
   sigma,
   max_iter,
   tol,
-  use_rcpp = NULL
+  use_cpp = FALSE
 )
 }
 \arguments{
@@ -24,7 +24,7 @@ compute_parrot_rwr(
 
 \item{tol}{Convergence tolerance}
 
-\item{use_rcpp}{Whether to use C++ implementation}
+\item{use_cpp}{Whether to use C++ implementation}
 }
 \description{
 Compute RWR Features for PARROT (Dispatcher)

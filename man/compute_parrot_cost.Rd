@@ -11,7 +11,7 @@ compute_parrot_cost(
   alpha = 0.5,
   sigma = 0.15,
   gamma = 0.1,
-  use_rcpp = NULL
+  use_cpp = FALSE
 )
 }
 \arguments{
@@ -27,7 +27,7 @@ compute_parrot_cost(
 
 \item{gamma}{Cross-graph discount factor for Sylvester equation}
 
-\item{use_rcpp}{Whether to use C++ implementation}
+\item{use_cpp}{Whether to use C++ implementation}
 }
 \description{
 Compute Position-Aware Cost Matrix (Dispatcher)

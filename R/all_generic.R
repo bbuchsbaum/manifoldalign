@@ -71,20 +71,33 @@
 #' \donttest{
 #' # Example with hyperdesign data
 #' library(multivarious)
+#' library(multidesign)
 #' 
 #' # Create synthetic multi-domain data
-#' domain1 <- list(x = matrix(rnorm(100), 50, 2), 
-#'                labels = sample(c("A", "B"), 50, TRUE))
-#' domain2 <- list(x = matrix(rnorm(100), 50, 2), 
-#'                labels = sample(c("A", "B"), 50, TRUE))
-#' hd <- list(domain1 = domain1, domain2 = domain2)
+#' set.seed(123)
+#' X1 <- matrix(rnorm(100), 50, 2)
+#' X2 <- matrix(rnorm(100), 50, 2)
+#' labels <- sample(c("A", "B"), 50, TRUE)
+#' 
+#' # Create design data frames
+#' design1 <- data.frame(labels = labels)
+#' design2 <- data.frame(labels = labels)
+#' 
+#' # Create multidesign objects
+#' md1 <- multidesign(X1, design1)
+#' md2 <- multidesign(X2, design2)
+#' 
+#' # Create hyperdesign
+#' hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
 #' 
 #' # Run KEMA with default settings
 #' result <- kema(hd, y = labels, ncomp = 2)
 #' 
 #' # Semi-supervised learning with missing labels
-#' domain1$labels[1:10] <- NA  # Mark some samples as unlabeled
-#' result_semi <- kema(hd, y = labels, ncomp = 2)
+#' design1$labels[1:10] <- NA  # Mark some samples as unlabeled
+#' md1_semi <- multidesign(X1, design1)
+#' hd_semi <- hyperdesign(list(domain1 = md1_semi, domain2 = md2))
+#' result_semi <- kema(hd_semi, y = labels, ncomp = 2)
 #' 
 #' # Use exact solver for highest accuracy
 #' result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)
@@ -491,7 +504,19 @@ parrot <- function(data, anchors, ...) {
 #'     \item A \code{hyperdesign} object with 3+ domains
 #'     \item A list of 3+ matrices (nodes x features)
 #'   }
-#' @param ... Additional arguments passed to fitting methods
+#' @param ... Additional arguments passed to fitting methods, including:
+#'   \itemize{
+#'     \item \code{ref_idx}: Index of the domain to use as initial reference (default: 1)
+#'     \item \code{preproc}: Preprocessing function to apply to data
+#'     \item \code{ncomp}: Number of components for spectral embedding
+#'     \item \code{sigma}: Diffusion parameter
+#'     \item \code{lambda}: Regularization parameter
+#'     \item \code{use_laplacian}: Whether to use Laplacian normalization
+#'     \item \code{solver}: Assignment solver ("linear" or "auction")
+#'     \item \code{max_iter}: Maximum iterations
+#'     \item \code{tol}: Convergence tolerance
+#'     \item \code{knn}: Number of nearest neighbors
+#'   }
 #'
 #' @return A \code{multiblock_biprojector} object containing alignment results
 #'   for all graphs
@@ -514,7 +539,18 @@ cone_align_multiple <- function(data, ...) {
 #'     \item A \code{hyperdesign} object with 3+ domains
 #'     \item A list of 3+ matrices (nodes x features)
 #'   }
-#' @param ... Additional arguments passed to fitting methods
+#' @param ... Additional arguments passed to fitting methods, including:
+#'   \itemize{
+#'     \item \code{ncomp}: Number of spectral components to extract (default: 30)
+#'     \item \code{q_descriptors}: Number of diffusion-time descriptors (default: 100)
+#'     \item \code{sigma}: Diffusion parameter for descriptor computation (default: 0.73)
+#'     \item \code{lambda}: Regularization parameter for base alignment (default: 0.1)
+#'     \item \code{use_laplacian}: Whether to use Laplacian normalization (default: TRUE)
+#'     \item \code{anchor}: Index of reference graph or "mean" for barycenter (default: 1)
+#'     \item \code{solver}: Assignment method: "auction" (default) or "linear"
+#'     \item \code{max_iter}: Maximum iterations for joint alignment (default: 100)
+#'     \item \code{tol}: Convergence tolerance (default: 1e-6)
+#'   }
 #'
 #' @return A \code{grasp_multiset} object containing alignment results
 #'   for all graphs
@@ -524,4 +560,131 @@ cone_align_multiple <- function(data, ...) {
 #' @export
 grasp_multiset <- function(data, ...) {
   UseMethod("grasp_multiset")
+}
+
+#' Coupled Diagonalization for Multi-Modal Alignment
+#'
+#' Performs Coupled Diagonalization alignment on multi-modal data. Finds coupled 
+#' eigenvectors across multiple modalities that jointly diagonalize graph Laplacians 
+#' while respecting cross-modal correspondences.
+#'
+#' Coupled Diagonalization (Eynard et al. 2015) extends spectral methods to 
+#' multi-modal data by finding bases that simultaneously diagonalize individual 
+#' Laplacians while being aligned through correspondence constraints. The algorithm 
+#' uses Stiefel manifold optimization to maintain orthogonality constraints.
+#'
+#' @param data Input data object. Can be a hyperdesign object (for 
+#'   \code{coupled_diagonalization.hyperdesign}) containing multiple data domains
+#' @param ... Additional arguments passed to specific methods. See 
+#'   \code{\link{coupled_diagonalization.hyperdesign}} for details on 
+#'   method-specific parameters such as \code{correspondence}, \code{preproc}, 
+#'   \code{ncomp}, \code{ncomp_per_domain}, \code{mu_coupling}, \code{knn}, 
+#'   \code{sigma}, \code{max_iter}, \code{step_size}, and \code{tol}
+#'
+#' @details
+#' The algorithm minimizes the objective function:
+#' \deqn{F(A) = sum_i ||A_i^T L_i A_i - diag(A_i^T L_i A_i)||_F^2 + mu_c sum_{i<j} ||F_i^T U_i A_i - F_j^T U_j A_j||_F^2}
+#' 
+#' where:
+#' \itemize{
+#'   \item \code{A_i} are the coupling matrices on the Stiefel manifold
+#'   \item \code{L_i} are the eigenvalues of the i-th Laplacian
+#'   \item \code{U_i} are the eigenvectors of the i-th Laplacian
+#'   \item \code{F_i} are the correspondence matrices between modalities
+#'   \item \code{mu_c} controls the coupling strength
+#' }
+#'
+#' The first term encourages diagonalization of individual Laplacians, while the 
+#' second term enforces alignment through correspondences. The algorithm uses 
+#' projected gradient descent on the Stiefel manifold to maintain orthogonality.
+#'
+#' Key features:
+#' \itemize{
+#'   \item Handles partial correspondences between modalities
+#'   \item Preserves manifold structure through graph Laplacians
+#'   \item Maintains orthogonality via Stiefel manifold optimization
+#'   \item Supports semi-supervised learning with missing correspondences
+#' }
+#'
+#' @return A \code{multiblock_biprojector} object containing:
+#' \itemize{
+#'   \item \code{s}: Coupled eigenvectors (scores) for all samples
+#'   \item \code{v}: Projection matrices for out-of-sample extension
+#'   \item \code{coupled_bases}: List of coupled bases for each modality
+#'   \item \code{sdev}: Standard deviations of the coupled components
+#'   \item Additional metadata for reconstruction and diagnostics
+#' }
+#'
+#' @examples
+#' \donttest{
+#' # Example with hyperdesign data
+#' library(multidesign)
+#' 
+#' # Create synthetic multi-modal data
+#' set.seed(123)
+#' # Domain 1: 3D data
+#' X1 <- matrix(rnorm(150), 50, 3)
+#' # Domain 2: 4D data  
+#' X2 <- matrix(rnorm(200), 50, 4)
+#' 
+#' # Create design with full correspondence
+#' design1 <- data.frame(sample_id = 1:50)
+#' design2 <- data.frame(sample_id = 1:50)
+#' 
+#' # Create multidesign objects
+#' md1 <- multidesign(X1, design1)
+#' md2 <- multidesign(X2, design2)
+#' 
+#' # Create hyperdesign
+#' hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
+#' 
+#' # Run coupled diagonalization with default settings
+#' result <- coupled_diagonalization(hd, ncomp = 3)
+#' 
+#' # Access coupled bases
+#' coupled_scores <- result$s
+#' coupled_bases <- result$coupled_bases
+#' 
+#' # With partial correspondences
+#' # Specify correspondence matrix (e.g., only first 30 samples correspond)
+#' F_partial <- Matrix::sparseMatrix(i = 1:30, j = 1:30, x = 1, dims = c(50, 50))
+#' result_partial <- coupled_diagonalization(hd, 
+#'                                         correspondence = list(F_partial, F_partial),
+#'                                         ncomp = 3)
+#' }
+#'
+#' @references
+#' Eynard, D., Kovnatsky, A., Bronstein, M. M., Glashoff, K., & Bronstein, A. M. 
+#' (2015). Multimodal manifold analysis by simultaneous diagonalization of 
+#' Laplacians. IEEE Transactions on Pattern Analysis and Machine Intelligence, 
+#' 37(12), 2505-2517.
+#'
+#' @seealso \code{\link{coupled_diagonalization.hyperdesign}}
+#' @export
+coupled_diagonalization <- function(data, ...) {
+  UseMethod("coupled_diagonalization")
+}
+
+#' Gromov-Wasserstein Distance
+#' 
+#' Generic function for computing Gromov-Wasserstein distance between domains
+#' 
+#' @param data The input data (typically a hyperdesign object)
+#' @param ... Additional arguments passed to methods:
+#'   \itemize{
+#'     \item \code{epsilon}: Entropic regularization parameter (default: 0.1)
+#'     \item \code{metric}: Distance metric for within-domain distances (default: "euclidean")
+#'     \item \code{init}: Initialization method: "uniform" (default), "random", or initial transport plans
+#'     \item \code{max_iter}: Maximum iterations for optimization (default: 100)
+#'     \item \code{tol}: Convergence tolerance (default: 1e-9)
+#'     \item \code{verbose}: Print convergence information (default: FALSE)
+#'     \item \code{marginals}: Optional list of marginal distributions
+#'     \item \code{scale}: How to scale distance matrices (default: "per_domain")
+#'     \item \code{inner_max_iter}: Maximum iterations for inner Sinkhorn loop (default: 30)
+#'     \item \code{inner_tol}: Convergence tolerance for inner Sinkhorn iterations (default: 1e-9)
+#'     \item \code{dist_chunk_size}: Chunk size for memory-efficient distance computation (default: 1000)
+#'   }
+#' @export
+gromov_wasserstein <- function(data, ...) {
+  UseMethod("gromov_wasserstein")
 }
