@@ -7,21 +7,28 @@
 #' @param data A hyperdesign object containing multiple data domains
 #' @param ... Additional arguments passed to methods:
 #'   \itemize{
-#'     \item \code{omega1}: Weight of the feature term (0 ≤ omega1 ≤ 1). The structural 
-#'       term weight omega2 = 1 - omega1 is computed automatically (default: 0.001)
-#'     \item \code{lambda}: Non-negative total variation penalty for the penalized FPGW 
-#'       variant. Set lambda = 0 to disable and use rho instead (default: 0).
+#'     \item \code{omega1}: Weight of the feature term (0 ≤ omega1 ≤ 1).
+#'       The structural term weight omega2 = 1 - omega1 is computed
+#'       automatically (default: 0.001)
+#'     \item \code{lambda}: Non-negative total variation penalty for the
+#'       penalized FPGW variant. Set \code{lambda = 0} to disable and use
+#'       \code{rho} instead (default: 0).
 #'       NOTE: The TV penalty is experimental and may not produce expected 
 #'       sparsity-inducing behavior due to its quadratic formulation
-#'     \item \code{rho}: Mass budget in (0, min(|μ|,|ν|)] for the mass-constrained variant. 
-#'       If rho is supplied, the solver runs the mass-constrained variant; otherwise 
-#'       it uses the penalized variant (λ > 0) or classical FGW (both λ = 0, rho = NULL)
-#'     \item \code{epsilon}: Initial entropic regularization for warm-start (default: 0.01). 
-#'       Set to 0 to disable warm-start
+#'     \item \code{rho}: Mass budget in (0, min(|μ|,|ν|)] for the
+#'       mass-constrained variant. If \code{rho} is supplied, the solver
+#'       runs the mass-constrained variant; otherwise it uses the
+#'       penalized variant (\eqn{\lambda > 0}) or classical FGW when both
+#'       \eqn{\lambda = 0} and \code{rho} is \code{NULL}
+#'     \item \code{epsilon}: Initial entropic regularization for warm-start
+#'       (default: 0.01). Set to 0 to disable warm-start
 #'     \item \code{metric}: Distance metric for within-domain distances (default: "euclidean")
-#'     \item \code{max_iter}: Maximum iterations for Frank-Wolfe optimization (default: 200)
-#'     \item \code{tol}: Convergence tolerance for the Frank-Wolfe gap (default: 1e-6)
-#'     \item \code{inner_max_iter}: Maximum iterations for inner optimization (default: 50)
+#'     \item \code{max_iter}: Maximum iterations for Frank-Wolfe optimization
+#'       (default: 200)
+#'     \item \code{tol}: Convergence tolerance for the Frank-Wolfe gap
+#'       (default: 1e-6)
+#'     \item \code{inner_max_iter}: Maximum iterations for inner optimization
+#'       (default: 50)
 #'     \item \code{verbose}: Print convergence information (default: FALSE)
 #'   }
 #'
@@ -123,6 +130,8 @@ fpgw <- function(data, ...) {
   UseMethod("fpgw")
 }
 
+#' @rdname fpgw
+#' @method fpgw hyperdesign
 #' @export
 fpgw.hyperdesign <- function(data,
                             omega1 = 0.001,

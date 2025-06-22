@@ -1,11 +1,13 @@
 #' Position-Aware Random Transport (PARROT) Network Alignment
 #'
-#' Performs PARROT alignment on hyperdesign data structures. Aligns networks
-#' using regularized optimal transport with position-aware features and consistency constraints.
+#' Performs PARROT alignment on hyperdesign data structures. Aligns
+#' networks using regularized optimal transport with position-aware
+#' features and consistency constraints.
 #'
-#' PARROT tackles network alignment by formulating it as a regularized optimal transport
-#' problem. The method incorporates position-aware features through Random Walk with Restart
-#' (RWR) descriptors and enforces structural consistency through neighborhood-preserving
+#' PARROT tackles network alignment by formulating it as a regularized
+#' optimal transport problem. The method incorporates position-aware
+#' features through Random Walk with Restart (RWR) descriptors and
+#' enforces structural consistency through neighborhood-preserving
 #' regularization terms.
 #'
 #' @param data Input data object containing network domains
@@ -18,10 +20,14 @@
 #' @details
 #' PARROT operates through the following algorithmic components:
 #' \itemize{
-#'   \item \strong{Position-Aware Features}: Compute RWR descriptors capturing network position
-#'   \item \strong{Cross-Network Cost}: Build transport cost matrix between networks
-#'   \item \strong{Consistency Regularization}: Add structural similarity constraints
-#'   \item \strong{Optimal Transport}: Solve regularized transport problem via Sinkhorn
+#'   \item \strong{Position-Aware Features}: Compute RWR descriptors
+#'     capturing network position
+#'   \item \strong{Cross-Network Cost}: Build transport cost matrix between
+#'     networks
+#'   \item \strong{Consistency Regularization}: Add structural similarity
+#'     constraints
+#'   \item \strong{Optimal Transport}: Solve regularized transport problem via
+#'     Sinkhorn
 #' }
 #'
 #' The algorithm minimizes the objective:
@@ -124,6 +130,8 @@ parrot <- function(data, anchors, ...) {
 #'
 #' @return A multiblock_biprojector object containing the PARROT alignment results
 #'
+#' @rdname parrot
+#' @method parrot hyperdesign
 #' @export
 #' @importFrom chk chk_number chk_true chk_logical
 #' @importFrom multivarious center
@@ -254,6 +262,8 @@ parrot.hyperdesign <- function(data,
             alpha, gamma, solver, max_iter, tol, use_cpp, block_indices, original_preproc, data)
 }
 
+#' @rdname parrot
+#' @method parrot default
 #' @export
 parrot.default <- function(data, anchors, ...) {
   # Validate input data

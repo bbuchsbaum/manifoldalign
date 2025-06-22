@@ -15,6 +15,8 @@
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return A grasp_multiset object
+#' @rdname grasp_multiset
+#' @method grasp_multiset hyperdesign
 #' @export
 #' @importFrom chk chk_s3_class chk_number chk_true chk_logical
 #' @importFrom Matrix Diagonal crossprod norm
@@ -128,6 +130,8 @@ grasp_multiset.hyperdesign <- function(data,
 #' @param data A list containing three or more matrices (nodes x features)
 #' @param ... Additional arguments passed to hyperdesign method
 #'
+#' @rdname grasp_multiset
+#' @method grasp_multiset list
 #' @export
 grasp_multiset.list <- function(data, ...) {
   
@@ -168,6 +172,8 @@ grasp_multiset.list <- function(data, ...) {
   grasp_multiset.hyperdesign(strata, ...)
 }
 
+#' @rdname grasp_multiset
+#' @method grasp_multiset default
 #' @export
 grasp_multiset.default <- function(data, ...) {
   stop("No applicable method for grasp_multiset. data must be a hyperdesign ",

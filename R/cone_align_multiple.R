@@ -6,6 +6,8 @@
 #' @param ref_idx Which domain acts as initial reference (default: 1)
 #' @inheritParams cone_align.hyperdesign
 #'
+#' @rdname cone_align_multiple
+#' @method cone_align_multiple hyperdesign
 #' @export
 #' @importFrom chk chk_number chk_true chk_logical
 #' @importFrom multivarious center concat_pre_processors
@@ -96,6 +98,8 @@ cone_align_multiple.hyperdesign <- function(data,
 #' @param data A list containing three or more matrices (nodes x features)
 #' @param ... Additional arguments passed to hyperdesign method
 #'
+#' @rdname cone_align_multiple
+#' @method cone_align_multiple list
 #' @export
 cone_align_multiple.list <- function(data, ...) {
   
@@ -137,6 +141,8 @@ cone_align_multiple.list <- function(data, ...) {
   cone_align_multiple.hyperdesign(strata, ...)
 }
 
+#' @rdname cone_align_multiple
+#' @method cone_align_multiple default
 #' @export
 cone_align_multiple.default <- function(data, ...) {
   stop("No applicable method for cone_align_multiple. data must be a hyperdesign ",
@@ -145,7 +151,8 @@ cone_align_multiple.default <- function(data, ...) {
 
 #' Core Multi-Graph CONE-Align Fitting
 #'
-#' Internal function that implements the iterative multi-graph alignment algorithm.
+#' Internal function that implements the iterative multi-graph
+#' alignment algorithm.
 #' Uses the helper functions from the pairwise implementation.
 #'
 #' @param strata List of preprocessed data domains

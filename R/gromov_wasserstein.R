@@ -1,6 +1,8 @@
 # Generic is defined in all_generic.R
 # Note: compute_distance_matrix has been moved to utils-ot.R
 
+#' @rdname gromov_wasserstein
+#' @method gromov_wasserstein hyperdesign
 #' @export
 gromov_wasserstein.hyperdesign <- function(data,
                                          epsilon = 0.1,
@@ -406,6 +408,8 @@ predict.gromov_wasserstein <- function(object, newdata, from, to, ...) {
        call. = FALSE)
 }
 
+#' @rdname gromov_wasserstein
+#' @method gromov_wasserstein default
 #' @export
 gromov_wasserstein.default <- function(data, ...) {
   stop("gromov_wasserstein requires a hyperdesign object", call. = FALSE)
