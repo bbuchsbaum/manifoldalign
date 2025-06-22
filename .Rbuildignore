@@ -13,3 +13,5 @@
 ^TODO\.md$
 ^TODO_PSEUDOLABELING_IMPROVEMENTS\.md$
 ^dev-scripts$
+^debug.*\.R$
+^test_.*\.R$
