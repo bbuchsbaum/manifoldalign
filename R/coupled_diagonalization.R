@@ -1,12 +1,14 @@
 #' Coupled Diagonalization for Hyperdesign Objects
 #'
-#' Performs Coupled Diagonalization alignment on hyperdesign data structures containing 
-#' multiple modalities. Finds coupled eigenvectors that jointly diagonalize graph 
+#' Performs Coupled Diagonalization alignment on hyperdesign data
+#' structures containing multiple modalities. Finds coupled eigenvectors
+#' that jointly diagonalize graph
 #' Laplacians while respecting cross-modal correspondences.
 #'
 #' @param data A hyperdesign object containing multiple data domains
-#' @param correspondence Optional list of correspondence matrices between modalities. 
-#'   If NULL (default), assumes full correspondence based on sample order.
+#' @param correspondence Optional list of correspondence matrices
+#'   between modalities. If NULL (default), assumes full correspondence
+#'   based on sample order.
 #'   Each matrix should be n_i x n_j sparse matrix indicating correspondences 
 #'   between modality i and j.
 #' @param preproc Preprocessing function to apply to the data (default: center())
@@ -18,7 +20,8 @@
 #' @param knn Number of nearest neighbors for graph construction (default: 10)
 #' @param sigma Gaussian kernel bandwidth for graph weights. If NULL (default), 
 #'   uses median of nearest neighbor distances.
-#' @param max_iter Maximum iterations for Stiefel manifold optimization (default: 200)
+#' @param max_iter Maximum iterations for Stiefel manifold optimization
+#'   (default: 200)
 #' @param step_size Base step size for gradient descent (default: 0.3)
 #' @param tol Convergence tolerance for relative cost change (default: 1e-6)
 #' @param verbose Whether to print convergence information (default: FALSE)
@@ -65,6 +68,8 @@
 #' Eynard et al. (2015). Multimodal manifold analysis by simultaneous 
 #' diagonalization of Laplacians. IEEE TPAMI, 37(12), 2505-2517.
 #'
+#' @rdname coupled_diagonalization
+#' @method coupled_diagonalization hyperdesign
 #' @export
 #' @importFrom Matrix sparseMatrix Diagonal crossprod colSums rowSums bdiag
 #' @importFrom neighborweights graph_weights
@@ -466,6 +471,8 @@ compute_cost_cd <- function(A, Lambda, FiUbar, mu_coupling) {
   cost_d + mu_coupling * cost_c
 }
 
+#' @rdname coupled_diagonalization
+#' @method coupled_diagonalization default
 #' @export
 coupled_diagonalization.default <- function(data, ...) {
   stop("No applicable method for coupled_diagonalization. ",

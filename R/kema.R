@@ -621,9 +621,11 @@ normalize_graphs <- function(Sl, Ws, Wd) {
 #' result_semi <- kema(md_semi, y = condition, subject = subject, ncomp = 2)
 #' }
 #'
+#' @rdname kema
+#' @method kema multidesign
 #' @export
 #' @import Matrix
-kema.multidesign <- function(data, y, 
+kema.multidesign <- function(data, y,
                              subject, 
                              preproc=center(), 
                              ncomp=2, 
@@ -750,9 +752,11 @@ kema.multidesign <- function(data, y,
 #' Tuia, D., & Camps-Valls, G. (2016). Kernel manifold alignment for domain 
 #' adaptation. PLoS ONE, 11(2), e0148655.
 #'
+#' @rdname kema
+#' @method kema hyperdesign
 #' @export
 #' @importFrom multivarious init_transform
-kema.hyperdesign <- function(data, y, 
+kema.hyperdesign <- function(data, y,
                              preproc=center(), 
                              ncomp=2, 
                              knn=5, 
@@ -1874,6 +1878,8 @@ assess_regression_quality <- function(Y_mat, Y_hat_mat, method_name = "regressio
   subspace_quality
 }
 
+#' @rdname kema
+#' @method kema default
 #' @export
 kema.default <- function(data, ...) {
   stop("kema() requires either a hyperdesign or multidesign object. ",

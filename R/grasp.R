@@ -41,6 +41,8 @@
 #' result <- grasp(hd, ncomp = 20, q_descriptors = 50)
 #' }
 #'
+#' @rdname grasp
+#' @method grasp hyperdesign
 #' @export
 #' @importFrom multivarious init_transform prep concat_pre_processors
 #' @importFrom manifoldalign block_indices
@@ -494,6 +496,8 @@ grasp <- function(data, ...) {
   UseMethod("grasp")
 }
 
+#' @rdname grasp
+#' @method grasp default
 #' @export
 grasp.default <- function(data, ...) {
   stop("grasp() requires a hyperdesign object. ",

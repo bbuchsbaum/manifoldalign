@@ -20,8 +20,10 @@
 #' CONE-Align operates through the following algorithmic blocks:
 #' \itemize{
 #'   \item \strong{Spectral Embedding}: Compute Laplacian eigenmaps for each graph
-#'   \item \strong{Orthogonal Alignment}: Find rotation matrices via Procrustes analysis
-#'   \item \strong{Assignment Update}: Solve linear assignment problem for correspondences
+#'   \item \strong{Orthogonal Alignment}: Find rotation matrices via
+#'     Procrustes analysis
+#'   \item \strong{Assignment Update}: Solve linear assignment problem
+#'     for correspondences
 #'   \item \strong{Convergence Check}: Iterate until assignments stabilize
 #' }
 #'
@@ -107,15 +109,18 @@ cone_align <- function(data, ...) {
 #' @param sigma Diffusion parameter for embedding computation (default: 0.73)
 #' @param lambda Regularization parameter for numerical stability (default: 0.1)
 #' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
-#' @param solver Assignment algorithm: "linear" for exact assignment (default), 
-#'   "auction" for large-scale approximation
+#' @param solver Assignment algorithm: "linear" for exact assignment
+#'   (default) or "auction" for large-scale approximation
 #' @param max_iter Maximum number of iterations (default: 30)
 #' @param tol Convergence tolerance for assignment changes (default: 0.01)
-#' @param knn Number of nearest neighbors for graph construction (default: adaptive)
+#' @param knn Number of nearest neighbors for graph construction
+#'   (default: adaptive)
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return A multiblock_biprojector object containing the CONE-Align results
 #'
+#' @rdname cone_align
+#' @method cone_align hyperdesign
 #' @export
 #' @importFrom chk chk_number chk_true chk_logical
 #' @importFrom multivarious center concat_pre_processors
@@ -224,7 +229,8 @@ cone_align.hyperdesign <- function(data,
 #'   "auction" for large-scale approximation
 #' @param max_iter Maximum number of iterations (default: 30)
 #' @param tol Convergence tolerance for assignment changes (default: 0.01)
-#' @param knn Number of nearest neighbors for graph construction (default: adaptive)
+#' @param knn Number of nearest neighbors for graph construction
+#'   (default: adaptive)
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return A multiblock_biprojector object containing the CONE-Align results
@@ -244,8 +250,10 @@ cone_align.hyperdesign <- function(data,
 #' embeddings <- result$s
 #' }
 #'
+#' @rdname cone_align
+#' @method cone_align list
 #' @export
-cone_align.list <- function(data, 
+cone_align.list <- function(data,
                            preproc = center(), 
                            ncomp = 10,
                            sigma = 0.73,
@@ -352,6 +360,8 @@ cone_align.list <- function(data,
                 solver, max_iter, tol, block_indices, knn)
 }
 
+#' @rdname cone_align
+#' @method cone_align default
 #' @export
 cone_align.default <- function(data, ...) {
   stop("No applicable method for cone_align. data must be a hyperdesign object or list of matrices.", call. = FALSE)
