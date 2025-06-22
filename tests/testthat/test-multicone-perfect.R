@@ -1,6 +1,6 @@
 test_that("cone_align_multiple recovers exact permutations on isomorphic graphs", {
 
-  skip_on_cran()               # 150‑200 ms locally, but leave CI time free
+  skip_on_cran()               # 150-200 ms locally, but leave CI time free
 
   set.seed(42)
   n  <- 80                     # nodes
@@ -19,7 +19,8 @@ test_that("cone_align_multiple recovers exact permutations on isomorphic graphs"
 
   ## 4. assess accuracy -------------------------------------------------
   recovered <- res$assignment             # list of length m
+  ref_inv <- match(seq_len(n), perms[[1]])
   for (g in seq_len(m)) {
-    expect_equal(recovered[[g]], match(seq_len(n), perms[[g]]))
+    expect_equal(recovered[[g]][ref_inv], match(seq_len(n), perms[[g]]))
   }
-}) 
+})
