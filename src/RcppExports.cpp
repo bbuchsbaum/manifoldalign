@@ -56,6 +56,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fallback_network_simplex_ot_cpp
+Rcpp::NumericMatrix fallback_network_simplex_ot_cpp(Rcpp::NumericMatrix cost_r, Rcpp::NumericVector a_r, Rcpp::NumericVector b_r);
+RcppExport SEXP _manifoldalign_fallback_network_simplex_ot_cpp(SEXP cost_rSEXP, SEXP a_rSEXP, SEXP b_rSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type cost_r(cost_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type a_r(a_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type b_r(b_rSEXP);
+    rcpp_result_gen = Rcpp::wrap(fallback_network_simplex_ot_cpp(cost_r, a_r, b_r));
+    return rcpp_result_gen;
+END_RCPP
+}
 // partial_ot_mass_rcpp
 Rcpp::NumericMatrix partial_ot_mass_rcpp(Rcpp::NumericMatrix cost_r, Rcpp::NumericVector a_r, Rcpp::NumericVector b_r, double mass, double eps);
 RcppExport SEXP _manifoldalign_partial_ot_mass_rcpp(SEXP cost_rSEXP, SEXP a_rSEXP, SEXP b_rSEXP, SEXP massSEXP, SEXP epsSEXP) {
@@ -290,6 +303,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_manifoldalign_debug_network_simplex", (DL_FUNC) &_manifoldalign_debug_network_simplex, 3},
     {"_manifoldalign_linear_sim_embed_cpp", (DL_FUNC) &_manifoldalign_linear_sim_embed_cpp, 8},
     {"_manifoldalign_network_simplex_ot_cpp", (DL_FUNC) &_manifoldalign_network_simplex_ot_cpp, 4},
+    {"_manifoldalign_fallback_network_simplex_ot_cpp", (DL_FUNC) &_manifoldalign_fallback_network_simplex_ot_cpp, 3},
     {"_manifoldalign_partial_ot_mass_rcpp", (DL_FUNC) &_manifoldalign_partial_ot_mass_rcpp, 5},
     {"_manifoldalign_compute_edge_distances_cpp", (DL_FUNC) &_manifoldalign_compute_edge_distances_cpp, 2},
     {"_manifoldalign_compute_edge_gradient_cpp", (DL_FUNC) &_manifoldalign_compute_edge_gradient_cpp, 5},

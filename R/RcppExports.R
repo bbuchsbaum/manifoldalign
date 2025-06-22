@@ -13,6 +13,10 @@ network_simplex_ot_cpp <- function(cost_r, a_r, b_r, eps = 1e-9) {
     .Call(`_manifoldalign_network_simplex_ot_cpp`, cost_r, a_r, b_r, eps)
 }
 
+fallback_network_simplex_ot_cpp <- function(cost_r, a_r, b_r) {
+    .Call(`_manifoldalign_fallback_network_simplex_ot_cpp`, cost_r, a_r, b_r)
+}
+
 partial_ot_mass_rcpp <- function(cost_r, a_r, b_r, mass, eps = 1e-9) {
     .Call(`_manifoldalign_partial_ot_mass_rcpp`, cost_r, a_r, b_r, mass, eps)
 }
