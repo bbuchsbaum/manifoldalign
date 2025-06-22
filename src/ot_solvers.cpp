@@ -97,6 +97,19 @@ Rcpp::NumericMatrix network_simplex_ot_cpp(Rcpp::NumericMatrix cost_r,
   return Rcpp::wrap(P);
 }
 
+// [[Rcpp::export]]
+Rcpp::NumericMatrix fallback_network_simplex_ot_cpp(Rcpp::NumericMatrix cost_r,
+                                                    Rcpp::NumericVector a_r,
+                                                    Rcpp::NumericVector b_r) {
+  arma::mat cost = Rcpp::as<arma::mat>(cost_r);
+  arma::vec a = Rcpp::as<arma::vec>(a_r);
+  arma::vec b = Rcpp::as<arma::vec>(b_r);
+
+  arma::mat P = fallback::network_simplex_ot(cost, a, b);
+
+  return Rcpp::wrap(P);
+}
+
 // Note: sinkhorn_ot_cpp moved to sinkhorn_unified.cpp for consolidation
 
 // [[Rcpp::export]]

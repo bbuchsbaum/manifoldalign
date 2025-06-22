@@ -277,100 +277,23 @@ bool NetworkSimplexAdapter::isAvailable() {
 #endif
 }
 
-// Fallback implementation (copy of existing network_simplex_ot)
+// Fallback implementation using lpSolve via the R helper
 namespace fallback {
 
-arma::mat network_simplex_ot(const arma::mat& cost, 
-                              const arma::vec& a, 
+arma::mat network_simplex_ot(const arma::mat& cost,
+                              const arma::vec& a,
                               const arma::vec& b,
-                              double eps) {
-  
-  int n = a.n_elem;
-  int m = b.n_elem;
-  
-  // Initialize transport plan
-  arma::mat P(n, m, arma::fill::zeros);
-  
-  // Create vectors for remaining mass
-  arma::vec a_rem = a;
-  arma::vec b_rem = b;
-  
-  // North-west corner rule initialization
-  int i = 0, j = 0;
-  
-  while (i < n && j < m) {
-    double mass = std::min(a_rem(i), b_rem(j));
-    P(i, j) = mass;
-    a_rem(i) -= mass;
-    b_rem(j) -= mass;
-    
-    if (a_rem(i) < eps) {
-      i++;
-    }
-    if (b_rem(j) < eps) {
-      j++;
-    }
-  }
-  
-  // Dual variables
-  arma::vec u(n, arma::fill::zeros);
-  arma::vec v(m, arma::fill::zeros);
-  
-  // Iterate to improve solution
-  int max_iter = 1000;
-  for (int iter = 0; iter < max_iter; iter++) {
-    bool improved = false;
-    
-    // Find entering variable (most negative reduced cost)
-    double min_reduced_cost = 0;
-    int enter_i = -1, enter_j = -1;
-    
-    for (int i = 0; i < n; i++) {
-      for (int j = 0; j < m; j++) {
-        if (P(i, j) < eps) {  // Non-basic variable
-          double reduced_cost = cost(i, j) - u(i) - v(j);
-          if (reduced_cost < min_reduced_cost - eps) {
-            min_reduced_cost = reduced_cost;
-            enter_i = i;
-            enter_j = j;
-          }
-        }
-      }
-    }
-    
-    // If no negative reduced cost, we're optimal
-    if (enter_i == -1) {
-      break;
-    }
-    
-    // Find cycle and determine leaving variable
-    // This is a simplified version - full implementation would use
-    // a more sophisticated cycle detection algorithm
-    
-    // For now, just add a small amount to maintain feasibility
-    double delta = std::min(a(enter_i) - arma::sum(P.row(enter_i)), 
-                           b(enter_j) - arma::sum(P.col(enter_j)));
-    
-    if (delta > eps) {
-      P(enter_i, enter_j) = delta;
-      improved = true;
-    }
-    
-    // Update dual variables (simplified)
-    for (int i = 0; i < n; i++) {
-      for (int j = 0; j < m; j++) {
-        if (P(i, j) > eps) {
-          v(j) = cost(i, j) - u(i);
-        }
-      }
-    }
-    
-    if (!improved) {
-      break;
-    }
-  }
-  
-  return P;
+                              double /*eps*/) {
+  Rcpp::Environment pkg = Rcpp::Environment::namespace_env("manifoldalign");
+  Rcpp::Function lp_fun = pkg["classical_ot_lp_r"];
+
+  Rcpp::NumericMatrix cost_r = Rcpp::wrap(cost);
+  Rcpp::NumericVector a_r = Rcpp::wrap(a);
+  Rcpp::NumericVector b_r = Rcpp::wrap(b);
+
+  Rcpp::NumericMatrix sol = lp_fun(cost_r, a_r, b_r);
+
+  return Rcpp::as<arma::mat>(sol);
 }
 
 } // namespace fallback
