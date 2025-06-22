@@ -32,6 +32,7 @@ This method provides out-of-sample extension for FPGW by:
   \item Using the transport plan to map to target domain
   \item Interpolating based on transport weights
 }
+The object must contain the training data used for fitting, otherwise an error is thrown.
 }
 \examples{
 \dontrun{
@@ -41,6 +42,7 @@ result <- fpgw(hd, omega1 = 0.1)
 # Transport new samples from domain 1 to domain 2
 new_samples <- matrix(rnorm(10 * 5), 10, 5)
 transported <- predict(result, new_samples, from = 1, to = 2)
+head(transported)
 }
 
 }
