@@ -40,6 +40,8 @@ An fpgw object (inheriting from multiblock_biprojector) containing:
   \item \code{lambda}: TV penalty (if penalized variant)
   \item \code{rho}: Mass budget (if mass-constrained variant)
   \item \code{domain_names}: Names of the domains
+  \item \code{training_data}: Original domain matrices for prediction
+  \item \code{metric}: Distance metric used
 }
 }
 \description{

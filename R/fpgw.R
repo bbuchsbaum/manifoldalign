@@ -42,6 +42,8 @@
 #'   \item \code{lambda}: TV penalty (if penalized variant)
 #'   \item \code{rho}: Mass budget (if mass-constrained variant)
 #'   \item \code{domain_names}: Names of the domains
+#'   \item \code{training_data}: Original domain matrices for prediction
+#'   \item \code{metric}: Distance metric used
 #' }
 #'
 #' @details
@@ -225,7 +227,9 @@ fpgw.hyperdesign <- function(data,
       omega1 = omega1,
       lambda = lambda,
       rho = rho,
-      domain_names = domain_names
+      domain_names = domain_names,
+      training_data = X_list,
+      metric = metric
     ),
     class = c("fpgw", "multiblock_biprojector")
   )
@@ -705,8 +709,10 @@ print.fpgw <- function(x, ...) {
 }
 
 #' Predict method for FPGW
-#' 
+#'
 #' Transport new samples using learned FPGW alignment
+#'
+#' @importFrom RANN nn2
 #' 
 #' @param object An fpgw object
 #' @param newdata New data from one domain to transport
@@ -724,15 +730,18 @@ print.fpgw <- function(x, ...) {
 #'   \item Using the transport plan to map to target domain
 #'   \item Interpolating based on transport weights
 #' }
+#' The object must contain the training data used for fitting,
+#' otherwise an error is thrown.
 #' 
 #' @examples
 #' \dontrun{
 #' # After computing FPGW alignment
 #' result <- fpgw(hd, omega1 = 0.1)
-#' 
+#'
 #' # Transport new samples from domain 1 to domain 2
 #' new_samples <- matrix(rnorm(10 * 5), 10, 5)
 #' transported <- predict(result, new_samples, from = 1, to = 2)
+#' head(transported)
 #' }
 #' 
 #' @export
@@ -782,34 +791,31 @@ predict.fpgw <- function(object, newdata, from, to, type = "transport", ...) {
   }
   
   if (type == "transport") {
-    # Simple barycentric mapping based on transport plan
-    # For each new point, find its representation in source domain
-    # then map through transport plan
-    
-    # This is a placeholder - full implementation would require
-    # access to original data or learned embeddings
-    warning("Full out-of-sample transport not yet implemented. ",
-            "Returning interpolated coordinates based on transport plan.",
-            call. = FALSE)
-    
-    # Normalize transport plan rows for interpolation
-    row_sums <- rowSums(P)
-    P_norm <- P
-    # Only normalize rows with positive mass
-    positive_rows <- row_sums > 1e-10
-    P_norm[positive_rows, ] <- P[positive_rows, ] / row_sums[positive_rows]
-    P_norm[!positive_rows, ] <- 0
-    
-    # For now, return the transport weights for the new data
-    # In full implementation, would compute nearest neighbors and interpolate
+    if (is.null(object$training_data)) {
+      stop("Training data not stored in object; cannot perform barycentric mapping",
+           call. = FALSE)
+    }
+
+    X_source <- object$training_data[[from]]
+    if (ncol(newdata) != ncol(X_source)) {
+      stop("New data has different number of features than source domain",
+           call. = FALSE)
+    }
+
+    k <- min(5L, nrow(X_source))
+    nn <- RANN::nn2(X_source, newdata, k = k)
+    idx <- nn$nn.idx
+    dists <- nn$nn.dists
+    w <- 1 / (dists + 1e-8)
+    w <- w / rowSums(w)
+
     n_new <- nrow(newdata)
-    n_target <- ncol(P)
-    
-    # Placeholder: random weights (should be based on nearest neighbors)
-    weights <- matrix(runif(n_new * n_target), n_new, n_target)
-    weights <- weights / rowSums(weights)
-    
-    return(weights)
+    res <- matrix(0, n_new, ncol(P))
+    for (i in seq_len(n_new)) {
+      res[i, ] <- w[i, ] %*% P[idx[i, ], , drop = FALSE]
+    }
+
+    return(res)
     
   } else {
     # Return embeddings in shared space
