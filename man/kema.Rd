@@ -84,12 +84,13 @@ r is the number of landmarks.
 # Example with hyperdesign data
 library(multivarious)
 library(multidesign)
+library(tibble)
 
 # Create synthetic multi-domain data
 set.seed(123)
-X1 <- matrix(rnorm(100), 50, 2)
-X2 <- matrix(rnorm(100), 50, 2)
-labels <- sample(c("A", "B"), 50, TRUE)
+X1 <- matrix(rnorm(40), 20, 2)
+X2 <- matrix(rnorm(40), 20, 2)
+labels <- sample(c("A", "B"), 20, TRUE)
 
 # Create design data frames
 design1 <- data.frame(labels = labels)
@@ -103,10 +104,10 @@ md2 <- multidesign(X2, design2)
 hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
 
 # Run KEMA with default settings
-result <- kema(hd, y = labels, ncomp = 2)
+result <- kema(hd, y = labels, ncomp = 2, knn = 3)
 
 # Semi-supervised learning with missing labels
-design1$labels[1:10] <- NA  # Mark some samples as unlabeled
+design1$labels[1:4] <- NA  # Mark a few samples as unlabeled
 md1_semi <- multidesign(X1, design1)
 hd_semi <- hyperdesign(list(domain1 = md1_semi, domain2 = md2))
 result_semi <- kema(hd_semi, y = labels, ncomp = 2)

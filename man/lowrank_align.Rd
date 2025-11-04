@@ -17,6 +17,8 @@ lowrank_align(data, y, ...)
   lambda = NULL,
   scale_M = FALSE,
   n_cores = NULL,
+  sv_thresh = 1,
+  solver = c("explicit", "operator"),
   ...
 )
 }
@@ -50,6 +52,15 @@ accordingly (default: FALSE)}
 \item{n_cores}{Number of threads for PRIMME eigenvalue computations. If 
 NULL (default), uses system default. Set to 1 for reproducible results 
 across systems.}
+
+\item{sv_thresh}{Singular value threshold used when forming R (default: 1).
+Values at or below the threshold are discarded, matching Eq. 11 of the
+original Low-Rank Alignment paper.}
+
+\item{solver}{Eigen solver backend. `"explicit"` (default) forms the dense
+matrices and uses PRIMME, matching the original implementation. `"operator"`
+keeps low-rank factors and uses RSpectra with a matrix-vector operator to
+reduce memory and runtime.}
 }
 \value{
 The return value depends on the specific method. For hyperdesign 

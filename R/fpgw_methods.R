@@ -15,11 +15,9 @@ NULL
 #' @param target_index Index of target domain
 #' @param ... Additional arguments
 #' 
-#' @return Transformed data
+#' @return Transformed samples in the target domain feature space.
 #' @export
 transform.fpgw <- function(x, newdata, source_index = 1, target_index = 2, ...) {
-  # This would implement the actual transformation
-  # For now, it's a placeholder that calls predict
   predict(x, newdata, from = source_index, to = target_index, type = "transport", ...)
 }
 

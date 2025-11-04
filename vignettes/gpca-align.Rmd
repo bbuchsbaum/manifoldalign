@@ -1,0 +1,197 @@
+---
+title: "Generalized PCA Alignment with gpca_align"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Generalized PCA Alignment with gpca_align}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+`gpca_align.hyperdesign()` implements the Generalized PCA alignment described in
+`R/gpca_align.R`.  It constructs a coupled metric across domains and then solves
+a generalized PCA problem to obtain a shared latent embedding.  The helper
+`gpca_align_control()` exposes safeguards for graph sparsification, label
+balancing and dense-matrix memory limits, making it practical on real data.
+
+This vignette walks through a minimal pipeline:
+
+1. Load a reusable **hyperdesign** dataset with three related domains.
+2. Run `gpca_align.hyperdesign()` and inspect the aligned scores.
+3. Tune graph sparsity and balancing with `gpca_align_control()`.
+
+The code below only relies on public package APIs, so you can copy–paste it when
+exploring your own data.
+
+## Setup
+
+```{r setup}
+library(manifoldalign)
+library(multidesign)
+library(multivarious)
+library(tibble)
+library(dplyr)
+library(ggplot2)
+library(purrr)
+```
+
+## Constructing a Hyperdesign
+
+We reuse the packaged benchmark dataset so every alignment vignette operates on
+identical inputs.  It contains three domains with two latent classes and
+moderate domain-specific transformations.
+
+```{r synthetic-data}
+alignment_benchmark <- manifoldalign::alignment_benchmark
+domain_list <- lapply(alignment_benchmark$domains, function(dom) {
+  multidesign(dom$x, dom$design)
+})
+hd <- hyperdesign(domain_list)
+labels <- alignment_benchmark$labels
+domain_names <- names(domain_list)
+domain_sizes <- vapply(domain_list, function(dom) nrow(dom$x), integer(1))
+```
+
+```{r gpca-helpers}
+# Standardise columns while guarding against zero variance
+zscore_columns <- function(mat) {
+  center <- sweep(mat, 2, colMeans(mat), "-")
+  sds <- sqrt(colMeans(center^2))
+  sds[sds == 0] <- 1
+  center / sds
+}
+```
+
+`gpca_align.hyperdesign()` expects the label column name via the `y` argument.
+
+```{r run-gpca-align}
+base_preproc <- replicate(length(domain_names), multivarious::pass(), simplify = FALSE)
+
+gpca_fit <- gpca_align.hyperdesign(
+  hd,
+  y = condition,
+  ncomp = 2,
+  u = 0.6,           # balance within/between alignment
+  lambda = 1e-2,     # light ridge regularisation
+  preproc = base_preproc
+)
+
+str(gpca_fit, max.level = 1)
+```
+
+```{r gpca-metrics}
+# RMS alignment between domain pairs
+rms_alignment <- function(scores, sizes, names) {
+  offsets <- c(0, cumsum(sizes))
+  idx <- setNames(vector('list', length(names)), names)
+  for (i in seq_along(names)) {
+    idx[[names[i]]] <- seq(offsets[i] + 1L, offsets[i + 1L])
+  }
+  purrr::map_dfr(combn(names, 2, simplify = FALSE), function(pair) {
+    i_idx <- idx[[pair[1]]]
+    j_idx <- idx[[pair[2]]]
+    mat_i <- scores[i_idx, , drop = FALSE]
+    mat_j <- scores[j_idx, , drop = FALSE]
+    tibble(
+      domain_i = pair[1],
+      domain_j = pair[2],
+      rms = sqrt(mean(rowSums((mat_i - mat_j)^2)))
+    )
+  })
+}
+
+rms_alignment(as.matrix(gpca_fit$s), domain_sizes, domain_names)
+```
+
+The result is a `multiblock_biprojector`, so we can extract scores and feature
+loadings just like other `multivarious` models. For plotting below we z-score the
+aligned scores so that the scale matches other vignettes.
+
+You can optionally pass a domain-specific preprocessing list (e.g.
+`list(center(), center(), center())`) if you want to centre or scale each block
+before alignment.  Passing the `base_preproc` list (built above with
+`multivarious::pass()`) keeps preprocessing as the identity—which keeps this
+example lightweight while still supporting different feature dimensions.
+
+```{r inspect-scores}
+score_tbl <- as_tibble(zscore_columns(as.matrix(gpca_fit$s)), .name_repair = "minimal")
+colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
+
+scores <- score_tbl %>%
+  mutate(
+    sample = seq_len(nrow(.)),
+    domain = rep(domain_names, times = domain_sizes),
+    condition = rep(labels, length(domain_names))
+  )
+
+head(scores)
+```
+
+### Visualising the Shared Embedding
+
+```{r plot-scores, fig.width = 6, fig.height = 4}
+ ggplot(scores, aes(x = comp1, y = comp2, colour = condition, shape = domain)) +
+  geom_point(size = 2.2, alpha = 0.85) +
+  labs(
+    title = "GPCA alignment: shared 2D embedding",
+    x = "Component 1",
+    y = "Component 2"
+  ) +
+  theme_minimal()
+```
+
+## Controlling Graph Sparsification and Balancing
+
+The optional `control` argument feeds through to
+`gpca_align_control()`, letting you adjust k-NN sparsification, label balancing
+and memory caps.  Here we build a denser within-domain graph but down-weight the
+majority class via label balancing.
+
+```{r control-example}
+ctrl <- gpca_align_control(
+  knn = 10,
+  knn_mode = "mutual",
+  balance = "within",
+  balance_power = 0.5,
+  normalize = "edges",
+  verbose = FALSE
+)
+
+gpca_dense <- gpca_align.hyperdesign(
+  hd,
+  y = condition,
+  ncomp = 2,
+  control = ctrl,
+  preproc = base_preproc
+)
+
+summary(gpca_dense$sdev)
+```
+
+When working with larger domains, consider leaving `knn = NA` (the default) to
+use fully dense metrics or lower the `max_dense_elems` parameter to enforce a
+safe memory ceiling.  If `gpca_align.hyperdesign()` detects that densifying the block matrix
+would exceed the limit, it aborts with a diagnostic message so you can tighten
+the sparsification or dimensionality reduction beforehand.
+
+## Next Steps
+
+- `gpca_align.hyperdesign()` returns a standard `multivarious` projector, so you can call
+  `predict()` on new samples (via `multivarious::multiblock_biprojector`).
+- The RMS alignment summary above shows how closely each domain pair agrees in the
+  coupled space; values near zero indicate strong agreement.
+- Use `gpca_align_control()` to add sparsification or label balancing when operating
+  at larger scale.
+- Pair `gpca_align.hyperdesign()` with `kema()` or `grasp()` in the same pipeline to compare
+  linear vs kernel alignment strategies.
+
+This vignette is intentionally lightweight—swap in your own domains or expand
+chunks to benchmark larger settings.

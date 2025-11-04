@@ -10,7 +10,7 @@ extract_kema_eigenvalues(
   kernel = kernlab::rbfdot(sigma = 0.1),
   knn = 5,
   u = 0.5,
-  lambda = 0.001,
+  lambda = 0,
   ncomp = 3,
   solver = "exact"
 )

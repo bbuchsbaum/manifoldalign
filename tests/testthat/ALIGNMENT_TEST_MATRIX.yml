@@ -1,0 +1,223 @@
+fixtures:
+  spiral_two_domain:
+    generator: spiral_two_domain
+    params:
+      n: 100
+      noise: 0.05
+    applies_to:
+    - gpca_align
+    - grasp
+    - kema
+    invariants:
+    - structure
+    - finite
+    - subspace
+    - eigenvalues
+  linear_maps:
+    generator: linear_maps
+    params:
+      n: 80
+      noise: 0.01
+    applies_to:
+    - gpca_align
+    - cone_align
+    - lowrank_align
+    - linear_sim_embed
+    invariants:
+    - structure
+    - finite
+    - similarity_preservation
+  anchor_partial_overlap:
+    generator: anchor_partial_overlap
+    params: {}
+    applies_to:
+    - parrot
+    - cone_align
+    - kema
+    invariants:
+    - structure
+    - anchors
+    - ot_marginals
+  graph_cycle_mismatch:
+    generator: graph_cycle_mismatch
+    params: {}
+    applies_to:
+    - parrot
+    - grasp
+    invariants:
+    - structure
+    - ot_marginals
+    - assignment
+  high_dim_sparse:
+    generator: high_dim_sparse
+    params:
+      n: 60
+      p: 500
+    applies_to:
+    - gpca_align
+    - grasp_multiset
+    invariants:
+    - finite
+    - psd
+    - densification
+  noisy_labels:
+    generator: noisy_labels
+    params:
+      imbalance: 0.7
+    applies_to:
+    - cone_align
+    - pseudolabel
+    invariants:
+    - balancing
+    - structure
+  singular_block:
+    generator: singular_block
+    params: {}
+    applies_to:
+    - gpca_align
+    - kema
+    invariants:
+    - rank_warning
+  large_ot_cost:
+    generator: large_ot_cost
+    params:
+      n: 40
+      tau_values:
+      - 0.001
+      - 0.01
+      - 0.1
+    applies_to:
+    - parrot
+    - gromov_wasserstein
+    - fpgw
+    invariants:
+    - ot_marginals
+    - solver_equivalence
+  task_partial_observation:
+    generator: task_partial_observation
+    params:
+      missing_fraction: 0.3
+    applies_to:
+    - generalized_procrustes
+    invariants:
+    - task_recovery
+    - convergence
+  dual_graphs_structural:
+    generator: dual_graphs_structural
+    params:
+      n: 50
+    applies_to:
+    - gromov_wasserstein
+    - fpgw
+    invariants:
+    - structure_preservation
+    - ot_marginals
+  multi_modal_views:
+    generator: multi_modal_views
+    params:
+      n: 70
+      views: 3
+    applies_to:
+    - coupled_diagonalization
+    invariants:
+    - structure
+    - orthonormality
+methods:
+  gpca_align:
+    capabilities:
+    - spectral_linear
+    - multiset
+    required_fixtures:
+    - spiral_two_domain
+    - linear_maps
+    - high_dim_sparse
+    - singular_block
+  grasp:
+    capabilities:
+    - spectral_graph
+    - multiset
+    required_fixtures:
+    - spiral_two_domain
+    - graph_cycle_mismatch
+  grasp_multiset:
+    capabilities:
+    - spectral_graph
+    - multiset
+    required_fixtures:
+    - high_dim_sparse
+  kema:
+    capabilities:
+    - kernel_spectral
+    - multiset
+    required_fixtures:
+    - spiral_two_domain
+    - anchor_partial_overlap
+    - singular_block
+  cone_align:
+    capabilities:
+    - graph_alignment
+    - multiset
+    required_fixtures:
+    - linear_maps
+    - anchor_partial_overlap
+    - noisy_labels
+  lowrank_align:
+    capabilities:
+    - linear_manifold
+    - multiset
+    required_fixtures:
+    - linear_maps
+  parrot:
+    capabilities:
+    - optimal_transport
+    - anchors
+    required_fixtures:
+    - anchor_partial_overlap
+    - graph_cycle_mismatch
+    - large_ot_cost
+  pseudolabel:
+    capabilities:
+    - label_transfer
+    - multiset
+    required_fixtures:
+    - noisy_labels
+  generalized_procrustes:
+    capabilities:
+    - orthogonal_alignment
+    - tasks
+    required_fixtures:
+    - task_partial_observation
+  gromov_wasserstein:
+    capabilities:
+    - optimal_transport
+    - structural
+    required_fixtures:
+    - large_ot_cost
+    - dual_graphs_structural
+  fpgw:
+    capabilities:
+    - optimal_transport
+    - structural
+    required_fixtures:
+    - large_ot_cost
+    - dual_graphs_structural
+  coupled_diagonalization:
+    capabilities:
+    - spectral_joint
+    - multiset
+    required_fixtures:
+    - multi_modal_views
+  linear_sim_embed:
+    capabilities:
+    - linear_similarity
+    - two_set
+    required_fixtures:
+    - linear_maps
+  cone_align_multiple:
+    capabilities:
+    - graph_alignment
+    - multiset
+    required_fixtures:
+    - linear_maps
+    - anchor_partial_overlap
+    - noisy_labels

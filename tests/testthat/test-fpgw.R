@@ -3,14 +3,20 @@
 
 library(testthat)
 library(Matrix)
-library(multidesign)
-library(multivarious)
-library(tibble)
-library(manifoldalign)
+
+have_multidesign <- requireNamespace("multidesign", quietly = TRUE)
+have_lpSolve <- requireNamespace("lpSolve", quietly = TRUE)
+
+if (have_multidesign && !("package:multidesign" %in% search())) {
+  suppressPackageStartupMessages(library(multidesign))
+}
+if (requireNamespace("tibble", quietly = TRUE) && !("package:tibble" %in% search())) {
+  suppressPackageStartupMessages(library(tibble))
+}
 
 test_that("fpgw works with basic hyperdesign input", {
-  skip_if_not_installed("multidesign")
-  skip_if_not_installed("lpSolve")
+  skip_if_not(have_multidesign, "multidesign not installed")
+  skip_if_not(have_lpSolve, "lpSolve not installed")
   
   # Create simple test data
   set.seed(123)
@@ -51,7 +57,8 @@ test_that("fpgw works with basic hyperdesign input", {
 })
 
 test_that("fpgw handles mass-constrained variant", {
-  skip_if_not_installed("lpSolve")
+  skip_if_not(have_multidesign, "multidesign not installed")
+  skip_if_not(have_lpSolve, "lpSolve not installed")
   
   set.seed(456)
   n <- 15
@@ -77,7 +84,7 @@ test_that("fpgw handles mass-constrained variant", {
 })
 
 test_that("fpgw handles TV-penalized variant", {
-  skip_if_not_installed("multidesign")
+  skip_if_not(have_multidesign, "multidesign not installed")
   
   set.seed(789)
   n <- 10
@@ -103,7 +110,7 @@ test_that("fpgw handles TV-penalized variant", {
 })
 
 test_that("fpgw validates mutually exclusive parameters", {
-  skip_if_not_installed("multidesign")
+  skip_if_not(have_multidesign, "multidesign not installed")
   
   # Create dummy data
   n <- 10
@@ -120,7 +127,7 @@ test_that("fpgw validates mutually exclusive parameters", {
 })
 
 test_that("fpgw handles different omega1 values", {
-  skip_if_not_installed("multidesign")
+  skip_if_not(have_multidesign, "multidesign not installed")
   
   set.seed(111)
   n <- 15
@@ -147,7 +154,7 @@ test_that("fpgw handles different omega1 values", {
 })
 
 test_that("fpgw convergence behavior", {
-  skip_if_not_installed("multidesign")
+  skip_if_not(have_multidesign, "multidesign not installed")
   
   # Small problem that should converge quickly
   set.seed(222)
@@ -167,7 +174,7 @@ test_that("fpgw convergence behavior", {
 })
 
 test_that("fpgw print method works", {
-  skip_if_not_installed("multidesign")
+  skip_if_not(have_multidesign, "multidesign not installed")
   
   # Create simple test case
   set.seed(333)
@@ -196,8 +203,8 @@ test_that("fpgw print method works", {
 
 # Validation test against known solution
 test_that("fpgw produces expected results on toy problem", {
-  skip_if_not_installed("multidesign")
-  skip_if_not_installed("lpSolve")
+  skip_if_not(have_multidesign, "multidesign not installed")
+  skip_if_not(have_lpSolve, "lpSolve not installed")
   
   # Create a toy problem with known structure
   set.seed(42)
@@ -227,7 +234,7 @@ test_that("fpgw produces expected results on toy problem", {
 })
 
 test_that("fpgw handles different dimensional data", {
-  skip_if_not_installed("multidesign")
+  skip_if_not(have_multidesign, "multidesign not installed")
   
   # Create data with different dimensions
   set.seed(789)
@@ -253,4 +260,37 @@ test_that("fpgw handles different dimensional data", {
   total_mass <- sum(P)
   expect_gt(total_mass, 0)
   expect_lte(total_mass, 1)
+})
+
+test_that("fpgw out-of-sample transport approximates target samples", {
+  skip_if_not(have_multidesign, "multidesign not installed")
+  skip_if_not(have_lpSolve, "lpSolve not installed")
+
+  set.seed(4242)
+  n <- 12
+  X1 <- matrix(rnorm(n * 3), n, 3)
+  # Target domain is shifted version of source
+  shift <- matrix(rep(c(0.5, -0.25, 0.1), each = n), n, 3, byrow = FALSE)
+  X2 <- X1 + shift
+
+  design <- data.frame(id = 1:n)
+  md1 <- multidesign::multidesign(X1, design)
+  md2 <- multidesign::multidesign(X2, design)
+  hd <- hyperdesign(list(source = md1, target = md2))
+
+  fit <- fpgw(hd, omega1 = 0.9, max_iter = 50, verbose = FALSE)
+
+  new_points <- X1[1:3, , drop = FALSE]
+  transported <- predict(fit, new_points, from = "source", to = "target", k = 1)
+
+  expect_equal(dim(transported), dim(new_points))
+  expected <- X2[1:3, , drop = FALSE]
+  expect_equal(transported, expected, tolerance = 0.2)
+
+  weights <- predict(fit, new_points, from = 1, to = 2, type = "weights", k = 2)
+  expect_equal(nrow(weights), nrow(new_points))
+  expect_equal(rowSums(weights), rep(1, nrow(weights)), tolerance = 1e-6)
+
+  transformed <- transform(fit, new_points, source_index = 1, target_index = 2, k = 2)
+  expect_equal(dim(transformed), dim(new_points))
 })

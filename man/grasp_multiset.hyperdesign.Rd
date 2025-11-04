@@ -6,6 +6,7 @@
 \usage{
 \method{grasp_multiset}{hyperdesign}(
   data,
+  preproc = multivarious::center(),
   ncomp = 30,
   q_descriptors = 100,
   sigma = 0.73,
@@ -13,6 +14,7 @@
   use_laplacian = TRUE,
   anchor = 1L,
   solver = c("auction", "linear"),
+  assignment_alpha = 0.5,
   max_iter = 100,
   tol = 1e-06,
   ...
@@ -20,6 +22,8 @@
 }
 \arguments{
 \item{data}{A hyperdesign object containing three or more graph domains}
+
+\item{preproc}{Preprocessing step applied via multivarious::init_transform}
 
 \item{ncomp}{Number of spectral components (default: 30)}
 
@@ -34,6 +38,8 @@
 \item{anchor}{Index of reference graph (1-based) or "mean" (default: 1)}
 
 \item{solver}{Assignment solver: "auction" or "linear" (default: "auction")}
+
+\item{assignment_alpha}{Weight for cosine vs. Euclidean assignment cost (0-1)}
 
 \item{max_iter}{Maximum iterations for joint optimization (default: 100)}
 

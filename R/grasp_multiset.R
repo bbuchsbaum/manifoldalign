@@ -3,6 +3,7 @@
 #' GRASP Multiset for Hyperdesign Objects
 #'
 #' @param data A hyperdesign object containing three or more graph domains
+#' @param preproc Preprocessing step applied via multivarious::init_transform
 #' @param ncomp Number of spectral components (default: 30)
 #' @param q_descriptors Number of descriptors (default: 100)
 #' @param sigma Diffusion parameter (default: 0.73)
@@ -10,6 +11,7 @@
 #' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
 #' @param anchor Index of reference graph (1-based) or "mean" (default: 1)
 #' @param solver Assignment solver: "auction" or "linear" (default: "auction")
+#' @param assignment_alpha Weight for cosine vs. Euclidean assignment cost (0-1)
 #' @param max_iter Maximum iterations for joint optimization (default: 100)
 #' @param tol Convergence tolerance (default: 1e-6)
 #' @param ... Additional arguments (currently unused)
@@ -22,6 +24,7 @@
 #' @importFrom Matrix Diagonal crossprod norm
 #' @importFrom clue solve_LSAP
 grasp_multiset.hyperdesign <- function(data,
+                                     preproc = multivarious::center(),
                                      ncomp = 30,
                                      q_descriptors = 100,
                                      sigma = 0.73,
@@ -29,14 +32,25 @@ grasp_multiset.hyperdesign <- function(data,
                                      use_laplacian = TRUE,
                                      anchor = 1L,
                                      solver = c("auction", "linear"),
+                                     assignment_alpha = 0.5,
                                      max_iter = 100,
                                      tol = 1e-6,
                                      ...) {
-  
+
   # Validate input
   chk::chk_s3_class(data, "hyperdesign")
-  
-  domains <- unclass(data)
+
+  pdata <- tryCatch(
+    multivarious::init_transform(data, preproc),
+    error = function(e) {
+      if (inherits(e, "error") && grepl("no applicable method", e$message, fixed = TRUE)) {
+        data
+      } else {
+        stop(e)
+      }
+    }
+  )
+  domains <- unclass(pdata)
   m <- length(domains)
   if (m < 2) {
     stop("Need at least two domains for multi-graph alignment", call. = FALSE)
@@ -60,7 +74,9 @@ grasp_multiset.hyperdesign <- function(data,
   chk::chk_true(max_iter > 0)
   chk::chk_number(tol)
   chk::chk_true(tol > 0)
-  
+  chk::chk_number(assignment_alpha)
+  chk::chk_true(assignment_alpha >= 0 && assignment_alpha <= 1)
+
   # Validate anchor
   if (is.numeric(anchor)) {
     chk::chk_number(anchor)
@@ -75,7 +91,7 @@ grasp_multiset.hyperdesign <- function(data,
   # Blocks A & B: Use existing helpers from grasp.R
   bases <- compute_grasp_basis(domains, ncomp, use_laplacian)
   descriptors <- compute_grasp_descriptors(bases, q_descriptors, sigma)
-  
+
   # New: Joint basis alignment
   alignment_result <- align_bases_multiset(bases, descriptors, lambda, max_iter, tol)
   rotations <- alignment_result$rotations
@@ -85,10 +101,29 @@ grasp_multiset.hyperdesign <- function(data,
   C_list <- lapply(seq_len(m), function(s) {
     solve_diagonal_map(descriptors[[s]], bases[[s]], rotations[[s]], latent_coef)
   })
-  
-  # Embeddings in latent space
+
+  # Descriptor projections for latent descriptor embeddings
+  A_list <- Map(function(d, b) Matrix::crossprod(d, b$vectors), descriptors, bases)
+
+  # Spectral embeddings (returned to callers)
   embeddings <- lapply(seq_len(m), function(s) {
     as.matrix(bases[[s]]$vectors %*% rotations[[s]] %*% C_list[[s]])
+  })
+
+  # Augmented features used only for assignments
+  assignment_features <- lapply(seq_len(m), function(s) {
+    spec_mat <- embeddings[[s]]
+    desc_rot <- A_list[[s]] %*% rotations[[s]] %*% C_list[[s]]
+    desc_embed <- as.matrix(descriptors[[s]] %*% desc_rot)
+
+    desc_norm <- sqrt(sum(desc_embed^2))
+    if (desc_norm > 0) {
+      spec_norm <- sqrt(sum(spec_mat^2))
+      scale <- if (spec_norm > 0) spec_norm / desc_norm else 1
+      cbind(spec_mat, desc_embed * scale)
+    } else {
+      spec_mat
+    }
   })
   
   # Assignments - compute permutations to anchor
@@ -99,20 +134,108 @@ grasp_multiset.hyperdesign <- function(data,
     anchor_idx <- 1L
   }
   
-  permutations <- lapply(seq_len(m), function(s) {
+  # Pairwise permutations to support majority voting during assignment
+  pairwise_perm <- lapply(seq_len(m), function(i) vector("list", m))
+  for (i in seq_len(m)) {
+    for (j in seq_len(m)) {
+      if (i == j) next
+      pairwise_perm[[i]][[j]] <- solve_assignment_multiset(
+        assignment_features[[i]],
+        assignment_features[[j]],
+        distance = "cosine",
+        solver = solver,
+        alpha = assignment_alpha
+      )
+    }
+  }
+
+  direct_map <- lapply(seq_len(m), function(s) {
     if (s == anchor_idx) {
-      # Identity permutation for anchor
-      seq_len(nrow(embeddings[[s]]))
+      seq_len(nrow(assignment_features[[s]]))
     } else {
-      solve_assignment_multiset(embeddings[[anchor_idx]], embeddings[[s]], 
-                               distance = "cosine", solver = solver)
+      pairwise_perm[[anchor_idx]][[s]]
     }
   })
-  
+
+  permutations <- lapply(seq_len(m), function(s) {
+    if (s == anchor_idx) {
+      direct_map[[s]]
+    } else {
+      candidates <- list(direct_map[[s]])
+      if (m > 2) {
+        for (t in seq_len(m)) {
+          if (t %in% c(anchor_idx, s)) next
+          perm_anchor_to_t <- direct_map[[t]]
+          perm_t_to_s <- pairwise_perm[[t]][[s]]
+          candidates[[length(candidates) + 1L]] <- perm_t_to_s[perm_anchor_to_t]
+        }
+      }
+
+      if (length(candidates) == 1L) {
+        candidates[[1L]]
+      } else {
+        n_anchor <- nrow(assignment_features[[anchor_idx]])
+        n_target <- nrow(assignment_features[[s]])
+        vote_counts <- matrix(0, n_anchor, n_target)
+        for (cand in candidates) {
+          cand <- as.integer(cand)
+          for (j in seq_len(n_anchor)) {
+            idx <- cand[j]
+            if (idx > 0L && idx <= n_target) {
+              vote_counts[j, idx] <- vote_counts[j, idx] + 1L
+            }
+          }
+        }
+
+        row_scores <- apply(vote_counts, 1, max)
+        order_rows <- order(row_scores, decreasing = TRUE)
+        perm_final <- integer(n_anchor)
+        used <- rep(FALSE, n_target)
+
+        for (row in order_rows) {
+          counts <- vote_counts[row, ]
+          candidate_order <- order(counts, decreasing = TRUE)
+          assigned <- FALSE
+          for (candidate in candidate_order) {
+            if (counts[candidate] <= 0) break
+            if (!used[candidate]) {
+              perm_final[row] <- candidate
+              used[candidate] <- TRUE
+              assigned <- TRUE
+              break
+            }
+          }
+
+          if (!assigned) {
+            direct_candidate <- direct_map[[s]][row]
+            if (direct_candidate > 0L && direct_candidate <= n_target && !used[direct_candidate]) {
+              perm_final[row] <- direct_candidate
+              used[direct_candidate] <- TRUE
+              assigned <- TRUE
+            }
+          }
+
+          if (!assigned) {
+            fallback <- which(!used)
+            if (length(fallback) > 0L) {
+              perm_final[row] <- fallback[1L]
+              used[fallback[1L]] <- TRUE
+            } else {
+              perm_final[row] <- direct_map[[s]][row]
+            }
+          }
+        }
+
+        perm_final
+      }
+    }
+  })
+
   # Return grasp_multiset object
   structure(
     list(
       embeddings = embeddings,
+      assignment_embeddings = assignment_features,
       permutations = permutations,
       rotations = rotations,
       mapping_diag = C_list,
@@ -193,95 +316,90 @@ grasp_multiset.default <- function(data, ...) {
 #'
 #' @return List with rotations and convergence info
 #' @keywords internal
-align_bases_multiset <- function(bases, descriptors, lambda, 
+align_bases_multiset <- function(bases, descriptors, lambda,
                                 max_iter = 100, tol = 1e-6) {
-  
+
   m <- length(bases)
   k <- ncol(bases[[1]]$vectors)
-  
-  # Initialize rotations as identity matrices
+
   Ms <- replicate(m, Matrix::Diagonal(k), simplify = FALSE)
-  
-  # Pre-compute F^T * Phi for every graph
-  FtPhi <- Map(function(d, b) Matrix::crossprod(d, b$vectors),
-               descriptors, bases)
-  
-  # Objective function (closure uses outer environment)
+
+  A_list <- Map(function(d, b) Matrix::crossprod(d, b$vectors),
+                descriptors, bases)
+  Gss <- lapply(A_list, function(A) Matrix::crossprod(A, A))
+
   compute_objective <- function() {
-    obj_total <- 0
-    
+    off_sum <- 0
     for (s in seq_len(m)) {
-      # Off-diagonal penalty for graph s
       Lambda_s <- Matrix::Diagonal(x = bases[[s]]$values)
-      aligned <- Matrix::t(Ms[[s]]) %*% Lambda_s %*% Ms[[s]]
-      diag_aligned <- Matrix::diag(aligned)
-      off_diag <- aligned - Matrix::Diagonal(x = diag_aligned)
-      off_penalty <- Matrix::norm(off_diag, "F")^2
-      
-      # Descriptor alignment penalty
-      desc_penalty <- 0
-      for (t in setdiff(seq_len(m), s)) {
-        residual <- FtPhi[[s]] - FtPhi[[t]] %*% Ms[[t]] %*% Matrix::t(Ms[[s]])
-        desc_penalty <- desc_penalty + Matrix::norm(residual, "F")^2
-      }
-      
-      obj_total <- obj_total + off_penalty + lambda * desc_penalty
+      S <- Matrix::crossprod(Ms[[s]], Lambda_s %*% Ms[[s]])
+      off_mat <- S - Matrix::Diagonal(x = diag(S))
+      off_sum <- off_sum + Matrix::norm(off_mat, "F")^2
     }
-    
-    obj_total
+
+    desc_sum <- 0
+    if (m > 1) {
+      for (s in 1:(m - 1)) {
+        for (t in (s + 1):m) {
+          diff_mat <- A_list[[s]] %*% Ms[[s]] - A_list[[t]] %*% Ms[[t]]
+          desc_sum <- desc_sum + Matrix::norm(diff_mat, "F")^2
+        }
+      }
+    }
+
+    off_sum + lambda * desc_sum
   }
-  
-  # Main optimization loop
+
   prev_obj <- compute_objective()
-  
+
   for (iter in seq_len(max_iter)) {
-    # Update each rotation matrix
     for (s in seq_len(m)) {
-      # Compute gradient for M_s
-      grad <- gradient_single_multiset(bases[[s]], FtPhi[[s]], FtPhi, Ms, s, lambda)
-      
-      # Line search with retraction
-      step_size <- 0.5
-      for (ls_iter in 1:8) {
-        M_new_euc <- Ms[[s]] - step_size * grad
-        
-        # SVD retraction to Stiefel manifold
-        M_new_mat <- as.matrix(M_new_euc)
-        if (any(!is.finite(M_new_mat))) {
+      grad <- gradient_single_multiset(
+        basis_s = bases[[s]],
+        A_list = A_list,
+        Ms = Ms,
+        s = s,
+        lambda = lambda,
+        Gss = Gss
+      )
+
+      step <- 0.5
+      for (ls in 1:8) {
+        M_trial_euc <- Ms[[s]] - step * grad
+        M_trial_mat <- as.matrix(M_trial_euc)
+
+        if (any(!is.finite(M_trial_mat))) {
           warning("Non-finite values in rotation matrix, reducing step size")
-          step_size <- step_size * 0.5
+          step <- step * 0.5
           next
         }
-        
-        svd_res <- svd(M_new_mat)
-        M_new <- Matrix::Matrix(svd_res$u %*% t(svd_res$v), sparse = TRUE)
-        
-        # Store old M_s, update, check objective
+
+        uv <- svd(M_trial_mat)
+        M_trial <- Matrix::Matrix(uv$u %*% t(uv$v), sparse = TRUE)
+
         M_old <- Ms[[s]]
-        Ms[[s]] <- M_new
+        Ms[[s]] <- M_trial
         new_obj <- compute_objective()
-        
-        if (new_obj < prev_obj) {
+
+        if (is.finite(new_obj) && new_obj < prev_obj) {
+          prev_obj <- new_obj
           break
         } else {
           Ms[[s]] <- M_old
-          step_size <- step_size * 0.5
+          step <- step * 0.5
         }
       }
     }
-    
-    # Check convergence
+
     cur_obj <- compute_objective()
-    rel_change <- abs(prev_obj - cur_obj) / max(1, prev_obj)
-    
-    if (iter > 5 && rel_change < tol) {
+    rel <- abs(prev_obj - cur_obj) / max(1, prev_obj)
+    if (iter > 5 && rel < tol) {
       message("Joint alignment converged after ", iter, " iterations")
       return(list(rotations = Ms, iterations = iter, converged = TRUE))
     }
-    
     prev_obj <- cur_obj
   }
-  
+
   warning("Joint alignment reached maximum iterations without convergence")
   list(rotations = Ms, iterations = max_iter, converged = FALSE)
 }
@@ -292,41 +410,39 @@ align_bases_multiset <- function(bases, descriptors, lambda,
 #' in the context of multiple graphs.
 #'
 #' @param basis_s Spectral basis for graph s
-#' @param FtPhi_s Descriptor-basis product for graph s  
-#' @param FtPhi_all List of all descriptor-basis products
+#' @param A_list List of descriptor-basis products for all graphs
 #' @param Ms List of all rotation matrices
 #' @param s Index of current graph
 #' @param lambda Regularization parameter
+#' @param Gss Optional list of A_s^T A_s matrices for reuse
 #'
 #' @return Gradient matrix
 #' @keywords internal
-gradient_single_multiset <- function(basis_s, FtPhi_s, FtPhi_all, Ms, s, lambda) {
-  
+gradient_single_multiset <- function(basis_s, A_list, Ms, s, lambda, Gss = NULL) {
+
   m <- length(Ms)
+  k <- ncol(Ms[[s]])
+
   Lambda_s <- Matrix::Diagonal(x = basis_s$values)
-  
-  # Gradient of off-diagonal penalty (same as pairwise)
-  A_s <- Lambda_s %*% Ms[[s]]
-  AtMA <- Matrix::t(Ms[[s]]) %*% A_s
-  diag_AtMA <- Matrix::diag(AtMA)
-  grad_off <- 2 * (A_s %*% AtMA - A_s %*% Matrix::Diagonal(x = diag_AtMA))
-  
-  # Gradient of descriptor penalty (sum over all other graphs)
-  grad_desc <- Matrix::Matrix(0, nrow = nrow(Ms[[s]]), ncol = ncol(Ms[[s]]), sparse = TRUE)
-  
-  for (t in setdiff(seq_len(m), s)) {
-    # Derivative w.r.t M_s of ||F_s^T Phi_s - F_t^T Phi_t M_t M_s^T||^2
-    residual <- FtPhi_s - FtPhi_all[[t]] %*% Ms[[t]] %*% Matrix::t(Ms[[s]])
-    grad_desc <- grad_desc - 2 * Matrix::t(Ms[[t]]) %*% Matrix::t(FtPhi_all[[t]]) %*% residual
+  Lambda_M <- Lambda_s %*% Ms[[s]]
+  S <- Matrix::crossprod(Ms[[s]], Lambda_M)
+  grad_off <- 4 * (Lambda_M %*% S - Lambda_M %*% Matrix::Diagonal(x = diag(S)))
+
+  A_s <- A_list[[s]]
+  G_ss <- if (!is.null(Gss)) Gss[[s]] else Matrix::crossprod(A_s, A_s)
+
+  accum <- Matrix::Matrix(0, nrow = k, ncol = k, sparse = TRUE)
+  if (m > 1) {
+    for (t in setdiff(seq_len(m), s)) {
+      accum <- accum + Matrix::crossprod(A_s, A_list[[t]] %*% Ms[[t]])
+    }
   }
-  
-  # Total Euclidean gradient
+  grad_desc <- 2 * ((m - 1) * (G_ss %*% Ms[[s]]) - accum)
+
   euc_grad <- grad_off + lambda * grad_desc
-  
-  # Project to tangent space of Stiefel manifold
-  riemannian_grad <- euc_grad - Ms[[s]] %*% Matrix::t(Ms[[s]]) %*% euc_grad
-  
-  riemannian_grad
+
+  MtE <- Matrix::crossprod(Ms[[s]], euc_grad)
+  euc_grad - Ms[[s]] %*% (0.5 * (MtE + Matrix::t(MtE)))
 }
 
 #' Build Anchor Representation
@@ -386,50 +502,49 @@ solve_diagonal_map <- function(desc, basis, M, Z) {
 #' @param E2 Second embedding matrix
 #' @param distance Distance metric: "cosine" or "euclidean"
 #' @param solver Assignment solver: "auction" or "linear"
+#' @param alpha Weight on cosine vs. Euclidean distance when distance = "cosine"
 #'
 #' @return Assignment vector
 #' @keywords internal
-solve_assignment_multiset <- function(E1, E2, distance = "cosine", solver = "auction") {
-  
-  # Compute cost matrix
-  if (distance == "cosine") {
-    # Normalize rows for cosine similarity
-    E1_norms <- sqrt(rowSums(E1^2) + 1e-12)
-    E2_norms <- sqrt(rowSums(E2^2) + 1e-12)
-    E1_norm <- E1 / E1_norms
-    E2_norm <- E2 / E2_norms
-    
-    sim_matrix <- E1_norm %*% t(E2_norm)
-    cost <- 1 - sim_matrix
-    cost[cost < 0] <- 0
-  } else {
-    # Euclidean distance
-    E1_sq <- rowSums(E1^2)
-    E2_sq <- rowSums(E2^2)
-    cross <- E1 %*% t(E2)
-    
-    cost <- sqrt(outer(E1_sq, E2_sq, "+") - 2 * cross)
-    cost[cost < 0] <- 0
-  }
-  
-  # Solve assignment (following existing grasp.R pattern)
+solve_assignment_multiset <- function(E1, E2, distance = "cosine",
+                                      solver = "auction", alpha = 0.5) {
+  cost <- compute_assignment_cost(E1, E2, distance, alpha = alpha)
+
   if (!requireNamespace("clue", quietly = TRUE)) {
     stop("clue package is required for assignment computation. ",
          "Please install it with: install.packages('clue')", call. = FALSE)
   }
-  
-  # Assignment solver selection
-  # Note: clue::solve_LSAP may not accept method parameter in all versions
-  assignment <- tryCatch({
-    if (nrow(cost) >= 1000 && solver == "auction") {
-      clue::solve_LSAP(cost, method = "auction")
-    } else {
-      clue::solve_LSAP(cost)  # Default solver
+
+  method_arg <- if (solver == "auction") "auction" else NULL
+  assignment <- tryCatch(
+    solve_lsap_with_padding(cost, method = method_arg),
+    error = function(e) {
+      solve_lsap_with_padding(cost, method = NULL)
     }
-  }, error = function(e) {
-    # Fallback if method parameter is not supported
-    clue::solve_LSAP(cost)
-  })
-  
+  )
+
   as.integer(assignment)
-} 
+}
+
+compute_assignment_cost <- function(E_source, E_target, distance = "cosine",
+                                    alpha = 0.5) {
+  if (distance == "cosine") {
+    n1 <- sqrt(rowSums(E_source^2) + 1e-12)
+    n2 <- sqrt(rowSums(E_target^2) + 1e-12)
+    sim <- (E_source / n1) %*% t(E_target / n2)
+    cost_cos <- pmax(1 - sim, 0)
+
+    e1 <- rowSums(E_source^2)
+    e2 <- rowSums(E_target^2)
+    dm <- sqrt(pmax(outer(e1, e2, "+") - 2 * (E_source %*% t(E_target)), 0))
+    if (max(dm) > 0) {
+      dm <- dm / max(dm)
+    }
+
+    alpha * cost_cos + (1 - alpha) * dm
+  } else {
+    e1 <- rowSums(E_source^2)
+    e2 <- rowSums(E_target^2)
+    sqrt(pmax(outer(e1, e2, "+") - 2 * (E_source %*% t(E_target)), 0))
+  }
+}

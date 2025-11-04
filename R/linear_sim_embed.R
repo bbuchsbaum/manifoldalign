@@ -665,22 +665,34 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
         warning("alpha_schedule is not supported by the C++ backend. Using fixed alpha_p.")
     }
     
-    # Call C++ function with proper initialization
-    ret <- linear_sim_embed_cpp(Xs, T, M, sigma_P, ncomp, alpha_p, maxit, tol)
+    # Call C++ function with proper initialization, fallback to R path on failure
+    ret <- tryCatch({
+        linear_sim_embed_cpp(Xs, T, M, sigma_P, ncomp, alpha_p, maxit, tol)
+      }, error = function(e) {
+        if (verbose) warning("C++ backend unavailable (", e$message, "). Falling back to R optimizer.")
+        NULL
+      })
 
-    if (ret$convergence != 0) {
-        warning("C++ optimization (L-BFGS-B) did not converge. Message: ", ret$message)
+    if (!is.null(ret)) {
+      if (ret$convergence != 0) {
+          warning("C++ optimization (L-BFGS-B) did not converge. Message: ", ret$message)
+      }
+      W <- ret$W
+      optimizer_name <- "L-BFGS-B (C++)"
+      convergence_info <- list(
+        convergence = ret$convergence,
+        message = ret$message,
+        iterations = ret$iterations %||% NA,
+        final_value = ret$value %||% NA
+      )
+      use_cpp <- TRUE
+    } else {
+      use_cpp <- FALSE
     }
-    W <- ret$W
-    optimizer_name <- "L-BFGS-B (C++)"
-    convergence_info <- list(
-      convergence = ret$convergence,
-      message = ret$message,
-      iterations = ret$iterations %||% NA,
-      final_value = ret$value %||% NA
-    )
 
-  } else {
+  }
+
+  if (!use_cpp) {
      # Use R (ADAM) with enhanced features
     res_opt <- .optimize_W_enhanced(Xs, T, M, W0,
                                    sigma = sigma_P, alpha_p = alpha_p,
@@ -727,8 +739,6 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
   
   return(result)
 }
-
-
 
 
 

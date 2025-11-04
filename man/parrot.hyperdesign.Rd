@@ -21,6 +21,7 @@
   max_iter = 100,
   tol = 1e-06,
   use_cpp = FALSE,
+  verbose = FALSE,
   ...
 )
 }
@@ -57,6 +58,8 @@ lambda_e, lambda_n, lambda_p separately for fine control}
 \item{tol}{Convergence tolerance (default: 1e-6)}
 
 \item{use_cpp}{Whether to use C++ optimizations (default: FALSE)}
+
+\item{verbose}{Logical flag to print progress information during fitting}
 
 \item{...}{Additional arguments (currently unused)}
 }

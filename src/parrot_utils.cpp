@@ -126,47 +126,48 @@ arma::mat compute_parrot_cost_cpp(const arma::mat& X1,
                                   double alpha = 0.5,
                                   double sigma = 0.15,
                                   double gamma = 0.1) {
-  // Compute attribute cost
-  arma::mat cost_attr = compute_squared_distances_cpp(X1, X2);
-  
-  // Compute RWR cost
-  arma::mat cost_rwr = compute_squared_distances_cpp(R1, R2);
-  
-  // Normalize costs
-  double max_attr = cost_attr.max();
-  double max_rwr = cost_rwr.max();
-  
-  if (max_attr > 1e-9) {
-    cost_attr = cost_attr / max_attr;
-  }
-  if (max_rwr > 1e-9) {
-    cost_rwr = cost_rwr / max_rwr;
-  }
-  
-  // Combined node-level cost
+  auto row_normalize = [](const arma::mat& M) {
+    arma::mat out = M;
+    arma::vec norms = arma::sqrt(arma::sum(arma::square(M), 1));
+    for (arma::uword i = 0; i < M.n_rows; ++i) {
+      double denom = norms(i);
+      if (denom < 1e-12) denom = 1e-12;
+      out.row(i) /= denom;
+    }
+    return out;
+  };
+
+  arma::mat R1n = row_normalize(R1);
+  arma::mat R2n = row_normalize(R2);
+  arma::mat X1n = row_normalize(X1);
+  arma::mat X2n = row_normalize(X2);
+
+  auto clamp_cosine = [](arma::mat& M) {
+    M.transform([](double val) {
+      if (val > 1.0) return 1.0;
+      if (val < -1.0) return -1.0;
+      return val;
+    });
+  };
+
+  arma::mat sim_rwr = R1n * R2n.t();
+  arma::mat sim_attr = X1n * X2n.t();
+  clamp_cosine(sim_rwr);
+  clamp_cosine(sim_attr);
+
+  double kappa = 1.0;
+  arma::mat cost_rwr = arma::exp(-kappa * sim_rwr);
+  arma::mat cost_attr = arma::exp(-kappa * sim_attr);
+
   arma::mat C_node = (1 - alpha) * cost_rwr + alpha * cost_attr;
-  
-  // Ensure non-negative
-  double min_c_node = C_node.min();
-  C_node = C_node - min_c_node + 1e-6;
-  
-  // Solve Sylvester equation
+
   arma::mat W2T = W2.t();
   arma::mat C_rwr = solve_sylvester_rwr_cpp(W1, W2T, C_node, sigma, gamma);
-  
-  // Final normalization
+
   double min_c_rwr = C_rwr.min();
-  if (min_c_rwr < 0) {
+  if (min_c_rwr <= 0) {
     C_rwr = C_rwr - min_c_rwr + 1e-6;
   }
-  
-  // Normalize to reasonable range
-  double mean_c_rwr = arma::mean(arma::vectorise(C_rwr));
-  double std_c_rwr = arma::stddev(arma::vectorise(C_rwr));
-  C_rwr = (C_rwr - mean_c_rwr) / std_c_rwr;
-  
-  // Final shift to ensure positivity
-  C_rwr = C_rwr - C_rwr.min() + 1e-6;
-  
+
   return C_rwr;
 }

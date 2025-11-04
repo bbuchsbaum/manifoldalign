@@ -12,7 +12,8 @@ gpca_align.hyperdesign(
   simfun = neighborweights::binary_label_matrix,
   u = 0.5,
   lambda = 0.1,
-  row_metric_scale = 1
+  row_metric_scale = 1,
+  control = gpca_align_control()
 )
 }
 \arguments{
@@ -20,28 +21,21 @@ gpca_align.hyperdesign(
 
 \item{y}{Name of the label variable to use for alignment}
 
-\item{preproc}{Preprocessing function to apply to the data (default: center())}
+\item{preproc}{Preprocessing function to apply to the data (default `center()`)}
 
-\item{ncomp}{Number of components to extract (default: 2)}
+\item{ncomp}{Number of components to extract (default 2)}
 
-\item{simfun}{Function to compute similarity between labels (default: neighborweights::binary_label_matrix)}
+\item{simfun}{Function to compute similarity between labels}
 
-\item{u}{Trade-off parameter between within-domain and between-domain similarity (0-1, default: 0.5).
-Both similarity matrices are normalized to unit Frobenius norm before blending, so u=0.5 
-gives truly equal weight to within-domain and between-domain similarities, making this 
-parameter interpretable regardless of the scale of the similarity function.}
+\item{u}{Trade-off parameter between within-domain and between-domain similarity (0-1)}
 
-\item{lambda}{Regularization parameter for matrix conditioning (default: 0.1)}
+\item{lambda}{Ridge regularisation added to the metric matrix}
 
-\item{row_metric_scale}{Scaling factor for the row metric matrix M (default: 1). 
-Since GPCA is scale-invariant to M up to a constant, this parameter typically doesn't 
-affect results but can be adjusted for numerical reasons if needed.}
-}
-\value{
-A multiblock_biprojector object containing the GPCA alignment
+\item{row_metric_scale}{Scaling applied to the assembled row metric before GPCA}
+
+\item{control}{A list created by [gpca_align_control()] that tunes sparsification,
+balancing, normalisation, and memory safeguards}
 }
 \description{
-Performs Generalized Principal Component Analysis (GPCA) alignment on hyperdesign data structures.
-This method aligns data from multiple domains using a similarity-based approach that balances
-within-domain and between-domain relationships.
+Generalized PCA Alignment for Hyperdesign Data
 }

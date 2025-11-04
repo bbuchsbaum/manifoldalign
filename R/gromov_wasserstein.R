@@ -184,7 +184,9 @@ gromov_wasserstein.hyperdesign <- function(data,
       epsilon = epsilon,
       loss_function = "square_loss",
       n_samples = n_samples,
-      domain_names = domain_names
+      domain_names = domain_names,
+      domain_data = X_list,
+      metric = metric
     ),
     class = c("gromov_wasserstein", "multiblock_biprojector")
   )
@@ -192,184 +194,135 @@ gromov_wasserstein.hyperdesign <- function(data,
 
 # Simplified and stable entropic GW solver
 solve_entropic_gw <- function(C1, C2, p, q, P_init,
-                            epsilon = 0.1,
-                            max_iter = 100,
-                            tol = 1e-9,
-                            inner_max_iter = 30,
-                            inner_tol = 1e-9,
-                            verbose = FALSE) {
-  
+                              epsilon = 0.1,
+                              max_iter = 100,
+                              tol = 1e-9,
+                              inner_max_iter = 30,
+                              inner_tol = 1e-9,
+                              verbose = FALSE) {
+
   n1 <- nrow(C1)
   n2 <- nrow(C2)
-  
-  # Initialize
+
   P <- P_init
-  
-  # Precompute constants that don't change during iterations
+
   C1_sqr <- C1^2
   C2_sqr <- C2^2
-  
-  # These terms only depend on marginals, not on P
-  # Pre-compute them once outside the loop
-  constC1 <- as.vector(C1_sqr %*% p)  # n1 x 1 vector
-  constC2 <- as.vector(C2_sqr %*% q)  # n2 x 1 vector
-  
-  # Pre-compute the constant part of the linear term
+
+  constC1 <- as.vector(C1_sqr %*% p)
+  constC2 <- as.vector(C2_sqr %*% q)
   const_term <- outer(constC1, rep(1, n2)) + outer(rep(1, n1), constC2)
-  
+
   loss_old <- Inf
-  consecutive_inf_count <- 0  # Track consecutive Inf losses
-  
-  for (iter in 1:max_iter) {
-    # Compute the linear term for kernel computation
-    # Only the P-dependent part changes: -2 * C1 * P * C2^T
-    linear_term <- const_term - 2 * C1 %*% P %*% t(C2)
-    
-    # Ensure non-negative
-    linear_term <- pmax(linear_term, 0)
-    
-    # Numerical stabilization: shift before exp to prevent overflow/underflow
-    max_val <- max(linear_term)
-    stable_linear_term <- linear_term - max_val
-    
-    # Sinkhorn iterations with stabilized kernel
-    K <- exp(-stable_linear_term / epsilon)
-    
-    # Update P using Sinkhorn scaling
-    u <- p
-    v <- q
-    
-    # Inner Sinkhorn iterations with configurable limit
+
+  for (iter in seq_len(max_iter)) {
+    M <- const_term - 2 * C1 %*% P %*% t(C2)
+    M[M < 0 & M > -1e-12] <- 0
+
+    m0 <- min(M)
+    K <- exp(-(M - m0) / epsilon)
+
+    u <- rep(1, n1)
+    v <- rep(1, n2)
     u_old <- u
     v_old <- v
-    
-    for (sinkhorn_iter in 1:inner_max_iter) {
-      u <- p / (K %*% v + 1e-20)
-      v <- q / (t(K) %*% u + 1e-20)
-      
-      # Check for numerical issues and break if detected
+    ok <- TRUE
+
+    for (sinkhorn_iter in seq_len(inner_max_iter)) {
+      Kv <- K %*% v + 1e-300
+      u <- p / Kv
+
+      Ktu <- t(K) %*% u + 1e-300
+      v <- q / Ktu
+
       if (any(!is.finite(u)) || any(!is.finite(v))) {
+        ok <- FALSE
         if (verbose) {
-          message(sprintf("  Warning: Numerical instability at iter %d, sinkhorn_iter %d", 
-                         iter, sinkhorn_iter))
+          message(sprintf("  Warning: numerical instability at iter %d (sinkhorn iter %d)",
+                          iter, sinkhorn_iter))
         }
-        # Reset to safe values
-        u <- p
-        v <- q
         break
       }
-      
-      # Check inner loop convergence
+
       if (inner_tol > 0) {
-        u_change <- max(abs(u - u_old) / (abs(u_old) + 1e-15))
-        v_change <- max(abs(v - v_old) / (abs(v_old) + 1e-15))
-        if (max(u_change, v_change) < inner_tol) {
+        du <- max(abs(u - u_old) / (abs(u_old) + 1e-15))
+        dv <- max(abs(v - v_old) / (abs(v_old) + 1e-15))
+        if (max(du, dv) < inner_tol) {
           break
         }
         u_old <- u
         v_old <- v
       }
     }
-    
-    # Update transport plan
+
+    if (!ok) {
+      P <- outer(p, q)
+      M <- const_term - 2 * C1 %*% P %*% t(C2)
+      M[M < 0 & M > -1e-12] <- 0
+      loss_new <- sum(P * M) + epsilon * sum(P * log(P + 1e-20))
+      return(list(
+        P = P,
+        distance = sqrt(max(0, sum(P * M))),
+        loss = loss_new,
+        converged = FALSE,
+        iterations = iter
+      ))
+    }
+
     P <- sweep(sweep(K, 1, u, "*"), 2, v, "*")
-    
-    # Check for numerical underflow
-    P_sum <- sum(P)
-    if (!is.finite(P_sum) || P_sum < 1e-300) {
-      # Numerical underflow or NA - reset to product of marginals
+
+    if (!all(is.finite(P))) {
       if (verbose) {
-        message(sprintf("  Warning: Transport plan %s at iter %d, resetting", 
-                       ifelse(is.na(P_sum), "NA", "underflow"), iter))
+        message(sprintf("  Warning: transport plan produced NaN/Inf at iter %d; using product plan", iter))
       }
-      P <- outer(p, q)  # Reset to product of marginals
+      P <- outer(p, q)
     }
-    
-    # CRITICAL FIX: Recompute linear term with updated P for loss calculation
-    # This ensures the loss reflects the current transport plan
-    linear_term_updated <- const_term - 2 * C1 %*% P %*% t(C2)
-    linear_term_updated <- pmax(linear_term_updated, 0)
-    
-    # Compute loss with the updated linear term
-    loss_new <- sum(P * linear_term_updated) - epsilon * sum(P * log(P + 1e-20))
-    
-    # Enhanced handling of Inf loss cases
-    if (!is.finite(loss_new)) {
-      consecutive_inf_count <- consecutive_inf_count + 1
-      
-      if (verbose) {
-        message(sprintf("  Warning: Non-finite loss at iter %d (count: %d)", 
-                       iter, consecutive_inf_count))
-      }
-      
-      # If we get too many consecutive Inf losses, terminate early
-      if (consecutive_inf_count >= 3) {
-        if (verbose) {
-          message("  Stopping due to repeated non-finite losses")
-        }
-        return(list(
-          P = P,
-          distance = Inf,  # Use Inf instead of NA for symmetry
-          loss = Inf,
-          converged = FALSE,
-          iterations = iter
-        ))
-      }
-      
-      loss_new <- Inf
-    } else {
-      consecutive_inf_count <- 0  # Reset counter on valid loss
-    }
-    
+
+    M <- const_term - 2 * C1 %*% P %*% t(C2)
+    M[M < 0 & M > -1e-12] <- 0
+    loss_new <- sum(P * M) + epsilon * sum(P * log(P + 1e-20))
+
     if (verbose && iter %% 10 == 0) {
       message(sprintf("  Iteration %3d: loss = %.6e", iter, loss_new))
     }
-    
-    # Check convergence - only if both losses are finite
+
     if (is.finite(loss_new) && is.finite(loss_old)) {
       rel_change <- abs(loss_old - loss_new) / (abs(loss_old) + 1e-15)
       if (is.finite(rel_change) && rel_change < tol) {
-        if (verbose) message(sprintf("  Converged at iteration %d", iter))
+        if (verbose) {
+          message(sprintf("  Converged at iteration %d", iter))
+        }
         return(list(
           P = P,
-          distance = sqrt(max(0, sum(P * linear_term_updated))),
+          distance = sqrt(max(0, sum(P * M))),
           loss = loss_new,
           converged = TRUE,
           iterations = iter
         ))
       }
-    } else if (!is.finite(loss_new) && !is.finite(loss_old)) {
-      # Both losses are Inf - check if we should stop
-      if (iter > 5) {
-        if (verbose) message("  Stopping: unable to achieve finite loss")
-        return(list(
-          P = P,
-          distance = Inf,  # Use Inf instead of NA for symmetry
-          loss = Inf,
-          converged = FALSE,
-          iterations = iter
-        ))
-      }
     }
-    
+
     loss_old <- loss_new
   }
-  
-  if (verbose) message("  Did not converge within max_iter iterations")
-  
-  # Final computation of linear term for accurate distance
-  linear_term_final <- const_term - 2 * C1 %*% P %*% t(C2)
-  linear_term_final <- pmax(linear_term_final, 0)
-  
+
+  if (verbose) {
+    message("  Did not converge within max_iter iterations")
+  }
+
+  M <- const_term - 2 * C1 %*% P %*% t(C2)
+  M[M < 0 & M > -1e-12] <- 0
+
   list(
     P = P,
-    distance = sqrt(max(0, sum(P * linear_term_final))),
-    loss = loss_new,
+    distance = sqrt(max(0, sum(P * M))),
+    loss = loss_old,
     converged = FALSE,
     iterations = max_iter
   )
 }
 
+#' @method print gromov_wasserstein
+#' @export
 print.gromov_wasserstein <- function(x, ...) {
   cat("Gromov-Wasserstein Alignment\n")
   cat("============================\n")
@@ -391,21 +344,110 @@ print.gromov_wasserstein <- function(x, ...) {
 
 #' Predict method for Gromov-Wasserstein
 #' 
-#' Transport new samples using learned GW alignment
+#' Transport new samples using the learned GW alignment.
 #' 
 #' @param object A gromov_wasserstein object
-#' @param newdata New data from one domain to transport to another
+#' @param newdata New data from the source domain (samples x features)
 #' @param from Source domain index or name
 #' @param to Target domain index or name
-#' @param ... Additional arguments
+#' @param type Prediction type. `"weights"` (default) returns barycentric
+#'   weights over target-domain samples. `"transport"` returns barycentric
+#'   combinations of target-domain features when available.
+#' @param k Number of nearest neighbours used to build the barycentric
+#'   combination (default: 5).
+#' @param ... Reserved for future use.
 #' 
-#' @return Transported samples in the target domain space
+#' @return Matrix of barycentric weights (`type = "weights"`) or transported
+#'   samples (`type = "transport"`).
 #' @export
-predict.gromov_wasserstein <- function(object, newdata, from, to, ...) {
-  # This would implement out-of-sample extension
-  # For now, return a placeholder
-  stop("Out-of-sample prediction not yet implemented for Gromov-Wasserstein", 
-       call. = FALSE)
+predict.gromov_wasserstein <- function(object, newdata, from, to,
+                                       type = c("weights", "transport"),
+                                       k = 5, ...) {
+  if (!inherits(object, "gromov_wasserstein")) {
+    stop("object must be a gromov_wasserstein result", call. = FALSE)
+  }
+
+  type <- match.arg(type)
+
+  if (missing(from) || missing(to)) {
+    stop("Both 'from' and 'to' domains must be specified", call. = FALSE)
+  }
+
+  from_idx <- resolve_domain_index(from, object$domain_names)
+  to_idx <- resolve_domain_index(to, object$domain_names)
+
+  source_data <- object$domain_data[[from_idx]]
+  target_data <- object$domain_data[[to_idx]]
+
+  if (is.null(source_data)) {
+    stop("Source domain data not available for out-of-sample prediction", call. = FALSE)
+  }
+
+  if (!is.matrix(newdata)) {
+    newdata <- as.matrix(newdata)
+  }
+
+  if (ncol(newdata) != ncol(source_data)) {
+    stop("newdata has ", ncol(newdata), " columns but source domain has ",
+         ncol(source_data), call. = FALSE)
+  }
+
+  plan <- extract_transport_plan(object$transport_plans, from_idx, to_idx,
+                                 length(object$domain_names))
+  plan_rows <- normalize_plan_rows(plan)
+
+  metric <- if (!is.null(object$metric)) object$metric else "euclidean"
+  nn <- find_knn_indices(newdata, source_data, k = k, metric = metric)
+  bary_weights <- aggregate_barycentric_weights(plan_rows, nn$idx, nn$dists)
+
+  if (type == "weights" || is.null(target_data)) {
+    if (!is.null(target_data)) {
+      colnames(bary_weights) <- rownames(target_data)
+    }
+    return(bary_weights)
+  }
+
+  transported <- bary_weights %*% as.matrix(target_data)
+  colnames(transported) <- colnames(target_data)
+
+  # If the transport plan is nearly uniform, fall back to target-space neighbours
+  max_weights <- apply(bary_weights, 1L, max)
+  needs_fallback <- !is.null(target_data) & (max_weights < 0.3)
+  if (any(needs_fallback)) {
+    fallback_idx <- find_knn_indices(
+      newdata[needs_fallback, , drop = FALSE],
+      target_data,
+      k = min(k, nrow(target_data)),
+      metric = metric
+    )
+
+    compute_local_mix <- function(idx_row, dist_row, n_target) {
+      if (any(is.na(idx_row))) {
+        return(rep(1 / n_target, n_target))
+      }
+      if (any(dist_row < 1e-12)) {
+        mask <- dist_row < 1e-12
+        weights <- mask / sum(mask)
+      } else {
+        weights <- 1 / (dist_row + 1e-8)
+        weights <- weights / sum(weights)
+      }
+      row_w <- numeric(n_target)
+      row_w[idx_row] <- weights
+      row_w
+    }
+
+    fallback_weights <- t(vapply(
+      seq_len(nrow(fallback_idx$idx)),
+      function(i) compute_local_mix(fallback_idx$idx[i, ], fallback_idx$dists[i, ], nrow(target_data)),
+      numeric(nrow(target_data))
+    ))
+
+    bary_weights[needs_fallback, ] <- fallback_weights
+    transported[needs_fallback, ] <- fallback_weights %*% as.matrix(target_data)
+  }
+
+  transported
 }
 
 #' @rdname gromov_wasserstein

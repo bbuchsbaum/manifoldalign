@@ -5,18 +5,21 @@
 \title{Compute PARROT cost matrix}
 \usage{
 compute_parrot_cost_cpp(
-  X1,
-  X2,
-  R1,
-  R2,
-  W1,
-  W2,
-  alpha = 0.5,
-  sigma = 0.15,
-  gamma = 0.1
+  networks,
+  rwr_features,
+  anchor_info,
+  alpha,
+  sigma,
+  gamma
 )
 }
 \arguments{
+\item{alpha}{Weight for attribute vs RWR cost}
+
+\item{sigma}{RWR restart probability}
+
+\item{gamma}{Cross-graph discount factor}
+
 \item{X1}{Features of network 1}
 
 \item{X2}{Features of network 2}
@@ -28,12 +31,6 @@ compute_parrot_cost_cpp(
 \item{W1}{Transition matrix of network 1}
 
 \item{W2}{Transition matrix of network 2}
-
-\item{alpha}{Weight for attribute vs RWR cost}
-
-\item{sigma}{RWR restart probability}
-
-\item{gamma}{Cross-graph discount factor}
 }
 \value{
 Position-aware cost matrix

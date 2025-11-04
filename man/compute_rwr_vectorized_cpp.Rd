@@ -4,11 +4,9 @@
 \alias{compute_rwr_vectorized_cpp}
 \title{Vectorized RWR computation}
 \usage{
-compute_rwr_vectorized_cpp(W_transpose, E, sigma, max_iter, tol)
+compute_rwr_vectorized_cpp(WT, E, sigma, max_iter, tol)
 }
 \arguments{
-\item{W_transpose}{Transpose of transition matrix}
-
 \item{E}{Matrix of restart vectors (columns are different restart distributions)}
 
 \item{sigma}{Restart probability}
@@ -16,6 +14,8 @@ compute_rwr_vectorized_cpp(W_transpose, E, sigma, max_iter, tol)
 \item{max_iter}{Maximum iterations}
 
 \item{tol}{Convergence tolerance}
+
+\item{W_transpose}{Transpose of transition matrix}
 }
 \value{
 RWR result matrix

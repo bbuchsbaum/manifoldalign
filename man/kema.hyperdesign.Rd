@@ -12,15 +12,17 @@
   knn = 5,
   sigma = NULL,
   u = 0.5,
+  mu = NULL,
   kernel = NULL,
   sample_frac = 1,
-  use_laplacian = TRUE,
+  use_laplacian = FALSE,
   solver = "regression",
-  dweight = 0,
+  auto_retry_exact = TRUE,
+  dweight = 1,
   rweight = 0,
   simfun = neighborweights::binary_label_matrix,
   disfun = NULL,
-  lambda = 1e-04,
+  lambda = 0,
   centre_kernel = FALSE,
   ...
 )
@@ -48,12 +50,23 @@ center())}
 \item{sample_frac}{Fraction of samples to use for kernel approximation 
 (default: 1)}
 
-\item{use_laplacian}{Whether to use Laplacian normalization (default: TRUE)}
+\item{use_laplacian}{Whether to use Laplacian normalization (default: FALSE)}
 
-\item{solver}{Solver method: "regression" for fast approximation (default) 
-or "exact" for precise solution}
+\item{solver}{Solver method: "regression" for fast approximation or "exact"
+for precise solution (recommended). The regression solver uses a two-step
+spectral approximation that may produce suboptimal results when: (1) dataset
+is small (n < 100), (2) labels are sparse (>50% unlabeled), (3) push forces
+are strong (rweight > 1 or dweight > 1), or (4) few components requested
+(ncomp < 5). If regression quality is poor (subspace angle > 8.6° or
+correlation < 0.75), KEMA automatically retries with solver='exact' unless
+auto_retry_exact=FALSE.}
 
-\item{dweight}{Weight for dissimilarity/repulsion terms (default: 0)}
+\item{auto_retry_exact}{Logical. If TRUE (default), automatically retry with
+exact solver when regression solver produces poor quality results. Set to
+FALSE to disable automatic retry (not recommended unless you understand the
+implications).}
+
+\item{dweight}{Weight for dissimilarity/repulsion terms (default: 1)}
 
 \item{rweight}{Weight for repulsion graph (default: 0)}
 
@@ -62,7 +75,7 @@ or "exact" for precise solution}
 \item{disfun}{Function to compute dissimilarity between labels (optional)}
 
 \item{lambda}{Regularization parameter for matrix conditioning 
-(default: 0.0001)}
+(default: 0)}
 
 \item{centre_kernel}{Whether to center kernel matrices (default: FALSE). 
 **[EXTENSION]** The original paper uses uncentered kernels. Set TRUE for 

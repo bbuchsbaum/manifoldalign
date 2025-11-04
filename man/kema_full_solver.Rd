@@ -7,6 +7,7 @@
 kema_full_solver(
   strata,
   Z,
+  Zop,
   Ks,
   Lap,
   kernel_indices,
@@ -15,7 +16,9 @@ kema_full_solver(
   u,
   dweight,
   rweight,
-  lambda
+  lambda,
+  scalable = FALSE,
+  label_factors = NULL
 )
 }
 \arguments{

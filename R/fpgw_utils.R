@@ -38,44 +38,20 @@ project_onto_simplex_doubly_stochastic <- function(P, p, q, max_iter = 100, tol 
 #' Prepare OT data from hyperdesign
 #' @keywords internal
 prepare_ot_data <- function(hyperdesign) {
-  if (!inherits(hyperdesign, "hyperdesign")) {
-    stop("Input must be a hyperdesign object", call. = FALSE)
-  }
-  
-  # Extract data blocks
-  blocks <- hyperdesign$blocks
-  n_domains <- length(blocks)
-  
-  if (n_domains < 2) {
+  resolved <- resolve_hyperdesign(hyperdesign)
+
+  if (resolved$n_domains < 2) {
     stop("FPGW requires at least 2 domains", call. = FALSE)
   }
-  
-  # Extract data matrices and ensure they're in the right format
-  X_list <- lapply(blocks, function(block) {
-    if (inherits(block, "multidesign")) {
-      as.matrix(block$X)
-    } else if (is.matrix(block) || is.data.frame(block)) {
-      as.matrix(block)
-    } else {
-      stop("Each block must be a multidesign object, matrix, or data frame", 
-           call. = FALSE)
-    }
-  })
-  
-  # Get sample sizes
-  n_samples <- sapply(X_list, nrow)
-  
-  # Get domain names
-  domain_names <- names(blocks)
-  if (is.null(domain_names)) {
-    domain_names <- paste0("Domain", seq_len(n_domains))
-  }
-  
+
+  X_list <- lapply(resolved$domains, function(domain) domain$x)
+  n_samples <- vapply(X_list, nrow, integer(1))
+
   list(
     X_list = X_list,
     n_samples = n_samples,
-    n_domains = n_domains,
-    domain_names = domain_names
+    n_domains = resolved$n_domains,
+    domain_names = resolved$domain_names
   )
 }
 
@@ -100,6 +76,16 @@ compute_distance_matrix <- function(X, metric = "euclidean") {
 compute_feature_cost <- function(X1, X2, metric = "euclidean") {
   n1 <- nrow(X1)
   n2 <- nrow(X2)
+
+  if (ncol(X1) != ncol(X2)) {
+    d_max <- max(ncol(X1), ncol(X2))
+    X1_pad <- matrix(0, n1, d_max)
+    X2_pad <- matrix(0, n2, d_max)
+    X1_pad[, seq_len(ncol(X1))] <- X1
+    X2_pad[, seq_len(ncol(X2))] <- X2
+    X1 <- X1_pad
+    X2 <- X2_pad
+  }
   
   if (metric == "euclidean") {
     # Efficient squared Euclidean distance computation
@@ -118,10 +104,9 @@ compute_feature_cost <- function(X1, X2, metric = "euclidean") {
   } else if (metric == "manhattan") {
     # Manhattan distance
     C <- matrix(0, n1, n2)
-    for (i in 1:n1) {
-      for (j in 1:n2) {
-        C[i, j] <- sum(abs(X1[i, ] - X2[j, ]))
-      }
+    for (i in seq_len(n1)) {
+      diffs <- abs(matrix(X1[i, ], n2, ncol(X1), byrow = TRUE) - X2)
+      C[i, ] <- rowSums(diffs)
     }
     C
   } else if (metric == "cosine") {

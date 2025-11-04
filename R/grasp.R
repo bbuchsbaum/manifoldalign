@@ -85,36 +85,25 @@ grasp.hyperdesign <- function(data,
          "alignment with 3+ domains, use grasp_multiset()", call. = FALSE)
   }
   
-  # Manually apply preprocessing to each domain
-  proc_template <- multivarious::prep(preproc)
-  pdata <- data
-  proclist <- list()
-  
-  for (i in seq_along(data)) {
-    transformed_x <- multivarious::init_transform(proc_template, data[[i]]$x)
-    pdata[[i]]$x <- transformed_x
-    # Store the processor - use the attribute if available, otherwise use the template
-    proc_attr <- attr(transformed_x, "preproc")
-    proclist[[i]] <- if (is.null(proc_attr)) proc_template else proc_attr
-  }
-  names(proclist) <- names(data)
-  
-  # Block indices computation
-  block_indices <- block_indices(pdata)
-  
-  # This is the correct concatenated preprocessor
-  full_proc <- multivarious::concat_pre_processors(proclist, 
-                                             split(block_indices, row(block_indices)))
-  names(block_indices) <- names(pdata)
-  
-  # Call GRASP fitting function
-  grasp_fit(pdata, full_proc, ncomp, q_descriptors, sigma, lambda, 
-             use_laplacian, solver, block_indices)
+  # Apply preprocessing once per domain via init_transform
+  pdata <- multivarious::init_transform(data, preproc)
+  proclist <- attr(pdata, "preproc")
+  names(proclist) <- names(pdata)
+
+  sample_block_idx <- block_indices(pdata)
+  sample_blocks_list <- split(sample_block_idx, row(sample_block_idx))
+  names(sample_blocks_list) <- names(pdata)
+
+  # Concatenate preprocessors (following package pattern from coupled_diagonalization.R)
+  proc <- multivarious::concat_pre_processors(proclist, sample_blocks_list)
+
+  grasp_fit(pdata, proc, ncomp, q_descriptors, sigma, lambda,
+            use_laplacian, solver, feature_block_indices(pdata))
 }
 
 #' @keywords internal
 grasp_fit <- function(strata, proc, ncomp, q_descriptors, sigma, lambda, 
-                     use_laplacian, solver, block_indices) {
+                     use_laplacian, solver, feature_blocks) {
   
   # Block A: Spectral basis construction
   bases <- compute_grasp_basis(strata, ncomp, use_laplacian)
@@ -134,32 +123,40 @@ grasp_fit <- function(strata, proc, ncomp, q_descriptors, sigma, lambda,
                                                solver_method = solver)
   
   # Compute scores (following package pattern)
-  embed1 <- bases[[1]]$vectors
-  embed2 <- bases[[2]]$vectors %*% alignment_result$rotation %*% assignment_result$mapping_matrix
-  scores <- rbind(embed1, embed2)
+  embed1 <- as.matrix(bases[[1]]$vectors)
+  embed2 <- as.matrix(bases[[2]]$vectors %*% alignment_result$rotation %*% assignment_result$mapping_matrix)
+  perm <- assignment_result$assignment
+  embed2_aligned <- embed2
+  valid <- perm > 0 & perm <= nrow(embed2)
+  if (any(valid)) {
+    inverse_perm <- rep(NA_integer_, nrow(embed2))
+    inverse_perm[perm[valid]] <- seq_along(perm)[valid]
+    target_idx <- which(!is.na(inverse_perm))
+    # Fix: Remove drop=FALSE from assignment (not needed, and causes parsing issues)
+    # The result is already a matrix, so drop behavior doesn't matter here
+    embed2_aligned[target_idx, ] <- embed2[inverse_perm[target_idx], ]
+  }
+  scores <- rbind(embed1, embed2_aligned)
   
   # Primal vectors computation (following KEMA pattern)
-  v <- do.call(rbind, lapply(seq_along(strata), function(i) {
+  loadings <- do.call(rbind, lapply(seq_along(strata), function(i) {
     xi <- strata[[i]]$x
     alpha_i <- bases[[i]]$vectors
     Matrix::crossprod(xi, alpha_i)
   }))
-  
-  # Return multiblock_biprojector with proper class structure for S3 dispatch
-  result <- multivarious::multiblock_biprojector(
-    v = v,
-    s = scores,
-    sdev = apply(scores, 2, sd),
+
+  new_alignment_result(
+    scores = scores,
+    loadings = loadings,
     preproc = proc,
-    block_indices = block_indices,
-    assignment = assignment_result$assignment,
-    rotation = alignment_result$rotation,
-    mapping_matrix = assignment_result$mapping_matrix,
-    classes = "grasp"
+    feature_blocks = feature_blocks,
+    subclass = "grasp",
+    extras = list(
+      assignment = assignment_result$assignment,
+      rotation = alignment_result$rotation,
+      mapping_matrix = assignment_result$mapping_matrix
+    )
   )
-  
-  # Add grasp class to outer object for S3 dispatch
-  structure(result, class = c("grasp", class(result)))
 }
 
 #' Block A: Spectral Basis Construction - Corrected
@@ -189,78 +186,101 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
       stop("GRASP requires at least 3 samples per domain", call. = FALSE)
     }
     
-    # Construct graph using package patterns (following KEMA pattern)
-    graph_weights <- safe_compute(
+    # Construct graph using package patterns (Patch 2)
+    graph_weights <- tryCatch(
       neighborweights::graph_weights(
         stratum$x,
         weight_mode = "normalized",
-        neighbor_mode = "knn", 
-        k = min(max(3, nrow(stratum$x) %/% 3), nrow(stratum$x) - 1),  # Adaptive k
+        neighbor_mode = "knn",
+        k = min(max(3, nrow(stratum$x) %/% 3), nrow(stratum$x) - 1),
         type = "normal",
-        sigma = 0.5  # More conservative sigma for better locality
+        sigma = 0.5
       ),
-      "Graph construction failed"
+      error = function(e) {
+        stop("Graph construction failed: ", e$message, call. = FALSE)
+      }
     )
-    
-    # Extract adjacency matrix
+
     adj_matrix <- neighborweights::adjacency(graph_weights)
-    
-    # Apply Laplacian normalization if requested
+    adj_matrix <- (adj_matrix + Matrix::t(adj_matrix)) / 2
+
     if (use_laplacian) {
-      # Improved isolated node handling (your suggestion)
       degrees <- Matrix::rowSums(adj_matrix)
-      isolated_nodes <- degrees == 0
-      
-      if (any(isolated_nodes)) {
-        warning("Found ", sum(isolated_nodes), " isolated nodes. They will be handled with zero eigenvalues.")
-        # Keep isolated nodes with zero row/col rather than perturbing
-        degrees[isolated_nodes] <- 1  # Temporary for sqrt computation
+      isolated <- as.vector(degrees == 0)
+      if (any(isolated)) {
+        warning("Found ", sum(isolated), " isolated nodes; Laplacian rows will be zeroed.")
       }
-      
-      D_inv_sqrt <- Matrix::Diagonal(n = length(degrees), x = 1 / sqrt(degrees))
-      if (any(isolated_nodes)) {
-        isolated_indices <- which(isolated_nodes)
-        D_inv_sqrt[isolated_indices, isolated_indices] <- 0  # Zero out isolated nodes
+      deg_safe <- pmax(degrees, 1)
+      D_inv_sqrt <- Matrix::Diagonal(x = 1 / sqrt(deg_safe))
+      if (any(isolated)) {
+        idx <- which(isolated)
+        D_inv_sqrt[idx, idx] <- 0
       }
-      
       L <- Matrix::Diagonal(nrow(adj_matrix)) - D_inv_sqrt %*% adj_matrix %*% D_inv_sqrt
+      L <- Matrix::forceSymmetric(L)
     } else {
-      L <- adj_matrix
+      L <- Matrix::forceSymmetric(adj_matrix)
     }
-    
-    # Eigenvalue computation - improved selection (your suggestion)
-    k_to_request <- min(ncomp + 1, nrow(L) - 1)
-    
-    # Use RSpectra by default with PRIMME as fallback (your suggestion)
-    decomp <- safe_compute({
-      if (requireNamespace("RSpectra", quietly = TRUE)) {
+
+    total_dim <- nrow(L)
+    if (total_dim <= 1) {
+      stop("Graph must contain at least two nodes", call. = FALSE)
+    }
+
+    k_to_request <- if (use_laplacian) {
+      min(ncomp + 1L, total_dim - 1L)
+    } else {
+      min(ncomp, total_dim)
+    }
+
+    if (k_to_request < 1L) {
+      stop("Not enough non-trivial eigenvectors available for requested components", call. = FALSE)
+    }
+
+    decomp <- tryCatch({
+      if (requireNamespace("RSpectra", quietly = TRUE) && k_to_request <= ceiling(0.8 * total_dim)) {
         RSpectra::eigs_sym(L, k = k_to_request, which = "SA")
-      } else {
+      } else if (requireNamespace("PRIMME", quietly = TRUE) && k_to_request < total_dim) {
         PRIMME::eigs_sym(L, NEig = k_to_request, which = "SA")
-      }
-    }, "Eigenvalue computation failed for GRASP basis")
-    
-    # Improved eigenvector selection (your suggestion)
-    if (use_laplacian) {
-      # For Laplacian, take indices 2:(ncomp+1) to skip the constant vector
-      if (k_to_request < ncomp + 1) {
-        warning("Requested ", ncomp, " components but only ", k_to_request - 1, " available")
-        ncomp_actual <- k_to_request - 1
       } else {
-        ncomp_actual <- ncomp
+        eig_full <- eigen(as.matrix(L), symmetric = TRUE)
+        list(
+          values = eig_full$values[seq_len(k_to_request)],
+          vectors = eig_full$vectors[, seq_len(k_to_request), drop = FALSE]
+        )
       }
-      
-      vectors <- as(decomp$vectors[, 2:(ncomp_actual + 1), drop = FALSE], "CsparseMatrix")
-      values <- decomp$values[2:(ncomp_actual + 1)]
+    }, error = function(e) {
+      eig_full <- eigen(as.matrix(L), symmetric = TRUE)
+      list(
+        values = eig_full$values[seq_len(k_to_request)],
+        vectors = eig_full$vectors[, seq_len(k_to_request), drop = FALSE]
+      )
+    })
+
+    if (use_laplacian) {
+      if (length(decomp$values) < 2L) {
+        stop("Unable to extract non-trivial Laplacian eigenvectors", call. = FALSE)
+      }
+      idx <- 2:min(ncomp + 1L, length(decomp$values))
+      if (length(idx) == 0L) {
+        stop("No non-trivial Laplacian eigenvectors remained after skipping the constant mode", call. = FALSE)
+      }
+      vectors <- Matrix::Matrix(decomp$vectors[, idx, drop = FALSE], sparse = TRUE)
+      values <- decomp$values[idx]
     } else {
-      # For adjacency matrix, use threshold as fallback
       non_trivial_idx <- which(abs(decomp$values) > 1e-10)
+      if (length(non_trivial_idx) == 0L) {
+        stop("No non-trivial adjacency eigenvalues available", call. = FALSE)
+      }
       ncomp_actual <- min(ncomp, length(non_trivial_idx))
-      
-      vectors <- as(decomp$vectors[, non_trivial_idx[1:ncomp_actual], drop = FALSE], "CsparseMatrix")
-      values <- decomp$values[non_trivial_idx[1:ncomp_actual]]
+      idx <- non_trivial_idx[seq_len(ncomp_actual)]
+      vectors <- Matrix::Matrix(decomp$vectors[, idx, drop = FALSE], sparse = TRUE)
+      values <- decomp$values[idx]
     }
-    
+
+    col_norms <- sqrt(Matrix::colSums(vectors * vectors))
+    vectors <- vectors %*% Matrix::Diagonal(x = 1 / pmax(col_norms, 1e-12))
+
     list(vectors = vectors, values = values)
   })
   
@@ -285,25 +305,27 @@ compute_grasp_descriptors <- function(bases, q_descriptors, sigma = 0.73) {
   time_steps <- seq(0.1, 50, length.out = q_descriptors) * sigma
   
   descriptors <- lapply(bases, function(basis) {
-    phi <- basis$vectors
+    phi <- Matrix::Matrix(basis$vectors, sparse = TRUE)
     lambda_vals <- basis$values
-    
-    # Improved sparse matrix handling (your suggestion)
-    # Keep phi^2 sparse
+
+    valid_idx <- which(lambda_vals > 1e-12)
+    if (length(valid_idx) == 0L) {
+      stop("All retained eigenvalues are numerically zero; reduce ncomp or verify graph connectivity", call. = FALSE)
+    }
+    phi <- phi[, valid_idx, drop = FALSE]
+    lambda_vals <- lambda_vals[valid_idx]
+
     phi_sq <- phi
     phi_sq@x <- phi_sq@x^2
-    
-    # Vectorized computation with numerical stability (your suggestion)
-    # Compute in log-space to prevent underflow
-    logH <- -outer(lambda_vals, time_steps)  # k x q
-    H <- exp(pmax(logH, -745))  # double-precision floor
-    desc_matrix <- phi_sq %*% H  # n x q (sparse x dense)
-    
-    # Efficient column normalization (your suggestion)
-    col_norms <- sqrt(Matrix::colSums(desc_matrix^2))
-    desc_matrix <- desc_matrix %*% Matrix::Diagonal(n = length(col_norms), x = 1 / pmax(col_norms, 1e-12))
-    
-    as(desc_matrix, "CsparseMatrix")
+
+    logH <- -outer(lambda_vals, time_steps)
+    H <- exp(pmax(logH, -745))
+    desc_matrix <- phi_sq %*% H
+
+    col_norms <- sqrt(Matrix::colSums(desc_matrix * desc_matrix))
+    desc_matrix <- desc_matrix %*% Matrix::Diagonal(x = 1 / pmax(col_norms, 1e-12))
+
+    Matrix::Matrix(desc_matrix, sparse = TRUE)
   })
   
   descriptors
@@ -356,22 +378,18 @@ align_grasp_bases <- function(basis1, basis2, desc1, desc2, lambda = 0.1,
   # Corrected gradient function
   gradient_fn <- function(M) {
     A <- Lambda2 %*% M
-    AtMA <- Matrix::crossprod(M, A)
-    
-    # Corrected gradient of off-diagonal penalty
-    diag_AtMA <- Matrix::diag(AtMA)
-    grad_off <- 2 * (A %*% AtMA - A %*% Matrix::Diagonal(n = length(diag_AtMA), x = diag_AtMA))
-    
-    # Gradient of descriptor penalty (optimized for sparse operations)
-    # G_T_Phi2 is q×k, M is k×k, result should be k×k
-    residual <- F_T_Phi1 - G_T_Phi2 %*% M  # q×k
-    grad_desc <- -2 * Matrix::crossprod(G_T_Phi2, residual)  # sparse-friendly
-    
+    S <- Matrix::crossprod(M, A)
+    diag_S <- Matrix::diag(S)
+    grad_off <- 4 * (A %*% S - A %*% Matrix::Diagonal(x = diag_S))
+
+    residual <- F_T_Phi1 - G_T_Phi2 %*% M
+    grad_desc <- -2 * Matrix::crossprod(G_T_Phi2, residual)
+
     euc_grad <- grad_off + lambda * grad_desc
-    
-    # Project to tangent space of Stiefel manifold
-    riemannian_grad <- euc_grad - M %*% Matrix::crossprod(M, euc_grad)
-    return(riemannian_grad)
+
+    MtE <- Matrix::crossprod(M, euc_grad)
+    riemannian_grad <- euc_grad - M %*% (0.5 * (MtE + Matrix::t(MtE)))
+    riemannian_grad
   }
 
   # Improved optimization with relative tolerance (your suggestion)
@@ -477,18 +495,56 @@ compute_grasp_assignment <- function(basis1, basis2, desc1, desc2, M,
          "Please install it with: install.packages('clue')", call. = FALSE)
   }
   
-  # Assignment solver selection
-  if (nrow(cost_matrix) >= 5000 && solver_method == "auction") {
-    assignment <- clue::solve_LSAP(cost_matrix, method = "auction")
-  } else if (solver_method == "hungarian") {
-    assignment <- clue::solve_LSAP(cost_matrix, method = "dense")  # default Hungarian
-  } else {
-    assignment <- clue::solve_LSAP(cost_matrix)  # alias for "dense"
-  }
-  
-  list(assignment = as.integer(assignment), 
+  method_arg <- switch(solver_method,
+                       auction = "auction",
+                       hungarian = "dense",
+                       linear = NULL)
+  assignment <- solve_lsap_with_padding(cost_matrix, method = method_arg)
+
+  list(assignment = assignment,
        cost_matrix = cost_matrix,
        mapping_matrix = C)
+}
+
+solve_lsap_with_padding <- function(cost_matrix, method = NULL) {
+  cost_matrix <- as.matrix(cost_matrix)
+  nr <- nrow(cost_matrix)
+  nc <- ncol(cost_matrix)
+  if (nr == 0 || nc == 0) {
+    stop("Cost matrix must have positive dimension", call. = FALSE)
+  }
+  solve_core <- function(mat) {
+    if (is.null(method)) {
+      return(clue::solve_LSAP(mat))
+    }
+    tryCatch(
+      clue::solve_LSAP(mat, method = method),
+      error = function(e) {
+        if (grepl("unused argument", e$message, fixed = TRUE)) {
+          clue::solve_LSAP(mat)
+        } else {
+          stop(e)
+        }
+      }
+    )
+  }
+
+  if (nr == nc) {
+    sol <- solve_core(cost_matrix)
+    return(as.integer(sol))
+  }
+
+  dim_pad <- max(nr, nc)
+  pad_value <- max(cost_matrix)
+  if (!is.finite(pad_value)) {
+    pad_value <- 0
+  }
+  padded <- matrix(pad_value, nrow = dim_pad, ncol = dim_pad)
+  padded[seq_len(nr), seq_len(nc)] <- cost_matrix
+
+  sol <- solve_core(padded)
+
+  as.integer(sol[seq_len(nr)])
 }
 
 #' @export

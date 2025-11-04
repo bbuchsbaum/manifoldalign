@@ -153,7 +153,6 @@ NULL
 #' }
 #'
 #' @importFrom stats quantile
-#' @importFrom magrittr %>%
 #' @export
 assign_pseudolabels <- function(sim_matrix,
                                min_clusters = 10,
@@ -186,12 +185,17 @@ assign_pseudolabels <- function(sim_matrix,
          "Current size: ", n)
   }
   
-  # Check value range with informative diagnostics
-  if (any(sim_matrix < 0 | sim_matrix > 1, na.rm = TRUE)) {
-    invalid_range <- range(sim_matrix, na.rm = TRUE)
-    stop("sim_matrix values must be in [0,1]. Found range: [", 
-         round(invalid_range[1], 4), ", ", round(invalid_range[2], 4), "]. ", 
-         "Consider normalizing your similarity matrix.")
+  # Check value range with informative diagnostics (avoid densification)
+  stored_vals <- sim_matrix@x
+  if (length(stored_vals) > 0) {
+    min_val <- min(stored_vals, na.rm = TRUE)
+    max_val <- max(stored_vals, na.rm = TRUE)
+    if (min_val < 0 || max_val > 1) {
+      invalid_range <- range(stored_vals, na.rm = TRUE)
+      stop("sim_matrix values must be in [0,1]. Found range: [",
+           round(invalid_range[1], 4), ", ", round(invalid_range[2], 4), "]. ",
+           "Consider normalizing your similarity matrix.")
+    }
   }
   
   # Check for NAs with helpful guidance
@@ -236,13 +240,11 @@ assign_pseudolabels <- function(sim_matrix,
     }
   }
   
-  # Clear diagonal to avoid self-loops - OPTIMIZED for sparse matrices
-  # Use summary() approach for safe diagonal removal
-  if (Matrix::nnzero(Matrix::diag(sim_matrix)) > 0) {
-    diag_indices <- Matrix::which(Matrix::diag(sim_matrix) != 0)
-    if (length(diag_indices) > 0) {
-      sim_matrix[cbind(diag_indices, diag_indices)] <- 0
-    }
+  # Clear diagonal to avoid self-loops (works for any Matrix subtype)
+  diag_vals <- Matrix::diag(sim_matrix)
+  nz_diag <- which(diag_vals != 0)
+  if (length(nz_diag)) {
+    sim_matrix[cbind(nz_diag, nz_diag)] <- 0
   }
   
   # Set seed for reproducibility if provided
@@ -406,44 +408,56 @@ assign_pseudolabels <- function(sim_matrix,
     cluster_ids[i] <- i
     rep_indices[i] <- rep_idx
     cluster_sizes_final[i] <- length(cluster_members)
-    
+
     # ENHANCED: Calculate both density-adjusted and observed similarity metrics
-    if (length(cluster_members) > 1) {
-      cluster_sims <- sim_matrix[cluster_members, cluster_members]
-      
-      # Extract off-diagonal entries efficiently for sparse matrices
+    m <- length(cluster_members)
+    if (m > 1) {
+      cluster_sims <- sim_matrix[cluster_members, cluster_members, drop = FALSE]
+      symm <- Matrix::isSymmetric(cluster_sims)
+
       if (inherits(cluster_sims, "sparseMatrix")) {
-        # Use summary() to get only non-zero off-diagonal entries
         sim_summary <- summary(cluster_sims)
         off_diag_mask <- sim_summary$i != sim_summary$j
+        if (symm) {
+          off_diag_mask <- off_diag_mask & (sim_summary$i < sim_summary$j)
+        }
         off_diag_values <- sim_summary$x[off_diag_mask]
+
+        n_possible_edges <- if (symm) m * (m - 1) / 2 else m * (m - 1)
         n_observed_edges <- length(off_diag_values)
-        n_possible_edges <- length(cluster_members) * (length(cluster_members) - 1)
-        
-        # Observed mean: average of non-zero similarities only
+
         observed_similarities[i] <- if (n_observed_edges > 0) {
-          mean(off_diag_values, na.rm = TRUE)
+          mean(off_diag_values)
         } else {
           0
         }
-        
-        # Edge density: proportion of possible edges that are non-zero
-        edge_densities[i] <- n_observed_edges / n_possible_edges
-        
-        # Density-adjusted mean: includes zeros for missing edges
-        avg_similarities[i] <- sum(off_diag_values) / n_possible_edges
+
+        edge_densities[i] <- if (n_possible_edges > 0) {
+          n_observed_edges / n_possible_edges
+        } else {
+          NA_real_
+        }
+
+        avg_similarities[i] <- if (n_possible_edges > 0) {
+          sum(off_diag_values) / n_possible_edges
+        } else {
+          NA_real_
+        }
       } else {
-        # Dense matrix - compute directly
-        total_sim <- sum(cluster_sims)
-        diag_sim <- sum(Matrix::diag(cluster_sims))  # Should be 0 already
-        n_possible_edges <- length(cluster_members) * (length(cluster_members) - 1)
-        
-        avg_similarities[i] <- (total_sim - diag_sim) / n_possible_edges
-        observed_similarities[i] <- avg_similarities[i]  # Same for dense
-        edge_densities[i] <- 1.0  # All edges observed in dense matrix
+        total <- sum(cluster_sims)
+        dg <- sum(Matrix::diag(cluster_sims))
+        sum_off <- total - dg
+        n_possible_edges <- m * (m - 1) / 2
+
+        avg_similarities[i] <- if (n_possible_edges > 0) {
+          (sum_off / 2) / n_possible_edges
+        } else {
+          NA_real_
+        }
+        observed_similarities[i] <- avg_similarities[i]
+        edge_densities[i] <- 1.0
       }
     } else {
-      # Single-member clusters
       avg_similarities[i] <- NA_real_
       observed_similarities[i] <- NA_real_
       edge_densities[i] <- NA_real_
@@ -503,8 +517,12 @@ print.pseudolabels <- function(x, ...) {
         " (weight: ", round(x$diversity_weight, 2), ")\n", sep = "")
   }
   cat("Samples:          ", x$n_samples, "\n")
-  cat("Assigned:         ", x$n_assigned, " (", 
-      round(100 * x$n_assigned / x$n_samples, 1), "%)\n", sep = "")
+  assigned_pct <- if (x$n_samples > 0) {
+    round(100 * x$n_assigned / x$n_samples, 1)
+  } else {
+    NA_real_
+  }
+  cat("Assigned:         ", x$n_assigned, " (", assigned_pct, "%)\n", sep = "")
   cat("Clusters found:   ", x$n_clusters, "\n")
   cat("Threshold used:   ", round(x$threshold_used, 4), "\n")
   
@@ -676,17 +694,21 @@ as.data.frame.pseudolabels <- function(x, ...) {
   
   # ENHANCED: Compute confidence scores based on cluster sizes (if available)
   confidence_scores <- rep(1, length(candidates))  # Default: equal confidence
-  if (!is.null(cluster_assignments) && !is.null(valid_clusters)) {
-    for (i in seq_along(candidates)) {
-      candidate <- candidates[i]
-      cluster_id <- cluster_assignments[candidate]
-      cluster_size <- sum(cluster_assignments == cluster_id)
-      # Confidence = normalized cluster size (larger clusters = higher confidence)
-      confidence_scores[i] <- cluster_size
+  if (!is.null(cluster_assignments)) {
+    max_cluster <- suppressWarnings(max(cluster_assignments, na.rm = TRUE))
+    if (is.finite(max_cluster) && max_cluster > 0) {
+      sizes <- tabulate(cluster_assignments, nbins = max_cluster)
+      candidate_clusters <- cluster_assignments[candidates]
+      confidence_scores <- sizes[candidate_clusters]
+      confidence_scores[is.na(confidence_scores)] <- 1
+      rng <- range(confidence_scores)
+      span <- rng[2] - rng[1]
+      if (span > 0) {
+        confidence_scores <- (confidence_scores - rng[1]) / span
+      } else {
+        confidence_scores[] <- 1
+      }
     }
-    # Normalize confidence scores to [0,1]
-    confidence_scores <- (confidence_scores - min(confidence_scores)) / 
-      (max(confidence_scores) - min(confidence_scores) + 1e-8)
   }
   
   # Handle edge cases for diversity_weight
@@ -788,16 +810,21 @@ as.data.frame.pseudolabels <- function(x, ...) {
   # OPTIMIZED: Farthest-First Traversal with confidence weighting
   # Pre-compute confidence scores
   confidence_scores <- rep(1, length(candidates))
-  if (!is.null(cluster_assignments) && !is.null(valid_clusters)) {
-    for (i in seq_along(candidates)) {
-      candidate <- candidates[i]
-      cluster_id <- cluster_assignments[candidate]
-      cluster_size <- sum(cluster_assignments == cluster_id)
-      confidence_scores[i] <- cluster_size
+  if (!is.null(cluster_assignments)) {
+    max_cluster <- suppressWarnings(max(cluster_assignments, na.rm = TRUE))
+    if (is.finite(max_cluster) && max_cluster > 0) {
+      sizes <- tabulate(cluster_assignments, nbins = max_cluster)
+      candidate_clusters <- cluster_assignments[candidates]
+      confidence_scores <- sizes[candidate_clusters]
+      confidence_scores[is.na(confidence_scores)] <- 1
+      rng <- range(confidence_scores)
+      span <- rng[2] - rng[1]
+      if (span > 0) {
+        confidence_scores <- (confidence_scores - rng[1]) / span
+      } else {
+        confidence_scores[] <- 1
+      }
     }
-    # Normalize confidence scores to [0,1]
-    confidence_scores <- (confidence_scores - min(confidence_scores)) / 
-      (max(confidence_scores) - min(confidence_scores) + 1e-8)
   }
   
   # Handle edge cases for diversity_weight
@@ -956,7 +983,11 @@ high_sim_pseudolabels <- function(strata,
     cat("Using RcppAnnoy version", as.character(annoy_version), "\n")
   }
   
-  ann <- RcppAnnoy::AnnoyAngular(ncol(X))
+  ann_ctor <- get0("AnnoyAngular", envir = asNamespace("RcppAnnoy"))
+  if (is.null(ann_ctor) || !inherits(ann_ctor, "C++Class")) {
+    stop("RcppAnnoy::AnnoyAngular constructor not found; please reinstall RcppAnnoy")
+  }
+  ann <- methods::new(ann_ctor, ncol(X))
   for (i in seq_len(nrow(X))) {
     ann$addItem(i - 1, X[i, ])
   }
@@ -970,7 +1001,7 @@ high_sim_pseudolabels <- function(strata,
   
   for (i in seq_len(nrow(X))) {
     # Get k+1 nearest neighbors (including self) and distances
-    nn_res <- ann$getNNsByItem(i - 1, k + 1, include_distances = TRUE)
+    nn_res <- ann$getNNsByItemList(i - 1, k + 1, -1L, TRUE)
     
     # Exclude self (first element)
     nns <- nn_res$item[-1]
@@ -1002,24 +1033,19 @@ high_sim_pseudolabels <- function(strata,
         }
         
         if (cos_sim >= cos_thresh) {
-          edge_count <- edge_count + 1
-          # FIXED: Guard against edge buffer overflow with auto-expansion
-          if (edge_count > max_edges) {
-            # Auto-expand edge buffer instead of failing
-            new_max_edges <- max_edges * 2
-            warning("Edge buffer overflow: expanding from ", max_edges, 
-                   " to ", new_max_edges, " edges. Consider increasing ", 
-                   "max_edges parameter for better performance.")
-            
-            # Expand edge vectors
+          if (edge_count == max_edges) {
+            new_max_edges <- max_edges * 2L
             new_edge_i <- integer(new_max_edges)
             new_edge_j <- integer(new_max_edges)
-            new_edge_i[1:edge_count] <- edge_i[1:edge_count]
-            new_edge_j[1:edge_count] <- edge_j[1:edge_count]
+            if (edge_count > 0) {
+              new_edge_i[1:edge_count] <- edge_i[1:edge_count]
+              new_edge_j[1:edge_count] <- edge_j[1:edge_count]
+            }
             edge_i <- new_edge_i
             edge_j <- new_edge_j
             max_edges <- new_max_edges
           }
+          edge_count <- edge_count + 1L
           edge_i[edge_count] <- i
           edge_j[edge_count] <- j
         }
@@ -1044,14 +1070,24 @@ high_sim_pseudolabels <- function(strata,
   }
   
   g <- igraph::graph_from_edgelist(edges_matrix, directed = FALSE)
+  if (is.null(igraph::V(g)$name)) {
+    igraph::V(g)$name <- as.character(seq_len(igraph::vcount(g)))
+  } else {
+    igraph::V(g)$name <- as.character(igraph::V(g)$name)
+  }
   components <- igraph::components(g)
   
-  # Assign labels
+  # Assign labels using original row indices stored in vertex names
   labels <- rep(NA_character_, nrow(X))
+  vertex_rows <- suppressWarnings(as.integer(igraph::V(g)$name))
   for (cid in seq_len(components$no)) {
-    members <- which(components$membership == cid)
-    if (length(members) >= min_size) {
-      labels[members] <- base::sprintf("anchor_%04d", cid)
+    members_in_graph <- which(components$membership == cid)
+    if (length(members_in_graph) >= min_size) {
+      original_rows <- vertex_rows[members_in_graph]
+      original_rows <- original_rows[!is.na(original_rows)]
+      if (length(original_rows)) {
+        labels[original_rows] <- base::sprintf("anchor_%04d", cid)
+      }
     }
   }
   

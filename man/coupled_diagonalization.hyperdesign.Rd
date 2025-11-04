@@ -11,6 +11,8 @@
   ncomp = 10,
   ncomp_per_domain = 20,
   mu_coupling = 1,
+  alpha_match = 0,
+  lambda_target = NULL,
   knn = 10,
   sigma = NULL,
   max_iter = 200,
@@ -38,6 +40,12 @@ coupling (default: 20). Must be >= ncomp.}
 \item{mu_coupling}{Coupling weight controlling alignment vs diagonalization 
 trade-off (default: 1). Higher values emphasize cross-modal alignment.}
 
+\item{alpha_match}{Optional weight for matching the diagonal of 
+\code{A_i^T Lambda_i A_i} to target eigenvalues (default: 0).}
+
+\item{lambda_target}{Optional list of length \code{m} providing target eigenvalue
+vectors for each modality (only the first \code{ncomp} entries are used).}
+
 \item{knn}{Number of nearest neighbors for graph construction (default: 10)}
 
 \item{sigma}{Gaussian kernel bandwidth for graph weights. If NULL (default), 
@@ -61,6 +69,7 @@ A multiblock_biprojector object containing:
   \item \code{coupled_bases}: List of coupled bases V_i for each modality
   \item \code{sdev}: Standard deviations of coupled components
   \item \code{eigenvalues}: List of eigenvalues for each domain
+  \item \code{diagnostics}: List with per-iteration cost diagnostics
   \item \code{converged}: Logical indicating convergence
   \item \code{iterations}: Number of iterations performed
   \item \code{final_cost}: Final objective value
@@ -72,12 +81,16 @@ multiple modalities. Finds coupled eigenvectors that jointly diagonalize graph
 Laplacians while respecting cross-modal correspondences.
 }
 \details{
-The algorithm minimizes:
-\deqn{F = \sum_i ||A_i^T \Lambda_i A_i - diag(A_i^T \Lambda_i A_i)||_F^2 + 
-      \mu_c \sum_{i<j} ||F_i^T U_i A_i - F_j^T U_j A_j||_F^2}
+The algorithm minimizes the objective
+\preformatted{
+F = sum_i ||A_i^T Lambda_i A_i - diag(A_i^T Lambda_i A_i)||_F^2 +
+    mu_c sum_{i<j} ||F_i^T U_i A_i - F_j^T U_j A_j||_F^2
+}
 
-Using projected gradient descent on the Stiefel manifold to maintain 
+It uses projected gradient descent on the Stiefel manifold to maintain
 orthogonality of the coupling matrices A_i.
+When \code{alpha_match > 0}, the diagonal term also nudges the joint modes
+toward user-specified target eigenvalues as described in Eynard et al. (2015, Eq. 9).
 }
 \examples{
 \dontrun{

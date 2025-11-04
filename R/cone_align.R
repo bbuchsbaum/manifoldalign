@@ -209,7 +209,7 @@ cone_align.hyperdesign <- function(data,
   
   # Call CONE-Align fitting function
   cone_align_fit(pdata, proc, ncomp, sigma, lambda, use_laplacian, 
-                solver, max_iter, tol, block_indices, knn)
+                solver, max_iter, tol, feature_block_indices(pdata), knn)
 }
 
 #' CONE-Align for List of Feature Matrices
@@ -357,7 +357,7 @@ cone_align.list <- function(data,
   
   # Call CONE-Align fitting function
   cone_align_fit(pdata, proc, ncomp, sigma, lambda, use_laplacian, 
-                solver, max_iter, tol, block_indices, knn)
+                solver, max_iter, tol, feature_block_indices(pdata), knn)
 }
 
 #' @rdname cone_align
@@ -381,68 +381,45 @@ compute_block_indices <- function(pdata) {
 
 #' @keywords internal
 cone_align_fit <- function(strata, proc, ncomp, sigma, lambda, use_laplacian, 
-                          solver, max_iter, tol, block_indices, knn) {
+                          solver, max_iter, tol, feature_blocks, knn) {
   
   # Compute spectral embeddings (following GRASP pattern)
   embeddings <- compute_cone_embeddings(strata, ncomp, sigma, use_laplacian, knn)
-  
+
+  if (any(vapply(embeddings, is.null, logical(1)))) {
+    stop("Embedding computation failed for one or more graphs.", call. = FALSE)
+  }
+
   # Iterative alignment (core CONE-Align algorithm)
   alignment_result <- cone_align_iterate(embeddings, solver, max_iter, tol, lambda)
   
-  # Compute scores with correct assignment alignment
+  # Compute scores with consistent alignment direction (map graph 1 -> graph 2 space)
   embed1_aligned <- embeddings[[1]] %*% alignment_result$Q
-  # Apply final assignment to second embedding before alignment
   embed2_permuted <- embeddings[[2]][alignment_result$P, , drop = FALSE]
-  embed2_aligned <- embed2_permuted %*% alignment_result$Q
-  scores <- rbind(embed1_aligned, embed2_aligned)
+  scores <- rbind(embed1_aligned, embed2_permuted)
   
   # Primal vectors computation (following KEMA/GRASP pattern)
-  v <- do.call(rbind, lapply(seq_along(strata), function(i) {
+  loadings <- do.call(rbind, lapply(seq_along(strata), function(i) {
     xi <- strata[[i]]$x
     alpha_i <- embeddings[[i]]
     Matrix::crossprod(xi, alpha_i)
   }))
-  
-  # Compute feature block indices for multiblock_biprojector (following KEMA pattern)
-  feat_per_block <- vapply(strata, function(b) ncol(b$x), integer(1))
-  end_idx   <- cumsum(feat_per_block)
-  start_idx <- c(1L, head(end_idx, -1) + 1L)
-  
-  feature_block_idx <- lapply(seq_along(feat_per_block), function(i) {
-    start_idx[i]:end_idx[i]
-  })
-  names(feature_block_idx) <- paste0("block_", seq_along(feature_block_idx))
-  
-  # Store rotation as a list of two identical rotation matrices (for test compatibility)
-  rotation_list <- list(alignment_result$Q, alignment_result$Q)
-  
-  # Return multiblock_biprojector (exact package pattern)
-  if (is.null(proc)) {
-    # Create minimal identity preprocessor for NULL case
-    result <- list(
-      v = v,
-      s = scores,
-      sdev = apply(scores, 2, sd),
-      preproc = NULL,
-      block_indices = feature_block_idx,
+
+  # Store rotations used to produce scores (graph 1 rotated, graph 2 identity)
+  rotation_list <- list(alignment_result$Q,
+                        diag(ncol(embed2_permuted)))
+
+  new_alignment_result(
+    scores = scores,
+    loadings = loadings,
+    preproc = proc,
+    feature_blocks = feature_blocks,
+    subclass = "cone_align",
+    extras = list(
       assignment = alignment_result$P,
       rotation = rotation_list
     )
-    class(result) <- c("cone_align", "multiblock_biprojector")
-  } else {
-    result <- multivarious::multiblock_biprojector(
-      v = v,
-      s = scores,
-      sdev = apply(scores, 2, sd),
-      preproc = proc,
-      block_indices = feature_block_idx,
-      assignment = alignment_result$P,
-      rotation = rotation_list
-    )
-    class(result) <- c("cone_align", class(result))
-  }
-  
-  result
+  )
 }
 
 #' Compute Spectral Embeddings for CONE-Align
@@ -556,9 +533,27 @@ compute_embedding <- function(domain, ncomp, sigma, use_laplacian, knn) {
   # Select the best available eigenvectors
   ncomp_actual <- min(ncomp_safe, length(nz))
   selected_idx <- nz[seq_len(ncomp_actual)]
-  
-  # Return embedding matrix with a consistent number of columns
-  vecs[, selected_idx, drop = FALSE]
+
+  embedding <- vecs[, selected_idx, drop = FALSE]
+
+  # Normalize embeddings for alignment stability (row-wise unit norm + spectral scaling)
+  if (!is.null(dim(embedding)) && ncol(embedding) > 0) {
+    row_norms <- sqrt(rowSums(embedding^2))
+    row_norms[row_norms < 1e-12] <- 1
+    embedding <- embedding / row_norms
+
+    if (nrow(embedding) > 0 && ncol(embedding) > 0) {
+      spectral_norm <- tryCatch({
+        max(svd(embedding, nu = 0, nv = 0)$d)
+      }, error = function(e) NA_real_)
+
+      if (is.finite(spectral_norm) && spectral_norm > 1e-12) {
+        embedding <- embedding / spectral_norm
+      }
+    }
+  }
+
+  embedding
 }
 
 #' @keywords internal
@@ -587,9 +582,14 @@ graph_laplacian <- function(A, normalized = TRUE) {
 #' @return List with final rotation, permutation, and iteration count
 #' @keywords internal
 cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda) {
-  
+
   if (nrow(embeddings[[1]]) == 0 || nrow(embeddings[[2]]) == 0) {
     stop("Input embeddings to cone_align_iterate must have non-zero rows.")
+  }
+
+  if (nrow(embeddings[[1]]) != nrow(embeddings[[2]])) {
+    stop("This implementation requires equal node counts. Pad the smaller graph with singleton nodes before alignment.",
+         call. = FALSE)
   }
 
   # Initialize with identity permutation on the reference set
@@ -642,45 +642,28 @@ cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda) {
 #' @param lambda Regularization parameter for Procrustes problem
 #' @return Orthogonal transformation matrix Q
 #' @keywords internal
-solve_procrustes_cone <- function(Z1, Z2, P, lambda) {
-  # Subset the target matrix Z2 according to the permutation P
+solve_procrustes_cone <- function(Z1, Z2, P, lambda = 0) {
   Z2_permuted <- Z2[P, , drop = FALSE]
-  
-  # Ensure Z1 and permuted Z2 are compatible
-  if (ncol(Z1) != ncol(Z2_permuted)) {
-    stop("Source and permuted target embeddings must have the same number of columns", call. = FALSE)
+
+  if (ncol(Z1) != ncol(Z2_permuted) || nrow(Z1) != nrow(Z2_permuted)) {
+    stop("Z1 and Z2[P, ] must have identical dimensions.", call. = FALSE)
   }
-  
-  if (nrow(Z1) != nrow(Z2_permuted)) {
-    stop("Source and permuted target embeddings must have the same number of rows", call. = FALSE)
-  }
-  
-  # Compute the cross-covariance matrix M
+
   M <- crossprod(Z1, Z2_permuted)
-  
-  # Add regularization only if lambda > 0 (avoid unnecessary computation)
+
   if (lambda > 0) {
     diag(M) <- diag(M) + lambda
   }
-  
-  # Perform Singular Value Decomposition
-  # For small matrices, base::svd is often faster than alternatives
-  svd_result <- if (ncol(M) <= 20) {
-    svd(M, nu = ncol(M), nv = ncol(M))
-  } else {
-    # For larger matrices, consider using partial SVD if available
-    svd(M)
+
+  sv <- svd(M)
+  Q <- sv$u %*% t(sv$v)
+
+  if (det(Q) < 0) {
+    D <- diag(ncol(Q))
+    D[ncol(Q), ncol(Q)] <- -1
+    Q <- sv$u %*% D %*% t(sv$v)
   }
-  
-  # Compute the optimal rotation matrix Q
-  # Ensure proper rotation (det = +1)
-  d <- sign(det(svd_result$v %*% t(svd_result$u)))
-  if (d < 0) {
-    svd_result$v[, ncol(svd_result$v)] <- -svd_result$v[, ncol(svd_result$v)]
-  }
-  
-  Q <- svd_result$v %*% t(svd_result$u)
-  
+
   Q
 }
 
@@ -730,21 +713,17 @@ solve_assignment_cone <- function(Z1, Z2, Q, solver) {
 #' @return A matrix of squared Euclidean distances (n x m)
 #' @keywords internal
 #' @noRd
-pairwise_sqdist <- function(X, Y) {
-  # Fast squared Euclidean distance computation
-  nx <- nrow(X)
-  ny <- nrow(Y)
-  
-  # Compute squared norms of rows
+pairwise_sqdist <- function(X, Y = NULL) {
+  if (is.null(Y)) {
+    Y <- X
+  }
+  if (!is.matrix(X)) X <- as.matrix(X)
+  if (!is.matrix(Y)) Y <- as.matrix(Y)
+
   X_norm_sq <- rowSums(X^2)
   Y_norm_sq <- rowSums(Y^2)
-  
-  # Compute squared Euclidean distances
-  # dist^2 = ||x - y||^2 = ||x||^2 + ||y||^2 - 2 * x^T * y
+
   D <- outer(X_norm_sq, Y_norm_sq, "+") - 2 * tcrossprod(X, Y)
-  
-  # Ensure numerical stability: clamp small negative values to 0
-  # This can happen due to floating point precision issues
+
   pmax(D, 0)
 }
-

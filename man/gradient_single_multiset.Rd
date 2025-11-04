@@ -4,20 +4,20 @@
 \alias{gradient_single_multiset}
 \title{Gradient for Single Rotation in Multi-Graph Setting}
 \usage{
-gradient_single_multiset(basis_s, FtPhi_s, FtPhi_all, Ms, s, lambda)
+gradient_single_multiset(basis_s, A_list, Ms, s, lambda, Gss = NULL)
 }
 \arguments{
 \item{basis_s}{Spectral basis for graph s}
 
-\item{FtPhi_s}{Descriptor-basis product for graph s}
-
-\item{FtPhi_all}{List of all descriptor-basis products}
+\item{A_list}{List of descriptor-basis products for all graphs}
 
 \item{Ms}{List of all rotation matrices}
 
 \item{s}{Index of current graph}
 
 \item{lambda}{Regularization parameter}
+
+\item{Gss}{Optional list of A_s^T A_s matrices for reuse}
 }
 \value{
 Gradient matrix

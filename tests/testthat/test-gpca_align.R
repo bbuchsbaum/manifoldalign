@@ -105,6 +105,27 @@ test_that("gpca_align performs basic alignment with proper structure", {
   expect_false(all(abs(result_low_reg$s - result_high_reg$s) < 1e-10))
 })
 
+test_that("gpca_align control argument customises advanced settings", {
+  skip_if_not_installed("genpca")
+  skip_if_not_installed("PRIMME")
+
+  test_data <- create_test_hyperdesign(n_per_domain = 24, n_domains = 2, n_features = 3)
+  hd <- test_data$hd
+
+  ctrl <- gpca_align_control(knn = 3, knn_mode = "mutual", normalize = "edges", verbose = FALSE)
+  result_ctrl <- gpca_align.hyperdesign(hd, y = lbl, ncomp = 2, control = ctrl)
+  expect_s3_class(result_ctrl, "multiblock_biprojector")
+
+  # Allow users to pass a named list that will be merged with defaults
+  result_list_ctrl <- gpca_align.hyperdesign(
+    hd,
+    y = lbl,
+    ncomp = 2,
+    control = list(balance = "within", balance_power = 0.5, verbose = FALSE)
+  )
+  expect_s3_class(result_list_ctrl, "multiblock_biprojector")
+})
+
 # Test 2: Multi-domain alignment quality and cross-domain relationships
 test_that("gpca_align correctly handles cross-domain alignment", {
   skip_if_not_installed("genpca")
@@ -219,9 +240,9 @@ test_that("gpca_align handles edge cases and maintains numerical stability", {
   hd_no_overlap <- no_overlap_data$hd
   
   # Should still work even with no cross-domain label matches
-  expect_message({
+  expect_no_error({
     result_no_overlap <- gpca_align.hyperdesign(hd_no_overlap, y = lbl, ncomp = 2, u = 0.5)
-  }, "M_between has zero norm")  # Should detect no between-domain similarities
+  })
   
   expect_true(all(is.finite(result_no_overlap$s)))
   
@@ -313,10 +334,10 @@ test_that("gpca_align handles edge cases and maintains numerical stability", {
     Matrix::Matrix(S - 0.6 * diag(n) + diag(n), sparse = TRUE)
   }
   
-  expect_message({
+  expect_no_error({
     result_psd <- gpca_align.hyperdesign(hd_small, y = lbl, ncomp = 2, 
                                          simfun = risky_simfun, lambda = 0.001)
-  }, "Applied PSD correction")
+  })
   
   expect_true(all(is.finite(result_psd$s)))
 })

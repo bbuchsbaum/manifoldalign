@@ -4,7 +4,13 @@
 \alias{solve_assignment_multiset}
 \title{Solve Assignment for Multi-Graph GRASP}
 \usage{
-solve_assignment_multiset(E1, E2, distance = "cosine", solver = "auction")
+solve_assignment_multiset(
+  E1,
+  E2,
+  distance = "cosine",
+  solver = "auction",
+  alpha = 0.5
+)
 }
 \arguments{
 \item{E1}{First embedding matrix}
@@ -14,6 +20,8 @@ solve_assignment_multiset(E1, E2, distance = "cosine", solver = "auction")
 \item{distance}{Distance metric: "cosine" or "euclidean"}
 
 \item{solver}{Assignment solver: "auction" or "linear"}
+
+\item{alpha}{Weight on cosine vs. Euclidean distance when distance = "cosine"}
 }
 \value{
 Assignment vector

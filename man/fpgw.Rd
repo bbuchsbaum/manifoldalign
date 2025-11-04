@@ -13,10 +13,9 @@ fpgw(data, ...)
 \itemize{
   \item \code{omega1}: Weight of the feature term (0 ≤ omega1 ≤ 1). The structural 
     term weight omega2 = 1 - omega1 is computed automatically (default: 0.001)
-  \item \code{lambda}: Non-negative total variation penalty for the penalized FPGW 
-    variant. Set lambda = 0 to disable and use rho instead (default: 0).
-    NOTE: The TV penalty is experimental and may not produce expected 
-    sparsity-inducing behavior due to its quadratic formulation
+  \item \code{lambda}: Non-negative transport-mass penalty for the penalized FPGW 
+    variant (adds \code{lambda * sum(gamma)} to the objective). Set lambda = 0 to 
+    disable and use rho instead (default: 0).
   \item \code{rho}: Mass budget in (0, min(|μ|,|ν|)] for the mass-constrained variant. 
     If rho is supplied, the solver runs the mass-constrained variant; otherwise 
     it uses the penalized variant (λ > 0) or classical FGW (both λ = 0, rho = NULL)

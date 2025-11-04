@@ -38,6 +38,9 @@ with proper objective function and monotonicity checks
 }
 \keyword{+}
 \keyword{<C_rwr,}
+\keyword{λ_e*L_e(S)}
+\keyword{λ_n*L_n(S)}
+\keyword{λ_p*L_a(S)}
 \keyword{Compute}
 \keyword{Computes}
 \keyword{Function}
@@ -48,6 +51,3 @@ with proper objective function and monotonicity checks
 \keyword{internal}
 \keyword{objective:}
 \keyword{the}
-\keyword{λ_e*L_e(S)}
-\keyword{λ_n*L_n(S)}
-\keyword{λ_p*L_a(S)}

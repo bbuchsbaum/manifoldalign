@@ -13,11 +13,16 @@
 library(testthat)
 library(Matrix)
 library(tibble)
-library(multidesign)
-library(multivarious)
-library(manifoldalign)
 
-skip_if_not_installed("lpSolve")
+have_multidesign <- requireNamespace("multidesign", quietly = TRUE)
+have_multivarious <- requireNamespace("multivarious", quietly = TRUE)
+have_lpSolve <- requireNamespace("lpSolve", quietly = TRUE)
+
+skip_if_missing_fpgw_deps <- function() {
+  skip_if_not(have_multidesign, "multidesign not installed")
+  skip_if_not(have_multivarious, "multivarious not installed")
+  skip_if_not(have_lpSolve, "lpSolve not installed")
+}
 set.seed(1234)
 
 # ---------------------------------------------------------------------------
@@ -39,11 +44,7 @@ objective_fpgw <- function(gamma, C_feat, Cx, Cy,
   strc <- struct_wt * gw_term
   
   # term 3 - TV penalty
-  tv <- if (lambda > 0) {
-    lambda * (sum(rowSums(gamma))^2 + sum(colSums(gamma))^2 - 2 * sum(gamma)^2)
-  } else {
-    0
-  }
+  tv <- if (lambda > 0) lambda * sum(gamma) else 0
   
   ftr + strc + tv
 }
@@ -70,7 +71,7 @@ create_test_hyperdesign <- function(X_list, design = NULL) {
   })
   names(md_list) <- paste0("domain", seq_along(X_list))
   
-  hyperdesign(md_list)
+  multidesign::hyperdesign(md_list)
 }
 
 # ---------------------------------------------------------------------------
@@ -78,6 +79,7 @@ create_test_hyperdesign <- function(X_list, design = NULL) {
 # ---------------------------------------------------------------------------
 test_that("Analytic gradient matches numeric finite differences", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   
   pb <- toy_pair()
   Cx <- as.matrix(dist(pb$X))
@@ -124,6 +126,7 @@ test_that("Analytic gradient matches numeric finite differences", {
 # ---------------------------------------------------------------------------
 test_that("Frank-Wolfe objective is non-increasing and converges", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   
   pb <- toy_pair()
   hd <- create_test_hyperdesign(list(pb$X, pb$Y))
@@ -135,7 +138,7 @@ test_that("Frank-Wolfe objective is non-increasing and converges", {
   # Since fpgw.hyperdesign calls fw_fpgw internally, we need to modify to capture trace
   # For now, we'll test convergence indirectly
   expect_true(result$converged[1, 2], 
-              info = "Frank-Wolfe should converge for well-posed problems")
+              label = "Frank-Wolfe should converge for well-posed problems")
 })
 
 # ---------------------------------------------------------------------------
@@ -143,6 +146,7 @@ test_that("Frank-Wolfe objective is non-increasing and converges", {
 # ---------------------------------------------------------------------------
 test_that("Partial OT oracle respects constraints exactly", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   
   # Small problem for exact verification
   G <- matrix(runif(9), 3, 3)
@@ -152,24 +156,26 @@ test_that("Partial OT oracle respects constraints exactly", {
   
   gamma <- manifoldalign:::partial_ot_mass(G, p, q, rho)
   
-  # Check row constraints
+  # Check row constraints (within numerical tolerance)
   row_sums <- rowSums(gamma)
-  expect_true(all(row_sums <= p + 1e-6),
-              info = "Row sums should not exceed marginal p")
+  row_violation <- max(row_sums - p)
+  expect_lte(row_violation, 1e-6,
+             label = sprintf("Row sums should not exceed marginal p (max excess %.2e)", row_violation))
   
-  # Check column constraints  
+  # Check column constraints (within numerical tolerance)
   col_sums <- colSums(gamma)
-  expect_true(all(col_sums <= q + 1e-6),
-              info = "Column sums should not exceed marginal q")
+  col_violation <- max(col_sums - q)
+  expect_lte(col_violation, 1e-6,
+             label = sprintf("Column sums should not exceed marginal q (max excess %.2e)", col_violation))
   
   # Check exact mass constraint
   total_mass <- sum(gamma)
   expect_equal(total_mass, rho, tolerance = 1e-6,
-               info = "Total transported mass should equal rho exactly")
+               label = "Total transported mass should equal rho exactly")
   
   # Verify it's a minimizer by checking KKT conditions (simplified)
   expect_true(all(gamma >= -1e-6),
-              info = "Transport plan should be non-negative")
+              label = "Transport plan should be non-negative")
 })
 
 # ---------------------------------------------------------------------------
@@ -177,6 +183,7 @@ test_that("Partial OT oracle respects constraints exactly", {
 # ---------------------------------------------------------------------------
 test_that("Classical OT oracle produces doubly stochastic matrix", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   
   G <- matrix(runif(16), 4, 4)
   p <- rep(0.25, 4)
@@ -186,11 +193,11 @@ test_that("Classical OT oracle produces doubly stochastic matrix", {
   
   # Check double stochasticity
   expect_equal(as.vector(rowSums(gamma)), p, tolerance = 1e-6,
-               info = "Row sums should equal p")
+               label = "Row sums should equal p")
   expect_equal(as.vector(colSums(gamma)), q, tolerance = 1e-6,
-               info = "Column sums should equal q")
+               label = "Column sums should equal q")
   expect_true(all(gamma >= -1e-6),
-              info = "Transport plan should be non-negative")
+              label = "Transport plan should be non-negative")
 })
 
 # ---------------------------------------------------------------------------
@@ -198,6 +205,7 @@ test_that("Classical OT oracle produces doubly stochastic matrix", {
 # ---------------------------------------------------------------------------
 test_that("FPGW distance is symmetric and satisfies triangle inequality", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   
   # Three small random domains
   set.seed(42)
@@ -213,11 +221,11 @@ test_that("FPGW distance is symmetric and satisfies triangle inequality", {
   
   # Check symmetry
   expect_equal(dmat, t(dmat), tolerance = 1e-10,
-               info = "Distance matrix should be symmetric")
+               label = "Distance matrix should be symmetric")
   
   # Check diagonal is zero
   expect_equal(diag(dmat), rep(0, 3), tolerance = 1e-10,
-               info = "Distance from domain to itself should be zero")
+               label = "Distance from domain to itself should be zero")
   
   # Check triangle inequality
   for (i in 1:3) {
@@ -235,6 +243,7 @@ test_that("FPGW distance is symmetric and satisfies triangle inequality", {
 # ---------------------------------------------------------------------------
 test_that("FPGW with rho=1 or huge lambda equals classical FGW", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   set.seed(42)  # Ensure deterministic test
   
   pb <- toy_pair(d = 3, n = 5)
@@ -252,7 +261,7 @@ test_that("FPGW with rho=1 or huge lambda equals classical FGW", {
   # Compare distances
   expect_equal(fgw_classical$distances[1, 2], fpgw_rho1$distances[1, 2], 
                tolerance = 1e-4,
-               info = "FPGW with rho=1 should equal classical FGW")
+               label = "FPGW with rho=1 should equal classical FGW")
   
   # Compare transport plans
   P_classical <- fgw_classical$transport_plans[[1]]
@@ -265,50 +274,28 @@ test_that("FPGW with rho=1 or huge lambda equals classical FGW", {
 # ---------------------------------------------------------------------------
 # 9. TV penalty effect: transported mass decreases with lambda
 # ---------------------------------------------------------------------------
-test_that("TV penalty is experimental and produces warnings", {
+test_that("Mass penalty decreases transported mass as lambda grows", {
   skip_on_cran()
-  
-  # Create domains with some outliers
+  skip_if_missing_fpgw_deps()
+
   set.seed(123)
-  X1 <- rbind(
-    matrix(rnorm(15, mean = 0), 5, 3),
-    matrix(rnorm(6, mean = 5), 2, 3)  # outliers
-  )
-  X2 <- rbind(
-    matrix(rnorm(15, mean = 0.2), 5, 3),
-    matrix(rnorm(9, mean = -5), 3, 3)  # different outliers
-  )
-  
-  # Create appropriate design frames for each domain
-  design1 <- data.frame(sample_id = 1:nrow(X1))
-  design2 <- data.frame(sample_id = 1:nrow(X2))
-  
-  # Create multidesign objects manually since domains have different sizes
-  md1 <- multidesign::multidesign(X1, design1)
-  md2 <- multidesign::multidesign(X2, design2)
-  hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
-  
-  # Check that lambda > 0 produces a warning
-  expect_warning(
-    result_lambda1 <- fpgw(hd, omega1 = 0.4, lambda = 1.0, max_iter = 40),
-    regexp = "TV penalty.*experimental",
-    info = "Using lambda > 0 should produce experimental warning"
-  )
-  
-  expect_warning(
-    result_lambda5 <- fpgw(hd, omega1 = 0.4, lambda = 5.0, max_iter = 40),
-    regexp = "TV penalty.*experimental",
-    info = "Using lambda > 0 should produce experimental warning"
-  )
-  
-  # No warning for lambda = 0
-  expect_no_warning(
-    result_lambda0 <- fpgw(hd, omega1 = 0.4, lambda = 0.0, max_iter = 40)
-  )
-  
-  # Note: The TV penalty does not guarantee monotonic mass decrease due to its
-  # concave quadratic nature. It biases towards either zero or full mass.
-  # For predictable sparsity, use the mass-constrained formulation (rho).
+  X1 <- matrix(rnorm(20), 5, 4)
+  X2 <- matrix(rnorm(20), 5, 4)
+  hd <- create_test_hyperdesign(list(X1, X2))
+
+  result_lambda0 <- fpgw(hd, omega1 = 0.4, lambda = 0.0, max_iter = 60)
+  result_lambda1 <- fpgw(hd, omega1 = 0.4, lambda = 0.5, max_iter = 60)
+  result_lambda5 <- fpgw(hd, omega1 = 0.4, lambda = 2.0, max_iter = 60)
+
+  mass0 <- sum(result_lambda0$transport_plans[[1]])
+  mass1 <- sum(result_lambda1$transport_plans[[1]])
+  mass5 <- sum(result_lambda5$transport_plans[[1]])
+
+  tol <- 1e-6
+  expect_lte(mass1, mass0 + tol,
+             label = sprintf("λ=0.5 mass (%.4f) should not exceed λ=0 mass (%.4f)", mass1, mass0))
+  expect_lte(mass5, mass1 + tol,
+             label = sprintf("λ=2.0 mass (%.4f) should not exceed λ=0.5 mass (%.4f)", mass5, mass1))
 })
 
 # ---------------------------------------------------------------------------
@@ -316,6 +303,7 @@ test_that("TV penalty is experimental and produces warnings", {
 # ---------------------------------------------------------------------------
 test_that("Mass-constrained variant respects rho exactly", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   
   # Test with various rho values
   pb <- toy_pair(d = 2, n = 6)
@@ -335,6 +323,7 @@ test_that("Mass-constrained variant respects rho exactly", {
 # ---------------------------------------------------------------------------
 test_that("FPGW is numerically stable", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   
   # Test with poorly conditioned data
   X1 <- matrix(c(1, 1e-8, 1e8, 1, 1, 1e-8), 3, 2)
@@ -348,9 +337,9 @@ test_that("FPGW is numerically stable", {
   
   # Check for valid output
   expect_true(all(result$distances >= 0),
-              info = "All distances should be non-negative")
+              label = "All distances should be non-negative")
   expect_true(all(is.finite(result$distances)),
-              info = "All distances should be finite")
+              label = "All distances should be finite")
 })
 
 # ---------------------------------------------------------------------------
@@ -358,6 +347,7 @@ test_that("FPGW is numerically stable", {
 # ---------------------------------------------------------------------------
 test_that("Distance between identical domains is zero", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   
   X <- matrix(rnorm(20), 5, 4)
   hd <- create_test_hyperdesign(list(X, X))  # Same data twice
@@ -365,12 +355,12 @@ test_that("Distance between identical domains is zero", {
   result <- fpgw(hd, omega1 = 0.5)
   
   expect_equal(result$distances[1, 2], 0, tolerance = 1e-8,
-               info = "Distance between identical domains should be zero")
+               label = "Distance between identical domains should be zero")
   
   # Transport plan should be identity (permuted)
   P <- result$transport_plans[[1]]
   expect_equal(sum(diag(P)), 1.0, tolerance = 1e-4,
-               info = "Transport plan should be approximately diagonal for identical domains")
+               label = "Transport plan should be approximately diagonal for identical domains")
 })
 
 # ---------------------------------------------------------------------------
@@ -378,6 +368,7 @@ test_that("Distance between identical domains is zero", {
 # ---------------------------------------------------------------------------
 test_that("FPGW handles domains with different dimensions", {
   skip_on_cran()
+  skip_if_missing_fpgw_deps()
   
   set.seed(456)  # Set seed for reproducibility
   X1 <- matrix(rnorm(15), 5, 3)  # 5 points in R^3
@@ -390,5 +381,5 @@ test_that("FPGW handles domains with different dimensions", {
   })
   
   expect_true(result$distances[1, 2] > 0,
-              info = "Distance should be positive for different dimensional data")
+              label = "Distance should be positive for different dimensional data")
 })

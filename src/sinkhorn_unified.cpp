@@ -1,4 +1,5 @@
 #include <RcppArmadillo.h>
+#include <algorithm>
 #include "ot_common.h"
 
 // [[Rcpp::depends(RcppArmadillo)]]
@@ -111,8 +112,8 @@ arma::mat solve_sinkhorn_stabilized_cpp(const arma::mat& C_in, double tau,
   // For backward compatibility with parrot code
   int n = C_in.n_rows;
   int m = C_in.n_cols;
-  arma::vec mu = arma::ones(n);
-  arma::vec nu = arma::ones(m);
+  arma::vec mu(n, arma::fill::value(1.0 / std::max(1, n)));
+  arma::vec nu(m, arma::fill::value(1.0 / std::max(1, m)));
   
   return sinkhorn_unified(C_in, mu, nu, tau, max_iter, tol, true);
 }

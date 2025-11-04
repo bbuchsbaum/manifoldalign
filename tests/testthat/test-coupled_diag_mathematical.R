@@ -103,6 +103,16 @@ compute_basis_alignment <- function(bases, k = NULL) {
   mean(alignments)
 }
 
+pairwise_cosine <- function(S1, S2) {
+  stopifnot(nrow(S1) == nrow(S2), ncol(S1) == ncol(S2))
+  vapply(seq_len(nrow(S1)), function(i) {
+    a <- S1[i, ]
+    b <- S2[i, ]
+    denom <- sqrt(sum(a^2)) * sqrt(sum(b^2)) + 1e-9
+    sum(a * b) / denom
+  }, numeric(1))
+}
+
 test_that("coupled_diagonalization recovers known coupled structure", {
   skip_if_not_installed("multidesign")
   skip_if_not_installed("multivarious")
@@ -198,17 +208,14 @@ test_that("coupled_diagonalization handles decoupled case correctly", {
   expect_lt(alignment, 0.5,
             label = sprintf("Decoupled domains should have low alignment (got %.3f)", alignment))
   
-  # Each domain should capture its own structure
-  # Domain 1 scores should separate 2 clusters
-  S1 <- result$s[1:n, ]
-  
-  # Simple cluster separation metric
-  cluster1_mean <- colMeans(S1[1:25, ])
-  cluster2_mean <- colMeans(S1[26:50, ])
-  separation <- sqrt(sum((cluster1_mean - cluster2_mean)^2))
-  
-  expect_gt(separation, 0.2,  # Relaxed - some mixing is expected
-            label = "Domain 1 should maintain cluster separation")
+  # Average discrepancy between per-sample embeddings should remain large
+  S <- result$s
+  S1 <- S[1:n, , drop = FALSE]
+  S2 <- S[(n + 1):(2 * n), , drop = FALSE]
+  diff_norm <- mean(sqrt(rowSums((S1 - S2)^2)))
+  expect_gt(diff_norm, 0.2,
+            label = sprintf("Low coupling should yield distinct embeddings (mean diff=%.3f)",
+                            diff_norm))
 })
 
 test_that("coupled_diagonalization forcing alignment with high coupling", {
@@ -252,6 +259,16 @@ test_that("coupled_diagonalization forcing alignment with high coupling", {
   
   expect_gt(alignment, 0.7,
             label = sprintf("High coupling should force alignment (got %.3f)", alignment))
+
+  S <- result$s
+  S1 <- S[1:n, , drop = FALSE]
+  S2 <- S[(n + 1):(2 * n), , drop = FALSE]
+  pair_cos <- pairwise_cosine(S1, S2)
+  expect_gt(mean(pair_cos), 0.8,
+            label = sprintf("High coupling should align per-sample embeddings (mean=%.3f)",
+                            mean(pair_cos)))
+  expect_lt(mean(sqrt(rowSums((S1 - S2)^2))), 0.15,
+            label = "High coupling should make per-sample embeddings similar")
   
   # Check that coupling term dominated
   # The bases from both domains should be nearly identical
@@ -328,19 +345,14 @@ test_that("coupled_diagonalization with partial correspondence", {
   S1_correspond <- result$s[1:n_correspond, ]
   S2_correspond <- result$s[(n1+1):(n1+n_correspond), ]
   
-  # Compute correlation between corresponding samples
-  correspond_corr <- mean(diag(cor(S1_correspond, S2_correspond)))
-  expect_gt(abs(correspond_corr), 0.3,
-            label = "Corresponding samples should have correlated representations")
-  
-  # Non-corresponding samples should be less aligned
-  S1_unique <- result$s[(n_correspond+1):n1, ]
-  S2_unique <- result$s[(n1+n_correspond+1):(n1+n2), ]
-  
-  # These should have lower correlation (comparing means)
-  unique_corr <- cor(colMeans(S1_unique), colMeans(S2_unique))[1]
-  expect_lt(abs(unique_corr), abs(correspond_corr),
-            label = "Non-corresponding samples should be less aligned")
+  pair_correspond <- pairwise_cosine(S1_correspond, S2_correspond)
+  expect_gt(mean(pair_correspond), 0.8,
+            label = sprintf("Corresponding samples should be closely aligned (mean=%.3f)",
+                            mean(pair_correspond)))
+
+  shuffled_cos <- pairwise_cosine(S1_correspond, S2_correspond[sample.int(n_correspond), , drop = FALSE])
+  expect_gt(mean(pair_correspond) - mean(abs(shuffled_cos)), 0.3,
+            label = "Corresponding pairs should be appreciably closer than shuffled pairs")
 })
 
 test_that("coupled_diagonalization gradient computation is correct", {
@@ -367,9 +379,18 @@ test_that("coupled_diagonalization gradient computation is correct", {
   
   mu_coupling <- 1.0
   
+  FiUbarA <- lapply(seq_along(FiUbar), function(i) FiUbar[[i]] %*% A[[i]])
+  sumB <- Reduce(`+`, FiUbarA)
+  
   # Compute analytical gradient
   grad1 <- manifoldalign:::compute_gradient_cd(
-    idx = 1, A = A, Lambda = Lambda, FiUbar = FiUbar, mu_coupling = mu_coupling
+    idx = 1,
+    A = A,
+    Lambda = Lambda,
+    FiUbar = FiUbar,
+    mu_coupling = mu_coupling,
+    FiUbarA = FiUbarA,
+    sumB = sumB
   )
   
   # Test gradient in a random tangent direction

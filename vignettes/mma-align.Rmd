@@ -1,0 +1,253 @@
+---
+title: "Multiset Manifold Alignment with mma_align_multiple"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Multiset Manifold Alignment with mma_align_multiple}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6,
+  fig.height = 4,
+  dev = "png"
+)
+```
+
+## Overview
+
+`mma_align_multiple()` aligns three or more domains by combining heat-kernel
+spectral embeddings, eigensignature-based eigenbasis registration, and an
+EM refinement step that supports both reference matching and joint consensus
+templates.  The function exposes controls for histogram versus Wasserstein
+signatures, gating heuristics for repeated eigenvalues, and final Hungarian
+assignments when hard correspondences are needed.
+
+This vignette follows the style of the other tutorials in the package: we build a
+multiset from the shared `alignment_benchmark`, run both reference and consensus
+modes, and inspect diagnostics returned by `alignment_quality()`.
+
+## Setup
+
+```{r setup}
+library(manifoldalign)
+library(multidesign)
+library(tibble)
+library(dplyr)
+library(ggplot2)
+```
+
+## Preparing the Multiset Example
+
+```{r prepare-multiset}
+alignment_benchmark <- manifoldalign::alignment_benchmark
+raw_domains <- alignment_benchmark$domains
+
+multi_domains <- lapply(raw_domains, function(dom) {
+  multidesign::multidesign(dom$x, dom$design)
+})
+
+multi_names <- names(multi_domains)
+node_counts <- vapply(multi_domains, function(dom) nrow(dom$x), integer(1))
+
+hd_multi <- multidesign::hyperdesign(multi_domains)
+
+tibble(
+  domain = multi_names,
+  nodes = node_counts,
+  features = vapply(multi_domains, function(dom) ncol(dom$x), integer(1))
+)
+```
+
+The latent classes shipped with the benchmark are used only for diagnostics.
+
+```{r label-distribution}
+table(multi_domains[[1]]$design$condition)
+```
+
+## Reference Mode Alignment
+
+We first align every domain to `domain1` with eigensignature gating, hypersphere
+normalisation, and a final Hungarian pass to extract hard correspondences.
+
+```{r run-reference}
+set.seed(1)
+mma_ref <- mma_align_multiple(
+  hd_multi,
+  ref_idx = 1,
+  ncomp = 8,
+  sigma = 0.7,
+  embedding = "ctd",
+  normalize = "hypersphere",
+  match_to = "reference",
+  signature_method = "hybrid",
+  signature_gate_multiplicity = TRUE,
+  signature_retry_if_weak = TRUE,
+  final_assignment = "hungarian"
+)
+
+str(mma_ref, max.level = 1)
+```
+
+```{r quality-reference}
+quality_ref <- alignment_quality(mma_ref)
+
+tibble::as_tibble(quality_ref$per_domain)
+
+tibble::as_tibble(quality_ref$global)
+```
+
+The per-domain diagnostics expose EM convergence, average eigensignature
+confidence, and MSE under both hard and soft correspondences.  We can relate the
+assignments back to the hidden labels of the benchmark.
+
+```{r reference-accuracy}
+ref_conditions <- multi_domains[[1]]$design$condition
+
+class_accuracy <- vapply(seq_along(multi_names)[-1], function(idx) {
+  perm <- mma_ref$assignment[[idx]]
+  keep <- which(!is.na(perm))
+  if (!length(keep)) return(NA_real_)
+  mean(ref_conditions[perm[keep]] == multi_domains[[idx]]$design$condition[keep])
+}, numeric(1))
+
+coverage <- quality_ref$per_domain$coverage[-1]
+
+accuracy_tbl <- tibble(
+  domain = multi_names[-1],
+  class_accuracy = class_accuracy,
+  hard_match_coverage = coverage
+)
+
+accuracy_tbl
+```
+
+The aligned embeddings combine all domains row-wise.  Visual inspection of the
+first two components highlights the shared latent structure recovered by
+`mma_align_multiple()`.
+
+```{r reference-plot, fig.alt = "Scatter of MMA reference-mode embeddings across domains and latent classes"}
+score_tbl <- as_tibble(as.matrix(mma_ref$s), .name_repair = "minimal")
+colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
+
+score_tbl <- score_tbl %>%
+  mutate(
+    domain = rep(multi_names, times = node_counts),
+    condition = unname(unlist(lapply(multi_domains, function(dom) dom$design$condition)))
+  )
+
+ ggplot(score_tbl, aes(x = comp1, y = comp2, colour = condition, shape = domain)) +
+  geom_point(alpha = 0.85, size = 2) +
+  labs(title = "Reference-mode MMA embeddings", x = "Component 1", y = "Component 2") +
+  theme_minimal()
+```
+
+## Consensus Template Mode
+
+Consensus mode learns a shared orthogonal template while allowing uneven domain
+sizes.  We down-sample `domain3` to 60 nodes to illustrate the automatic choice
+of consensus centres (`min` by default).
+
+```{r prepare-consensus}
+set.seed(42)
+consensus_domains <- raw_domains
+keep_idx <- sort(sample(seq_len(nrow(consensus_domains[[3]]$x)), 60))
+consensus_domains[[3]]$x <- consensus_domains[[3]]$x[keep_idx, , drop = FALSE]
+consensus_domains[[3]]$design <- consensus_domains[[3]]$design[keep_idx, ]
+
+multi_consensus <- lapply(consensus_domains, function(dom) {
+  multidesign::multidesign(dom$x, dom$design)
+})
+
+consensus_names <- names(multi_consensus)
+consensus_counts <- vapply(multi_consensus, function(dom) nrow(dom$x), integer(1))
+
+hd_consensus <- multidesign::hyperdesign(multi_consensus)
+
+tibble(
+  domain = consensus_names,
+  nodes = consensus_counts
+)
+```
+
+```{r run-consensus}
+set.seed(99)
+mma_consensus <- mma_align_multiple(
+  hd_consensus,
+  ref_idx = 1,
+  ncomp = 8,
+  sigma = 0.7,
+  embedding = "ctd",
+  normalize = "hypersphere",
+  match_to = "consensus",
+  consensus_centers = "min",
+  consensus_init = "ref",
+  signature_method = "w2",
+  eig_penalty = 0.01,
+  signature_gate_multiplicity = TRUE,
+  final_assignment = "hungarian",
+  em_outlier = 0.05
+)
+
+list(
+  consensus_centers = nrow(mma_consensus$consensus),
+  em_iterations = mma_consensus$em_stats$iterations,
+  converged = mma_consensus$em_stats$converged
+)
+```
+
+```{r quality-consensus}
+quality_consensus <- alignment_quality(mma_consensus)
+
+tibble::as_tibble(quality_consensus$per_domain)
+
+tibble::as_tibble(quality_consensus$global)
+```
+
+The consensus template captures the shared geometry in a compact basis.  Each
+domain's embeddings sit close to the learned centres even though `domain3` has
+fewer nodes.
+
+```{r consensus-plot, fig.alt = "Consensus-mode MMA embeddings with domain points and learned centres"}
+consensus_scores <- as_tibble(as.matrix(mma_consensus$s), .name_repair = "minimal")
+colnames(consensus_scores) <- paste0("comp", seq_len(ncol(consensus_scores)))
+
+consensus_scores <- consensus_scores %>%
+  mutate(
+    domain = rep(consensus_names, times = consensus_counts),
+    condition = unname(unlist(lapply(multi_consensus, function(dom) dom$design$condition)))
+  )
+
+centers_tbl <- tibble(
+  comp1 = mma_consensus$consensus[, 1],
+  comp2 = mma_consensus$consensus[, 2],
+  domain = "consensus",
+  condition = factor("template")
+)
+
+plot_tbl <- bind_rows(
+  mutate(consensus_scores, marker = "nodes"),
+  mutate(centers_tbl, marker = "centres")
+)
+
+ ggplot(plot_tbl, aes(x = comp1, y = comp2, colour = condition, shape = marker)) +
+  geom_point(alpha = 0.85, size = 2) +
+  labs(title = "Consensus-mode MMA embeddings", x = "Component 1", y = "Component 2") +
+  theme_minimal()
+```
+
+Consensus assignments point each domain back to indices of the template.  The
+coverage column in `alignment_quality()` indicates how many nodes land on a
+unique centre; increasing `em_outlier` or switching `final_assignment` to
+`"argmax"` can trade precision for recall when outliers are expected.
+
+## Summary
+
+- `mma_align_multiple()` unifies eigensignature alignment and EM refinement for both reference and consensus workflows.
+- Histogram/Wasserstein signatures with gating stabilise eigenbasis matching before the EM loop.
+- `alignment_quality()` reports convergence, coverage, and confidence diagnostics without relying on labels.
+- Consensus mode automatically adapts the template size when domains have different node counts.
+- Hard assignments remain optional; the EM posteriors can drive downstream soft analyses when coverage is low.

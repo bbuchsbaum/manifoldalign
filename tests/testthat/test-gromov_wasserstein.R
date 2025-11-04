@@ -221,3 +221,30 @@ test_that("gromov_wasserstein print method works", {
   expect_true(any(grepl("Number of domains: 3", output)))
   expect_true(any(grepl("data1, data2, data3", output)))
 })
+
+test_that("gromov_wasserstein out-of-sample weights behave as probabilities", {
+  skip_if_not_installed("multidesign")
+
+  set.seed(5150)
+  n <- 10
+  X1 <- matrix(rnorm(n * 3), n, 3)
+  X2 <- X1 + 0.2
+
+  design <- data.frame(id = 1:n)
+  md1 <- multidesign::multidesign(X1, design)
+  md2 <- multidesign::multidesign(X2, design)
+  hd <- hyperdesign(list(source = md1, target = md2))
+
+  result <- gromov_wasserstein(hd, epsilon = 0.1, max_iter = 50, verbose = FALSE)
+
+  new_points <- X1[1:2, , drop = FALSE]
+  weight_mat <- predict(result, new_points, from = 1, to = 2, type = "weights", k = 2)
+
+  expect_equal(nrow(weight_mat), nrow(new_points))
+  expect_equal(rowSums(weight_mat), rep(1, nrow(weight_mat)), tolerance = 1e-6)
+
+  transported <- predict(result, new_points, from = "source", to = "target",
+                         type = "transport", k = 2)
+  expect_equal(dim(transported), dim(new_points))
+  expect_equal(transported, X2[1:2, , drop = FALSE], tolerance = 0.3)
+})

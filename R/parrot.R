@@ -126,6 +126,7 @@ parrot <- function(data, anchors, ...) {
 #' @param max_iter Maximum number of iterations (default: 100)
 #' @param tol Convergence tolerance (default: 1e-6)
 #' @param use_cpp Whether to use C++ optimizations (default: FALSE)
+#' @param verbose Logical flag to print progress information during fitting
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return A multiblock_biprojector object containing the PARROT alignment results
@@ -154,6 +155,7 @@ parrot.hyperdesign <- function(data,
                               max_iter = 100,
                               tol = 1e-6,
                               use_cpp = FALSE,
+                              verbose = FALSE,
                               ...) {
   
   # Capture anchor variable (following KEMA/GRASP pattern)
@@ -216,8 +218,10 @@ parrot.hyperdesign <- function(data,
   
   n_anchors <- sum(!is.na(anchor_data))
   n_total <- length(anchor_data)
-  message("PARROT: Using ", n_anchors, " anchor correspondences out of ", 
-          n_total, " total nodes")
+  if (verbose) {
+    message("PARROT: Using ", n_anchors, " anchor correspondences out of ",
+            n_total, " total nodes")
+  }
   
   # Preprocess data (following CONE-Align simplified pattern)
   pdata <- lapply(data, function(domain) {
@@ -229,18 +233,18 @@ parrot.hyperdesign <- function(data,
   })
   
   # Debug: Check if preprocessing made a difference
-  if (is.function(preproc)) {
-    orig_mean <- mean(unlist(lapply(data, function(d) mean(d$x))))
-    proc_mean <- mean(unlist(lapply(pdata, function(d) mean(d$x))))
-    if (abs(orig_mean - proc_mean) > 1e-10) {
-      message("Preprocessing changed data mean from ", round(orig_mean, 4), 
-              " to ", round(proc_mean, 4))
+    if (verbose) {
+      if (is.function(preproc)) {
+        orig_mean <- mean(unlist(lapply(data, function(d) mean(d$x))))
+        proc_mean <- mean(unlist(lapply(pdata, function(d) mean(d$x))))
+        if (abs(orig_mean - proc_mean) > 1e-10) {
+          message("Preprocessing changed data mean from ", round(orig_mean, 4),
+                  " to ", round(proc_mean, 4))
+        }
+      }
     }
-  }
   
   # Block indices computation (following package pattern)
-  block_indices <- block_indices(pdata)
-  
   # Create proper preprocessing structure
   # Store the original preproc for later use
   original_preproc <- preproc
@@ -259,7 +263,8 @@ parrot.hyperdesign <- function(data,
   
   # Call PARROT fitting function - pass original data and preproc for flexible application
   parrot_fit(pdata, proc, anchor_data, ncomp, sigma, lambda_e, lambda_n, lambda_p, tau, 
-            alpha, gamma, solver, max_iter, tol, use_cpp, block_indices, original_preproc, data)
+            alpha, gamma, solver, max_iter, tol, use_cpp, feature_block_indices(pdata), 
+            original_preproc, data, verbose = verbose)
 }
 
 #' @rdname parrot
@@ -281,7 +286,8 @@ parrot.default <- function(data, anchors, ...) {
 
 #' @keywords internal
 parrot_fit <- function(strata, proc, anchor_data, ncomp, sigma, lambda_e, lambda_n, lambda_p, tau, 
-                      alpha, gamma, solver, max_iter, tol, use_cpp, block_indices, original_preproc = NULL, original_data = NULL) {
+                      alpha, gamma, solver, max_iter, tol, use_cpp, feature_blocks, 
+                      original_preproc = NULL, original_data = NULL, verbose = FALSE) {
   
   # Extract network structures 
   # Use preprocessed data (strata) by default, but for v computation we may need original data
@@ -320,9 +326,11 @@ parrot_fit <- function(strata, proc, anchor_data, ncomp, sigma, lambda_e, lambda
   
   # Debug: Check transport plan properties
   tp <- transport_result$transport_plan
-  message("Transport plan from solver: rows=", nrow(tp), " cols=", ncol(tp), 
-          " row_sum_mean=", round(mean(rowSums(tp)), 4), 
-          " col_sum_mean=", round(mean(colSums(tp)), 4))
+  if (verbose) {
+    message("Transport plan from solver: rows=", nrow(tp), " cols=", ncol(tp),
+            " row_sum_mean=", round(mean(rowSums(tp)), 4),
+            " col_sum_mean=", round(mean(colSums(tp)), 4))
+  }
   
   # Compute aligned embeddings (following package pattern)
   scores <- compute_parrot_embeddings(networks, transport_result$transport_plan, ncomp)
@@ -331,7 +339,7 @@ parrot_fit <- function(strata, proc, anchor_data, ncomp, sigma, lambda_e, lambda
   # Ensure consistent dimensions with scores
   actual_ncomp <- ncol(scores)
   
-  v <- do.call(rbind, lapply(seq_along(strata), function(i) {
+  loadings <- do.call(rbind, lapply(seq_along(strata), function(i) {
     # For v computation, use the same preprocessing that was used for the main computation
     # This ensures consistency between training and projection
     xi <- strata[[i]]$x  # Use the already preprocessed data
@@ -347,46 +355,24 @@ parrot_fit <- function(strata, proc, anchor_data, ncomp, sigma, lambda_e, lambda
     }
     Matrix::crossprod(xi, alpha_i)
   }))
-  
-  # Compute feature block indices for multiblock_biprojector (following KEMA pattern)
-  feat_per_block <- vapply(strata, function(b) ncol(b$x), integer(1))
-  end_idx   <- cumsum(feat_per_block)
-  start_idx <- c(1L, head(end_idx, -1) + 1L)
-  
-  feature_block_idx <- lapply(seq_along(feat_per_block), function(i) {
-    start_idx[i]:end_idx[i]
-  })
-  names(feature_block_idx) <- paste0("block_", seq_along(feature_block_idx))
-  
-  # Return multiblock_biprojector (exact package pattern)
-  if (is.null(proc)) {
-    # Create minimal identity preprocessor for NULL case
-    result <- list(
-      v = v,
-      s = scores,
-      sdev = apply(scores, 2, sd),
-      preproc = original_preproc,  # Store the original preproc
-      block_indices = feature_block_idx,
+
+  result <- new_alignment_result(
+    scores = scores,
+    loadings = loadings,
+    preproc = proc,
+    feature_blocks = feature_blocks,
+    subclass = "parrot",
+    extras = list(
       alignment_matrix = transport_result$transport_plan,
       transport_plan = transport_result$transport_plan,
       anchors = anchor_data
     )
-    class(result) <- c("parrot", "multiblock_biprojector")
-  } else {
-    result <- multivarious::multiblock_biprojector(
-      v = v,
-      s = scores,
-      sdev = apply(scores, 2, sd),
-      preproc = proc,
-      block_indices = feature_block_idx
-    )
-    # Add PARROT-specific fields
-    result$alignment_matrix <- transport_result$transport_plan
-    result$transport_plan <- transport_result$transport_plan
-    result$anchors <- anchor_data
-    class(result) <- c("parrot", class(result))
+  )
+
+  if (is.null(proc) && !is.null(original_preproc)) {
+    result$preproc <- original_preproc
   }
-  
+
   result
 }
 
@@ -541,9 +527,7 @@ compute_parrot_rwr <- function(networks, anchor_info, sigma, max_iter, tol, use_
     # Convert to dense for C++
     E1_dense <- as.matrix(E1)
     W1T_dense <- as.matrix(W1T)
-    
-    # Compute RWR using C++
-    R1 <- compute_rwr_vectorized_cpp(W1T_dense, E1_dense, sigma, max_iter, tol)
+    R1 <- compute_rwr_vectorized_cpp_fallback(W1T_dense, E1_dense, sigma, max_iter, tol)
     
     # Network 2 RWR
     W2T <- t(networks[[2]]$transition)
@@ -562,7 +546,7 @@ compute_parrot_rwr <- function(networks, anchor_info, sigma, max_iter, tol, use_
     W2T_dense <- as.matrix(W2T)
     
     # Compute RWR using C++
-    R2 <- compute_rwr_vectorized_cpp(W2T_dense, E2_dense, sigma, max_iter, tol)
+    R2 <- compute_rwr_vectorized_cpp_fallback(W2T_dense, E2_dense, sigma, max_iter, tol)
     
     list(R1, R2)
   } else {
@@ -641,13 +625,10 @@ solve_sylvester_rwr <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1,
                                 tol = 1e-6, max_iter = 50, use_cpp = FALSE) {
   
   if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
-    # Ensure matrices are regular for C++
     if (inherits(W1, "Matrix")) W1 <- as.matrix(W1)
     if (inherits(W2T, "Matrix")) W2T <- as.matrix(W2T)
     if (inherits(Cnode, "Matrix")) Cnode <- as.matrix(Cnode)
-    
-    # Call C++ implementation (no use_cpp arg)
-    solve_sylvester_rwr_cpp(W1, W2T, Cnode, beta, gamma, tol, max_iter)
+    solve_sylvester_rwr_cpp_fallback(W1, W2T, Cnode, beta, gamma, tol, max_iter)
   } else {
     # Use R implementation (no use_cpp arg)
     solve_sylvester_rwr_r(W1, W2T, Cnode, beta, gamma, tol, max_iter)
@@ -668,141 +649,85 @@ solve_sylvester_rwr <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1,
 #' @param gamma Cross-graph discount factor for Sylvester equation
 #' @return Position-aware cost matrix C_rwr
 #' @keywords internal
-compute_parrot_cost_r <- function(networks, rwr_features, anchor_info, alpha = 0.5, 
-                                 sigma = 0.15, gamma = 0.1) {
-  # AUDIT-02: Correct cost matrix computation following paper
-  
-  # 1. Compute C_node correctly (Eq. 3)
-  # Attribute cost: use squared Euclidean distance between node attributes
-  X1 <- networks[[1]]$features
-  X2 <- networks[[2]]$features
-  X1_sq <- rowSums(X1 ^ 2)
-  X2_sq <- rowSums(X2 ^ 2)
-  cost_attr <- outer(X1_sq, X2_sq, "+") - 2 * X1 %*% t(X2)
-  
-  # RWR cost: squared Euclidean distance between RWR descriptors
+compute_parrot_cost_r <- function(networks, rwr_features, anchor_info, alpha = 0.5,                                  sigma = 0.15, gamma = 0.1) {
+  # Cosine-based node cost with exponential scaling (Eq. 3 / App. A.2)
+  row_normalize <- function(M) {
+    norms <- sqrt(rowSums(M^2))
+    norms[norms < 1e-12] <- 1e-12
+    M / norms
+  }
+
   R1 <- rwr_features[[1]]
   R2 <- rwr_features[[2]]
-  R1_sq <- rowSums(R1 ^ 2)
-  R2_sq <- rowSums(R2 ^ 2)
-  cost_RWR <- outer(R1_sq, R2_sq, "+") - 2 * R1 %*% t(R2)
-  
-  # Normalize costs to prevent numerical issues
-  max_attr <- max(cost_attr)
-  max_rwr <- max(cost_RWR)
-  if (max_attr > 1e-9) cost_attr <- cost_attr / max_attr
-  if (max_rwr > 1e-9) cost_RWR <- cost_RWR / max_rwr
-  
-  # Combined node-level cost (Eq. 3) - Paper formulation
-  C_node <- (1 - alpha) * cost_RWR + alpha * cost_attr
-  
-  # Ensure non-negative costs for numerical stability
-  C_node <- C_node - min(C_node) + 1e-6
-  
-  # 2. Solve Sylvester equation for C_rwr (Eq. 4)
+  X1 <- networks[[1]]$features
+  X2 <- networks[[2]]$features
+
+  R1n <- row_normalize(R1)
+  R2n <- row_normalize(R2)
+  X1n <- row_normalize(X1)
+  X2n <- row_normalize(X2)
+
+  cosine_clip <- function(M) {
+    pmin(pmax(M, -1), 1)
+  }
+  sim_rwr <- cosine_clip(R1n %*% t(R2n))
+  sim_attr <- cosine_clip(X1n %*% t(X2n))
+
+  kappa <- 1.0
+  cost_rwr <- exp(-kappa * sim_rwr)
+  cost_attr <- exp(-kappa * sim_attr)
+
+  C_node <- (1 - alpha) * cost_rwr + alpha * cost_attr
+
+  # Solve Sylvester equation for C_rwr (Eq. 4)
   W1 <- networks[[1]]$transition  # Row-stochastic
   W2T <- t(networks[[2]]$transition)
-  
   C_rwr <- solve_sylvester_rwr(W1, W2T, C_node, beta = sigma, gamma = gamma)
-  
-  # Ensure C_rwr is non-negative after Sylvester equation
-  min_c_rwr <- min(C_rwr)
-  if (min_c_rwr < 0) {
-    C_rwr <- C_rwr - min_c_rwr + 1e-6
+
+  # Ensure strictly positive costs for downstream logarithms
+  C_rwr_min <- min(C_rwr)
+  if (C_rwr_min <= 0) {
+    C_rwr <- C_rwr - C_rwr_min + 1e-6
   }
-  
-  # Normalize cost matrix to reasonable range before applying anchor constraints
-  # This prevents numerical issues with extreme values
-  C_rwr <- (C_rwr - mean(C_rwr)) / sd(C_rwr)
-  
-  # Apply anchor constraints (soft constraints via low cost)
-  if (length(anchor_info$idx1) > 0 && length(anchor_info$idx2) > 0) {
-    # Set very low cost for anchor pairs (much lower than typical costs)
-    anchor_cost <- min(C_rwr) - 3 * sd(C_rwr)  # 3 standard deviations below minimum
-    
-    for (i in seq_along(anchor_info$idx1)) {
-      idx1 <- anchor_info$idx1[i]
-      anchor_val <- anchor_info$vec1[idx1]
-      
-      # Find matching anchors in network 2
-      for (j in seq_along(anchor_info$idx2)) {
-        idx2 <- anchor_info$idx2[j]
-        if (anchor_info$vec2[idx2] == anchor_val) {
-          C_rwr[idx1, idx2] <- anchor_cost
-        }
-      }
-    }
-  }
-  
-  # Final shift to ensure all costs are positive
-  C_rwr <- C_rwr - min(C_rwr) + 1e-6
-  
+
   C_rwr
 }
+
 
 #' Compute Position-Aware Cost Matrix (Dispatcher)
 #' 
 #' @inheritParams compute_parrot_cost_r
 #' @param use_cpp Whether to use C++ implementation
 #' @keywords internal
-compute_parrot_cost <- function(networks, rwr_features, anchor_info, alpha = 0.5, 
-                                sigma = 0.15, gamma = 0.1, use_cpp = FALSE) {
-  
+compute_parrot_cost <- function(networks, rwr_features, anchor_info, alpha = 0.5,                                 sigma = 0.15, gamma = 0.1, use_cpp = FALSE) {
+
   if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
-    # Extract components for C++
     X1 <- networks[[1]]$features
     X2 <- networks[[2]]$features
     R1 <- rwr_features[[1]]
     R2 <- rwr_features[[2]]
     W1 <- networks[[1]]$transition
     W2 <- networks[[2]]$transition
-    
-    # Ensure all are regular matrices
+
     if (inherits(X1, "Matrix")) X1 <- as.matrix(X1)
     if (inherits(X2, "Matrix")) X2 <- as.matrix(X2)
     if (inherits(R1, "Matrix")) R1 <- as.matrix(R1)
     if (inherits(R2, "Matrix")) R2 <- as.matrix(R2)
     if (inherits(W1, "Matrix")) W1 <- as.matrix(W1)
     if (inherits(W2, "Matrix")) W2 <- as.matrix(W2)
-    
-    # Call C++ implementation
-    C_rwr <- compute_parrot_cost_cpp(X1, X2, R1, R2, W1, W2, alpha, sigma, gamma)
-    
-    # Ensure C_rwr is non-negative after Sylvester equation
-    min_c_rwr <- min(C_rwr)
-    if (min_c_rwr < 0) {
-      C_rwr <- C_rwr - min_c_rwr + 1e-6
+
+    C_rwr <- compute_parrot_cost_cpp_fallback(networks, list(R1, R2), anchor_info,
+                                              alpha, sigma, gamma)
+    C_rwr_min <- min(C_rwr)
+    if (C_rwr_min <= 0) {
+      C_rwr <- C_rwr - C_rwr_min + 1e-6
     }
-    
-    # Normalize cost matrix to reasonable range (mirroring R implementation)
-    C_rwr <- (C_rwr - mean(C_rwr)) / sd(C_rwr)
-    
-    # Apply anchor constraints (same as R version)
-    if (length(anchor_info$idx1) > 0 && length(anchor_info$idx2) > 0) {
-      anchor_cost <- min(C_rwr) - 3 * sd(C_rwr)
-      
-      for (i in seq_along(anchor_info$idx1)) {
-        idx1 <- anchor_info$idx1[i]
-        anchor_val <- anchor_info$vec1[idx1]
-        
-        for (j in seq_along(anchor_info$idx2)) {
-          idx2 <- anchor_info$idx2[j]
-          if (anchor_info$vec2[idx2] == anchor_val) {
-            C_rwr[idx1, idx2] <- anchor_cost
-          }
-        }
-      }
-    }
-    
-    # Final shift to ensure all costs are positive
-    C_rwr <- C_rwr - min(C_rwr) + 1e-6
-    
     C_rwr
   } else {
-    # Use R implementation
     compute_parrot_cost_r(networks, rwr_features, anchor_info, alpha, sigma, gamma)
   }
 }
+
 
 #' Compute Sparse Edge Consistency Regularization
 #' 
@@ -815,58 +740,40 @@ compute_parrot_cost <- function(networks, rwr_features, anchor_info, alpha = 0.5
 #' @return Edge consistency cost matrix (sparse computation)
 #' @keywords internal
 compute_edge_consistency <- function(networks, transport_plan, lambda_e) {
-  # Get network adjacencies and features
+  if (lambda_e <= 0) {
+    return(matrix(0, nrow(transport_plan), ncol(transport_plan)))
+  }
+
   A1 <- networks[[1]]$adjacency
   A2 <- networks[[2]]$adjacency
   X1 <- networks[[1]]$features
   X2 <- networks[[2]]$features
-  
-  n1 <- nrow(X1)
-  n2 <- nrow(X2)
-  
-  # FIX3-03: Compute base edge distances
-  # Get edge indices
-  idx1 <- which(A1 != 0, arr.ind = TRUE)
-  idx2 <- which(A2 != 0, arr.ind = TRUE)
-  
-  # Compute base_edge term (distances between all node pairs)
-  X1_sq <- rowSums(X1^2)
-  X2_sq <- rowSums(X2^2)
-  cross_prod <- X1 %*% t(X2)
-  base_edge <- outer(X1_sq, X2_sq, "+") - 2 * cross_prod
-  
-  if (nrow(idx1) > 0) {
-    # Compute squared distances only for edges
-    edge_dists1 <- rowSums((X1[idx1[,1], ] - X1[idx1[,2], ])^2)
-    C1_sparse <- Matrix::sparseMatrix(i = idx1[,1], j = idx1[,2], 
-                                     x = edge_dists1, dims = c(n1, n1))
-    # Make symmetric
-    C1_sparse <- Matrix::forceSymmetric(C1_sparse, uplo = "L")
-  } else {
-    C1_sparse <- Matrix::sparseMatrix(i = integer(0), j = integer(0), 
-                                     x = numeric(0), dims = c(n1, n1))
+
+  if (inherits(A1, "Matrix")) A1 <- as.matrix(A1)
+  if (inherits(A2, "Matrix")) A2 <- as.matrix(A2)
+
+  row_normalize <- function(M) {
+    norms <- sqrt(rowSums(M^2))
+    norms[norms < 1e-12] <- 1e-12
+    M / norms
   }
-  
-  if (nrow(idx2) > 0) {
-    edge_dists2 <- rowSums((X2[idx2[,1], ] - X2[idx2[,2], ])^2)
-    C2_sparse <- Matrix::sparseMatrix(i = idx2[,1], j = idx2[,2], 
-                                     x = edge_dists2, dims = c(n2, n2))
-    # Make symmetric
-    C2_sparse <- Matrix::forceSymmetric(C2_sparse, uplo = "L")
-  } else {
-    C2_sparse <- Matrix::sparseMatrix(i = integer(0), j = integer(0), 
-                                     x = numeric(0), dims = c(n2, n2))
-  }
-  
-  # FIX3-03: Proper edge consistency with base_edge term
-  # L_edge = base_edge - 2 * (C1 %*% S %*% t(C2))
-  if (Matrix::nnzero(C1_sparse) > 0 && Matrix::nnzero(C2_sparse) > 0) {
-    edge_term <- lambda_e * (base_edge - 2 * as.matrix(C1_sparse %*% transport_plan %*% Matrix::t(C2_sparse)))
-    edge_term
-  } else {
-    lambda_e * base_edge
-  }
+
+  X1n <- row_normalize(X1)
+  X2n <- row_normalize(X2)
+
+  C1 <- (1 - X1n %*% t(X1n)) * (A1 != 0)
+  C2 <- (1 - X2n %*% t(X2n)) * (A2 != 0)
+
+  C1_sq <- rowSums(C1^2)
+  C2_sq <- rowSums(C2^2)
+
+  L_base <- outer(C1_sq, rep(1, length(C2_sq))) +
+    outer(rep(1, length(C1_sq)), C2_sq) -
+    2 * (C1 %*% transport_plan %*% t(C2))
+
+  lambda_e * L_base
 }
+
 
 #' Compute Neighborhood Consistency Regularization
 #' 
@@ -937,7 +844,7 @@ compute_squared_distances <- function(X1, X2, use_cpp = FALSE) {
     if (inherits(X2, "Matrix")) X2 <- as.matrix(X2)
     
     # Call C++ implementation
-    compute_squared_distances_cpp(X1, X2)
+    compute_squared_distances_cpp_fallback(X1, X2)
   } else {
     # Use R implementation
     compute_squared_distances_r(X1, X2)

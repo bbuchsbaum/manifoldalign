@@ -4,22 +4,38 @@
 \alias{predict.gromov_wasserstein}
 \title{Predict method for Gromov-Wasserstein}
 \usage{
-\method{predict}{gromov_wasserstein}(object, newdata, from, to, ...)
+\method{predict}{gromov_wasserstein}(
+  object,
+  newdata,
+  from,
+  to,
+  type = c("weights", "transport"),
+  k = 5,
+  ...
+)
 }
 \arguments{
 \item{object}{A gromov_wasserstein object}
 
-\item{newdata}{New data from one domain to transport to another}
+\item{newdata}{New data from the source domain (samples x features)}
 
 \item{from}{Source domain index or name}
 
 \item{to}{Target domain index or name}
 
-\item{...}{Additional arguments}
+\item{type}{Prediction type. `"weights"` (default) returns barycentric
+weights over target-domain samples. `"transport"` returns barycentric
+combinations of target-domain features when available.}
+
+\item{k}{Number of nearest neighbours used to build the barycentric
+combination (default: 5).}
+
+\item{...}{Reserved for future use.}
 }
 \value{
-Transported samples in the target domain space
+Matrix of barycentric weights (`type = "weights"`) or transported
+  samples (`type = "transport"`).
 }
 \description{
-Transport new samples using learned GW alignment
+Transport new samples using the learned GW alignment.
 }

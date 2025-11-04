@@ -19,7 +19,7 @@
 #' @return List containing eigenvalues and related validation metrics
 #' @keywords internal
 extract_kema_eigenvalues <- function(strata, labels, kernel = kernlab::rbfdot(sigma = 0.1), 
-                                     knn = 5, u = 0.5, lambda = 0.001, ncomp = 3, 
+                                     knn = 5, u = 0.5, lambda = 0, ncomp = 3, 
                                      solver = "exact") {
   
   # Compute similarity graphs
@@ -32,8 +32,20 @@ extract_kema_eigenvalues <- function(strata, labels, kernel = kernlab::rbfdot(si
   # Class similarity
   Ws <- neighborweights::binary_label_matrix(labels)
   
-  # No dissimilarity for this validation
-  Wd <- Matrix::sparseMatrix(length(labels), length(labels))
+  # Dissimilarity graph using labeled pairs only (paper-faithful)
+  label_vec <- as.character(labels)
+  labeled_idx <- which(!is.na(label_vec))
+  Wd <- Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0),
+                              dims = c(length(labels), length(labels)))
+  if (length(labeled_idx) > 1) {
+    labs <- label_vec[labeled_idx]
+    dissim <- outer(labs, labs, FUN = function(a, b) as.integer(a != b))
+    Wd[labeled_idx, labeled_idx] <- Matrix::Matrix(dissim, sparse = TRUE)
+    Matrix::diag(Wd) <- 0
+  }
+  if (!methods::is(Wd, "dgCMatrix")) {
+    Wd <- as(Wd, "dgCMatrix")
+  }
   
   # Normalize graphs
   G <- normalize_graphs(Sl, Ws, Wd)
@@ -43,7 +55,7 @@ extract_kema_eigenvalues <- function(strata, labels, kernel = kernlab::rbfdot(si
   Z <- Matrix::bdiag(Ks)
   
   # Compute Laplacians
-  Lap <- compute_laplacians(G$Ws, G$Wr, G$W, G$Wd, use_laplacian = TRUE)
+  Lap <- compute_laplacians(G$Ws, G$Wr, G$W, G$Wd, use_laplacian = FALSE)
   
   # Extract eigenvalues from the exact formulation
   if (solver == "exact") {
@@ -175,7 +187,7 @@ validate_kema_eigenvalues <- function(expected_eigenvals = c(0.82, 0.41),
     kernel = kernlab::rbfdot(sigma = 0.1),
     knn = 5,
     u = 0.5,
-    lambda = 0.001,
+    lambda = 0,
     ncomp = length(expected_eigenvals),
     solver = "exact"
   )

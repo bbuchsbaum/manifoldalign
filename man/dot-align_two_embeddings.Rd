@@ -29,7 +29,7 @@
 
 \item{knn}{Number of nearest neighbors}
 
-\item{block_indices}{Block index structure}
+\item{feature_blocks}{Feature block index structure}
 }
 \value{
 multiblock_biprojector object with multi-graph alignment results

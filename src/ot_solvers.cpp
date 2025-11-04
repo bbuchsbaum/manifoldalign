@@ -3,6 +3,7 @@
 #include "network_simplex_adapter.h"
 #include <queue>
 #include <limits>
+#include <cmath>
 
 // [[Rcpp::depends(RcppArmadillo)]]
 
@@ -27,52 +28,70 @@ arma::mat partial_ot_mass_cpp(const arma::mat& cost,
   
   int n = a.n_elem;
   int m = b.n_elem;
-  
-  // If requested mass is >= total mass, solve standard OT
+
+  if (mass < 0.0) {
+    Rcpp::stop("partial_ot_mass_cpp: mass must be non-negative");
+  }
+
   double total_mass_a = arma::sum(a);
   double total_mass_b = arma::sum(b);
-  if (mass >= std::min(total_mass_a, total_mass_b) - eps) {
+
+  double max_mass = std::min(total_mass_a, total_mass_b);
+  if (mass > max_mass + eps) {
+    Rcpp::stop("partial_ot_mass_cpp: mass exceeds available marginals");
+  }
+
+  if (std::abs(mass - max_mass) <= eps) {
+    // Degenerates to classical OT
     return network_simplex_ot(cost, a, b, eps);
   }
-  
-  // Create extended problem with dummy nodes
-  // Add one dummy source and one dummy sink
+
+  double row_slack = std::max(0.0, total_mass_a - mass);
+  double col_slack = std::max(0.0, total_mass_b - mass);
+
   arma::vec a_ext(n + 1);
   arma::vec b_ext(m + 1);
-  
-  // Original marginals with slack
   a_ext.head(n) = a;
   b_ext.head(m) = b;
-  
-  // Dummy source can supply the deficit (total_b - mass)
-  a_ext(n) = std::max(0.0, total_mass_b - mass);
-  
-  // Dummy sink can absorb the deficit (total_a - mass)
-  b_ext(m) = std::max(0.0, total_mass_a - mass);
-  
-  // Extended cost matrix
-  arma::mat cost_ext(n + 1, m + 1);
-  
-  // Original costs
-  cost_ext.submat(0, 0, n-1, m-1) = cost;
-  
-  // Zero cost for dummy edges (allows free disposal of excess mass)
-  cost_ext.col(m).zeros();  // Costs to dummy sink
-  cost_ext.row(n).zeros();  // Costs from dummy source
-  
-  // Solve extended problem
-  arma::mat P_ext = network_simplex_ot(cost_ext, a_ext, b_ext, eps);
-  
-  // Extract the original transport plan (excluding dummy nodes)
-  arma::mat P = P_ext.submat(0, 0, n-1, m-1);
-  
-  // Verify mass constraint
-  double actual_mass = arma::accu(P);
-  if (std::abs(actual_mass - mass) > eps) {
-    // If mass constraint not satisfied exactly, rescale
-    P *= (mass / actual_mass);
+  a_ext(n) = col_slack;
+  b_ext(m) = row_slack;
+
+  arma::mat cost_ext(n + 1, m + 1, arma::fill::zeros);
+  cost_ext.submat(0, 0, n - 1, m - 1) = cost;
+  cost_ext.submat(0, m, n - 1, m).zeros();
+  cost_ext.submat(n, 0, n, m - 1).zeros();
+
+  // Prevent dummy row/column from cancelling each other out
+  double max_cost = cost.is_empty() ? 1.0 : cost.max();
+  if (!std::isfinite(max_cost)) {
+    max_cost = 1.0;
   }
-  
+  double penalty = std::max(1.0, std::abs(max_cost)) * 1e6;
+  cost_ext(n, m) = penalty;
+
+  arma::mat P_ext = network_simplex_ot(cost_ext, a_ext, b_ext, eps);
+  arma::mat P = P_ext.submat(0, 0, n - 1, m - 1);
+
+  double actual_mass = arma::accu(P);
+  double mass_error = actual_mass - mass;
+  if (std::abs(mass_error) > 10 * eps) {
+    // Small numerical drift - correct by trimming the dummy column contribution.
+    arma::vec col_sums = arma::sum(P, 0).t();
+    arma::vec col_cap = b;
+    arma::vec excess = arma::clamp(col_sums - col_cap, 0.0, arma::datum::inf);
+    if (arma::accu(excess) > 0) {
+      // Remove excess proportionally from affected columns
+      for (int j = 0; j < m; ++j) {
+        if (excess(j) <= 0) continue;
+        double scale = std::max(0.0, (col_sums(j) - excess(j)) / std::max(1e-12, col_sums(j)));
+        P.col(j) *= scale;
+      }
+    } else if (mass_error != 0.0) {
+      double scale = mass / std::max(1e-12, actual_mass);
+      P *= scale;
+    }
+  }
+
   return P;
 }
 

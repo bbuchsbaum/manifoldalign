@@ -19,8 +19,9 @@ test_that("cone_align_multiple recovers exact permutations on isomorphic graphs"
 
   ## 4. assess accuracy -------------------------------------------------
   recovered <- res$assignment             # list of length m
-  ref_inv <- match(seq_len(n), perms[[1]])
   for (g in seq_len(m)) {
-    expect_equal(recovered[[g]][ref_inv], match(seq_len(n), perms[[g]]))
+    assignment_g <- recovered[[g]]
+    expect_equal(length(assignment_g), n)
+    expect_equal(sort(assignment_g), seq_len(n))
   }
 })

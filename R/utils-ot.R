@@ -167,30 +167,186 @@ prepare_ot_data <- function(data, preproc = NULL) {
 compute_feature_cost <- function(X1, X2, metric = "euclidean") {
   n1 <- nrow(X1)
   n2 <- nrow(X2)
-  
+
+  if (ncol(X1) != ncol(X2)) {
+    d_max <- max(ncol(X1), ncol(X2))
+    X1_pad <- matrix(0, n1, d_max)
+    X2_pad <- matrix(0, n2, d_max)
+    X1_pad[, seq_len(ncol(X1))] <- X1
+    X2_pad[, seq_len(ncol(X2))] <- X2
+    X1 <- X1_pad
+    X2 <- X2_pad
+  }
+
   if (metric == "euclidean") {
-    # Efficient computation for Euclidean distance
-    # Handle case where X1 and X2 have different number of columns
-    if (ncol(X1) != ncol(X2)) {
-      # Compute pairwise distances manually
-      D <- matrix(0, n1, n2)
-      for (i in seq_len(n1)) {
-        for (j in seq_len(n2)) {
-          # This will give NA if dimensions don't match, which is what we want
-          D[i,j] <- sqrt(sum((X1[i,] - X2[j,])^2, na.rm = TRUE))
-        }
-      }
-      return(D)
+    X1_sq <- rowSums(X1^2)
+    X2_sq <- rowSums(X2^2)
+    XY <- tcrossprod(X1, X2)
+    C <- outer(X1_sq, rep(1, n2)) + outer(rep(1, n1), X2_sq) - 2 * XY
+    C[C < 0] <- 0
+    sqrt(C)
+  } else if (metric == "manhattan") {
+    C <- matrix(0, n1, n2)
+    for (i in seq_len(n1)) {
+      diffs <- abs(matrix(X1[i, ], n2, ncol(X1), byrow = TRUE) - X2)
+      C[i, ] <- rowSums(diffs)
     }
-    
-    # Same dimensions - use efficient computation
-    as.matrix(dist(rbind(X1, X2)))[seq_len(n1), (n1 + 1):(n1 + n2)]
+    C
+  } else if (metric == "cosine") {
+    X1_norm <- X1 / sqrt(rowSums(X1^2) + 1e-10)
+    X2_norm <- X2 / sqrt(rowSums(X2^2) + 1e-10)
+    1 - tcrossprod(X1_norm, X2_norm)
   } else {
-    # Use compute_distance_matrix for other metrics
-    if (ncol(X1) != ncol(X2)) {
-      stop("Different number of features requires euclidean metric", call. = FALSE)
+    stop("Unsupported metric: ", metric, call. = FALSE)
+  }
+}
+
+#' Normalize transport plan rows to probability distributions
+#' @keywords internal
+normalize_plan_rows <- function(plan) {
+  if (!is.matrix(plan)) {
+    plan <- as.matrix(plan)
+  }
+  if (nrow(plan) == 0 || ncol(plan) == 0) {
+    return(plan)
+  }
+  row_sums <- rowSums(plan)
+  plan_norm <- plan
+  positive <- row_sums > 0
+  if (any(positive)) {
+    plan_norm[positive, ] <- plan_norm[positive, , drop = FALSE] / row_sums[positive]
+  }
+  if (any(!positive)) {
+    plan_norm[!positive, ] <- 1 / ncol(plan_norm)
+  }
+  plan_norm
+}
+
+#' Compute K-nearest neighbours under supported metrics
+#' @keywords internal
+find_knn_indices <- function(query, data, k = 5, metric = "euclidean") {
+  if (!is.matrix(query)) query <- as.matrix(query)
+  if (!is.matrix(data)) data <- as.matrix(data)
+  if (nrow(data) == 0) {
+    stop("Data matrix must contain at least one sample", call. = FALSE)
+  }
+  k <- max(1L, min(as.integer(k), nrow(data)))
+  n_query <- nrow(query)
+  idx <- matrix(NA_integer_, n_query, k)
+  dists <- matrix(NA_real_, n_query, k)
+
+  data_norm <- NULL
+  if (metric == "cosine") {
+    data_norm <- sqrt(rowSums(data^2))
+    data_norm[data_norm < 1e-12] <- 1e-12
+  }
+
+  for (i in seq_len(n_query)) {
+    d_vec <- compute_point_distance(query[i, , drop = FALSE], data, metric, data_norm)
+    ord <- order(d_vec, na.last = NA)[seq_len(k)]
+    idx[i, ] <- ord
+    dists[i, ] <- d_vec[ord]
+  }
+
+  list(idx = idx, dists = dists)
+}
+
+#' Compute distances between a point and all rows of a matrix
+#' @keywords internal
+compute_point_distance <- function(point, data, metric, data_norm = NULL) {
+  if (metric == "euclidean") {
+    diffs <- sweep(data, 2, point, FUN = "-")
+    sqrt(rowSums(diffs^2))
+  } else if (metric == "manhattan") {
+    diffs <- sweep(data, 2, point, FUN = "-")
+    rowSums(abs(diffs))
+  } else if (metric == "cosine") {
+    point_norm <- sqrt(sum(point^2))
+    if (point_norm < 1e-12) {
+      point_norm <- 1e-12
     }
-    D_full <- compute_distance_matrix(rbind(X1, X2), metric = metric)
-    D_full[seq_len(n1), (n1 + 1):(n1 + n2)]
+    sims <- (data %*% as.numeric(point)) / (data_norm * point_norm)
+    sims <- pmin(pmax(sims, -1), 1)
+    as.numeric(1 - sims)
+  } else {
+    stop("Unsupported metric for neighbour search: ", metric, call. = FALSE)
+  }
+}
+
+#' Combine neighbour plans into barycentric weights
+#' @keywords internal
+aggregate_barycentric_weights <- function(plan_rows, neighbor_idx, neighbor_dists) {
+  n_query <- nrow(neighbor_idx)
+  n_target <- ncol(plan_rows)
+  weights <- matrix(0, n_query, n_target)
+
+  for (i in seq_len(n_query)) {
+    idx <- neighbor_idx[i, ]
+    dists <- neighbor_dists[i, ]
+    if (any(is.na(idx))) {
+      next
+    }
+    if (any(dists < 1e-12)) {
+      mask <- dists < 1e-12
+      local_w <- mask / sum(mask)
+    } else {
+      local_w <- 1 / (dists + 1e-8)
+      local_w <- local_w / sum(local_w)
+    }
+    combined <- local_w %*% plan_rows[idx, , drop = FALSE]
+    total <- sum(combined)
+    if (total > 0) {
+      combined <- combined / total
+    } else {
+      combined <- rep(1 / n_target, n_target)
+    }
+    weights[i, ] <- combined
+  }
+  weights
+}
+
+#' Resolve domain input (index or name)
+#' @keywords internal
+resolve_domain_index <- function(x, domain_names) {
+  if (is.character(x)) {
+    idx <- match(x, domain_names)
+    if (is.na(idx)) {
+      stop("Domain '", x, "' not found", call. = FALSE)
+    }
+    idx
+  } else {
+    idx <- as.integer(x)
+    if (length(idx) != 1 || is.na(idx) || idx < 1 || idx > length(domain_names)) {
+      stop("Domain index must be between 1 and ", length(domain_names), call. = FALSE)
+    }
+    idx
+  }
+}
+
+#' Compute linear index for upper-triangular pair
+#' @keywords internal
+get_plan_index <- function(n_domains, from_idx, to_idx) {
+  if (from_idx >= to_idx) {
+    stop("from_idx must be strictly less than to_idx", call. = FALSE)
+  }
+  idx <- (from_idx - 1) * n_domains - (from_idx * (from_idx - 1)) / 2 + (to_idx - from_idx)
+  as.integer(idx)
+}
+
+#' Extract transport plan for an ordered domain pair
+#' @keywords internal
+extract_transport_plan <- function(plans, from_idx, to_idx, n_domains) {
+  if (from_idx == to_idx) {
+    stop("Source and target domains must be different", call. = FALSE)
+  }
+  if (from_idx < to_idx) {
+    idx <- get_plan_index(n_domains, from_idx, to_idx)
+    plan <- plans[[idx]]
+    if (is.null(plan)) {
+      stop("Transport plan not found for specified domain pair", call. = FALSE)
+    }
+    plan
+  } else {
+    t(extract_transport_plan(plans, to_idx, from_idx, n_domains))
   }
 }

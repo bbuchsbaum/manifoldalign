@@ -169,3 +169,7 @@ apply_tv_proximal_cpp <- function(Y, lambda) {
     .Call(`_manifoldalign_apply_tv_proximal_cpp`, Y, lambda)
 }
 
+w2_cost_matrix_1d <- function(Uref, Ug, w_ref, w_g) {
+    .Call(`_manifoldalign_w2_cost_matrix_1d`, Uref, Ug, w_ref, w_g)
+}
+

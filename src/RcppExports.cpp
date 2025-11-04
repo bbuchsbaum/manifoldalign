@@ -298,6 +298,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// w2_cost_matrix_1d
+Rcpp::List w2_cost_matrix_1d(Rcpp::NumericMatrix Uref, Rcpp::NumericMatrix Ug, Rcpp::NumericVector w_ref, Rcpp::NumericVector w_g);
+RcppExport SEXP _manifoldalign_w2_cost_matrix_1d(SEXP UrefSEXP, SEXP UgSEXP, SEXP w_refSEXP, SEXP w_gSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Uref(UrefSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Ug(UgSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type w_ref(w_refSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type w_g(w_gSEXP);
+    rcpp_result_gen = Rcpp::wrap(w2_cost_matrix_1d(Uref, Ug, w_ref, w_g));
+    return rcpp_result_gen;
+END_RCPP
+}
+
+RcppExport SEXP symbol(/* FIXME */);
 
 static const R_CallMethodDef CallEntries[] = {
     {"_manifoldalign_debug_network_simplex", (DL_FUNC) &_manifoldalign_debug_network_simplex, 3},
@@ -320,6 +336,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_manifoldalign_has_lemon_network_simplex", (DL_FUNC) &_manifoldalign_has_lemon_network_simplex, 0},
     {"_manifoldalign_test_network_simplex_minimal", (DL_FUNC) &_manifoldalign_test_network_simplex_minimal, 0},
     {"_manifoldalign_apply_tv_proximal_cpp", (DL_FUNC) &_manifoldalign_apply_tv_proximal_cpp, 2},
+    {"_manifoldalign_w2_cost_matrix_1d", (DL_FUNC) &_manifoldalign_w2_cost_matrix_1d, 4},
+    {"symbol", (DL_FUNC) &symbol, -1},
     {NULL, NULL, 0}
 };
 

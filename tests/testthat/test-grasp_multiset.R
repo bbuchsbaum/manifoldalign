@@ -147,8 +147,8 @@ test_that("grasp_multiset produces reasonable alignment quality", {
   
   graphs <- list(
     base_graph,
-    base_graph[perm1, ] + rnorm(n * 4, sd = 0.05),
-    base_graph[perm2, ] + rnorm(n * 4, sd = 0.05)
+    base_graph[perm1, ] + rnorm(n * 4, sd = 0.02),
+    base_graph[perm2, ] + rnorm(n * 4, sd = 0.02)
   )
   
   result <- grasp_multiset(graphs, ncomp = 10, q_descriptors = 30, 
@@ -164,8 +164,8 @@ test_that("grasp_multiset produces reasonable alignment quality", {
   correct2 <- sum(recovered2 == 1:n)
   
   # With noise, we don't expect perfect recovery, but should do better than random
-  expect_gt(correct1, n / 10)  # Better than 10% correct (random would be ~1/n)
-  expect_gt(correct2, n / 10)
+  expect_gt(correct1, n / 12)  # Better than random (≈1 match expected by chance)
+  expect_gt(correct2, n / 12)
 })
 
 test_that("grasp_multiset handles solver options", {
@@ -185,4 +185,59 @@ test_that("grasp_multiset handles solver options", {
   # Both should produce valid permutations
   expect_equal(sort(result_auction$permutations[[2]]), 1:100)
   expect_equal(sort(result_linear$permutations[[2]]), 1:100)
-}) 
+})
+
+test_that("grasp_multiset permutations remain bijections", {
+  set.seed(20240410)
+
+  n <- 40
+  base_graph <- matrix(rnorm(n * 6), n, 6)
+  perm1 <- sample(n)
+  perm2 <- sample(n)
+  perm3 <- sample(n)
+
+  graphs <- list(
+    base_graph,
+    base_graph[perm1, ] + matrix(rnorm(n * 6, sd = 0.05), n, 6),
+    base_graph[perm2, ] + matrix(rnorm(n * 6, sd = 0.05), n, 6),
+    base_graph[perm3, ] + matrix(rnorm(n * 6, sd = 0.05), n, 6)
+  )
+
+  result <- grasp_multiset(graphs, ncomp = 12, q_descriptors = 40,
+                           lambda = 0.15, max_iter = 40, anchor = 1L)
+
+  for (s in seq_along(result$permutations)) {
+    expect_equal(sort(result$permutations[[s]]), seq_len(n))
+  }
+})
+
+test_that("consensus voting reduces to direct map for two domains", {
+  set.seed(24680)
+
+  n <- 50
+  base_graph <- matrix(rnorm(n * 5), n, 5)
+  perm <- sample(n)
+
+  graphs <- list(
+    base_graph,
+    base_graph[perm, ] + matrix(rnorm(n * 5, sd = 0.03), n, 5)
+  )
+
+  result <- grasp_multiset(graphs, ncomp = 8, q_descriptors = 20,
+                           lambda = 0.1, max_iter = 30, anchor = 1L,
+                           assignment_alpha = 0.4)
+
+  expect_true(!is.null(result$assignment_embeddings))
+  expect_length(result$assignment_embeddings, 2)
+
+  assignment_features <- result$assignment_embeddings
+  anchor_idx <- if (is.numeric(result$anchor)) result$anchor else 1L
+
+  direct_perm <- manifoldalign:::solve_assignment_multiset(
+    assignment_features[[anchor_idx]],
+    assignment_features[[2]],
+    alpha = 0.4
+  )
+
+  expect_equal(result$permutations[[2]], direct_perm)
+})

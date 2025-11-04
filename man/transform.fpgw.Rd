@@ -18,7 +18,7 @@
 \item{...}{Additional arguments}
 }
 \value{
-Transformed data
+Transformed samples in the target domain feature space.
 }
 \description{
 Transform new data using FPGW alignment

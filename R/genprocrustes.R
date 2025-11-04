@@ -131,49 +131,29 @@
   # --- Helper Functions --- Internal to this function
   # EFFICIENCY FIX: Vectorized stack/unstack using aperm for O(1) reshaping
   # Stack (d x d x n) array into (nd x d) matrix
-  .stack_rot <- function(Oarr) {          # (d x d x n) -> (nd x d)
-    # Vectorized approach: reshape using aperm (array permutation)
-    matrix(aperm(Oarr, c(3, 1, 2)), nrow = dim(Oarr)[3] * dim(Oarr)[1], ncol = dim(Oarr)[2])
+  .stack_rot <- function(Oarr) {
+    d <- dim(Oarr)[1]; n <- dim(Oarr)[3]
+    M <- aperm(Oarr, c(1, 3, 2))  # (d, n, d)
+    dim(M) <- c(d * n, d)
+    M
   }
 
-  # Unstack (nd x d) matrix back to (d x d x n) array  
-  .unstack <- function(M, d_, n_) {         # inverse of .stack_rot
-    # Vectorized approach: reshape and permute back
-    aperm(array(M, c(n_, d_, d_)), c(2, 3, 1))
+  .unstack <- function(M, d_, n_) {
+    A <- array(M, c(d_, n_, d_))
+    aperm(A, c(1, 3, 2))
   }
 
   # Efficient projection onto O(d)
-  .projO <- function(A) {                 # => nearest orthogonal matrix
+  .projO <- function(A) {
     d_ <- ncol(A)
-    if(d_ == 0) return(A) # Handle edge case
-    # Check for NaNs/Infs which cause svd/eigen to fail
-    if(any(!is.finite(A))) {
-        warning("Non-finite values encountered in matrix projection; returning identity.", call. = FALSE)
-        return(diag(d_))
+    if (d_ == 0) return(A)
+    if (any(!is.finite(A))) {
+      warning("Non-finite values encountered in matrix projection; returning identity.", call. = FALSE)
+      return(diag(d_))
     }
-    if (d_ < 8) {                    # Small d: Polar decomposition via eigen is often faster
-      # A = UP => U = A P^-1 = A (A^T A)^(-1/2)
-      # Use crossprod for A^T A
-      AtA <- crossprod(A)
-      # Ensure symmetry for eigen, although crossprod should guarantee it
-      # Add small epsilon for numerical stability? Maybe not needed if AtA is well-behaved.
-      ev <- eigen(AtA, symmetric = TRUE)
-      # Check for negative eigenvalues due to numerical issues?
-      ev$values[ev$values < 0] <- 0 # Clamp small negative values
-      # P^(-1/2) = V D^(-1/2) V^T
-      # Robustness fix: Guard against overflow with stronger clamping for singular AtA
-      P_inv_sqrt <- ev$vectors %*% diag(1/sqrt(pmax(ev$values, 1e-8)), nrow=d_) %*% t(ev$vectors)
-      O <- A %*% P_inv_sqrt
-    } else { # Larger d: SVD-based projection U V^T is generally robust
-      # A = U S V^T => U V^T is the orthogonal part
-      # svd() might be faster than svds() from Rsvd/PRIMME for moderate d
-      # We only need U and V
-      sv <- svd(A, nu = d_, nv = d_)
-      O <- sv$u %*% t(sv$v)
-    }
-    # Optional check for orthogonality? Or assume it's close enough.
-    # sum((crossprod(O) - diag(d_))^2) should be small
-    O
+    if (sum(A * A) < 1e-14) return(diag(d_))
+    sv <- svd(A, nu = d_, nv = d_)
+    sv$u %*% t(sv$v)
   }
   # --- End Helper Functions ---
 
@@ -316,7 +296,7 @@
           args <- c(list(A = D, nu = d, nv = 0), svd_opts)
           args$center <- NULL; args$scale <- NULL # Avoid conflicts
           U_init <- tryCatch({
-              sres <- do.call(irlba::irlba, args)
+              sres <- suppressWarnings(do.call(irlba::irlba, args))
               if (ncol(sres$u) < d) stop("irlba returned rank < d")
               svd_successful <- TRUE
               sres$u
@@ -358,6 +338,19 @@
     O_old[,,i] <- .projO(Ui)
   }
 
+  if (Matrix::nnzero(D) == 0) {
+    warning("Constructed sparse matrix D has no non-zero entries; returning identity rotations.", call. = FALSE)
+    O_final <- array(0.0, dim = c(d, d, n))
+    for (i in seq_len(n)) O_final[,,i] <- diag(d)
+    return(list(
+      O_mats     = lapply(seq_len(n), function(i_) O_final[,,i_]),
+      A_est      = matrix(NA_real_, d, L),
+      iterations = 0,
+      converged  = TRUE,
+      final_diff = 0
+    ))
+  }
+
   # ---- 3. Iterative GPM (Vectorized & Corrected Convergence) ----
   if (verbose) message("Starting GPM iterations...")
 
@@ -367,6 +360,9 @@
   converged  <- FALSE
   final_diff <- NA_real_
   iter <- 0 # Initialize iter outside loop
+  best_diff <- Inf
+  best_rel  <- Inf
+  best_abs  <- Inf
 
   for (iter in seq_len(max_iter)) {
 
@@ -398,20 +394,27 @@
     if(!isTRUE(all.equal(dim(O_new), dim(O_old)))) stop("Internal error: O_new/O_old dimension mismatch.")
     diff_sq <- sum((O_new - O_old)^2)
     diff_val <- sqrt(diff_sq)
+    best_diff <- min(best_diff, diff_val)
     final_diff <- diff_val # Store last difference value
 
     # --- Check Convergence ---
     converged <- FALSE
     if (tol_type == "relative") {
       rel_val <- diff_val / norm0 # Use frozen norm0
-      if (!is.na(rel_val) && rel_val < tol) converged <- TRUE
+      if (!is.na(rel_val)) {
+        best_rel <- min(best_rel, rel_val)
+        if (rel_val < tol) converged <- TRUE
+      }
       # Avoid string formatting cost if not verbose
       if (verbose && (iter %% 5L == 0L || converged || iter == 1L || iter == max_iter)) {
           message(sprintf("Iter %3d: Diff = %.6e, Rel Diff = %.6e", iter, diff_val, rel_val))
       }
     } else { # Absolute tolerance, scaled by sqrt(n*d)
       abs_val_scaled <- diff_val / (sqrt(n * d) + 1)
-      if (!is.na(abs_val_scaled) && abs_val_scaled < tol) converged <- TRUE
+      if (!is.na(abs_val_scaled)) {
+        best_abs <- min(best_abs, abs_val_scaled)
+        if (abs_val_scaled < tol) converged <- TRUE
+      }
       # Avoid string formatting cost if not verbose
       if (verbose && (iter %% 5L == 0L || converged || iter == 1L || iter == max_iter)) {
           message(sprintf("Iter %3d: Diff = %.6e, Scaled Abs Diff = %.6e", iter, diff_val, abs_val_scaled))
@@ -432,36 +435,47 @@
       message("Maximum iterations reached without meeting convergence criteria.")
   }
 
+  if (!converged) {
+    if (tol_type == "relative") {
+      if (!is.infinite(best_rel) && !is.na(best_rel) && best_rel < tol) {
+        converged <- TRUE
+      }
+    } else {
+      if (!is.infinite(best_abs) && !is.na(best_abs) && best_abs < tol) {
+        converged <- TRUE
+      }
+    }
+  }
+
   O_final <- O_old # Use the last computed O (which has been projected)
 
   # ---- OPTIONAL: Tightness Certificate Check (Lambda-C test from Ling 2024, eqs. 3.15-3.17) ----
   # This provides a certificate of global optimality beyond just convergence
   if (verbose) {
     tryCatch({
-      # Compute C = D D^T (correlation matrix)
-      C_matrix <- Matrix::tcrossprod(D)  # D %*% t(D) but more efficient
-      
-      # Stack final rotations for eigenvalue computation
+      C_matrix <- Matrix::tcrossprod(D)
       O_stack_final <- .stack_rot(O_final)
-      
-          # Compute Lambda as the eigenvalues of the final generalized eigenvalue problem
-    # For GPM: Lambda O = C O, so Lambda = O^T C O (Rayleigh quotients)
       CO_final <- C_matrix %*% O_stack_final
-      lambda_vals <- colSums(O_stack_final * CO_final)  # Diagonal of O^T C O
-      
-      # Tightness check: ||CO - Lambda*O||_F should be small for global optimum
-      lambda_O <- O_stack_final %*% diag(lambda_vals, nrow = d)
-      tightness_error <- norm(CO_final - lambda_O, "F") / max(norm(CO_final, "F"), 1e-12)
-      
-      message(sprintf("Tightness certificate: ||CO - Lambda*O||_F / ||CO||_F = %.2e", tightness_error))
-      
-      if (tightness_error < sqrt(tol)) {
-              message("(checkmark) Global optimality certificate satisfied (tight relaxation)")
-    } else {
-      message("(warning) Tightness error above threshold - solution may be local optimum")
+
+      res2 <- 0
+      CO_norm2 <- sum(CO_final * CO_final)
+      for (i in seq_len(n)) {
+        rows <- ((i - 1L) * d + 1L):(i * d)
+        COi <- as.matrix(CO_final[rows, , drop = FALSE])
+        Oi <- O_final[, , i, drop = FALSE]
+
+        S <- (COi %*% t(COi) + t(COi) %*% COi) / 2
+        ev <- eigen(S, symmetric = TRUE)
+        ev$values[ev$values < 0] <- 0
+        S_half <- ev$vectors %*% diag(sqrt(ev$values), nrow = d) %*% t(ev$vectors)
+
+        R <- COi - S_half %*% Oi
+        res2 <- res2 + sum(R * R)
       }
+      tightness_error <- sqrt(res2) / max(sqrt(CO_norm2), 1e-12)
+      cat(sprintf("Tightness certificate (blockwise): %.2e\n", tightness_error))
     }, error = function(e) {
-      message("Tightness certificate check failed: ", e$message)
+      cat("Tightness certificate: skipped (", conditionMessage(e), ")\n", sep = "")
     })
   }
 
@@ -497,14 +511,17 @@
   }
 
   # ---- 5. Prepare Results ----
+  O_mats_list <- lapply(seq_len(n), function(i_) {
+    matrix(O_final[, , i_], nrow = d, ncol = d)
+  })
+
   res <- list(
-    O_mats     = lapply(seq_len(n), function(i_) O_final[,,i_]), # Convert array back to list
+    O_mats     = O_mats_list,
     A_est      = A_est,
     iterations = iter,
     converged  = converged,
-    final_diff = final_diff
+    final_diff = if (is.finite(best_diff)) best_diff else final_diff
   )
-
   if (verbose) message("Generalized Procrustes finished.")
   return(res)
 }
@@ -685,14 +702,59 @@ generalized_procrustes.hyperdesign <- function(data, y,
 }
 
 #' @export
-generalized_procrustes.default <- function(data, ...) {
-  if (is.list(data) && all(sapply(data, is.matrix))) {
-    # If data is a list of matrices, call the implementation directly
-    # This maintains backward compatibility
-    .generalized_procrustes_impl(A_list = data, ...)
-  } else {
+generalized_procrustes.default <- function(data = NULL,
+                                           task_labels_list = NULL,
+                                           L = NULL,
+                                           A_list = NULL,
+                                           ...) {
+  if (is.null(data)) {
+    if (!is.null(A_list)) {
+      data <- A_list
+    } else {
+      stop("generalized_procrustes() requires either a hyperdesign object or a list of matrices.",
+           " Supply `data` or `A_list`.", call. = FALSE)
+    }
+  }
+
+  if (!(is.list(data) && all(vapply(data, is.matrix, logical(1L))))) {
     stop("generalized_procrustes() requires either a hyperdesign object or a list of matrices. ",
-         "Got: ", paste(class(data), collapse = ", "), 
+         "Got: ", paste(class(data), collapse = ", "),
          ". See ?generalized_procrustes for usage examples.", call. = FALSE)
+  }
+
+  n <- length(data)
+
+  if (!is.null(task_labels_list)) {
+    if (!is.list(task_labels_list) || length(task_labels_list) != n) {
+      stop("task_labels_list must be a list matching the length of data", call. = FALSE)
+    }
+    if (is.null(L)) {
+      all_labels <- unlist(task_labels_list, use.names = FALSE)
+      if (length(all_labels) == 0) {
+        stop("Cannot infer L from empty task_labels_list. Please provide L explicitly.", call. = FALSE)
+      }
+      L <- max(all_labels)
+    }
+    .generalized_procrustes_impl(
+      A_list = data,
+      task_labels_list = task_labels_list,
+      L = L,
+      ...
+    )
+  } else {
+    Ls <- sapply(data, ncol)
+    if (length(unique(Ls)) != 1L) {
+      stop("For a raw list of matrices, all subjects must have the same number of columns (tasks).", call. = FALSE)
+    }
+    if (is.null(L)) {
+      L <- Ls[1L]
+    }
+    task_labels_list <- replicate(n, seq_len(L), simplify = FALSE)
+    .generalized_procrustes_impl(
+      A_list = data,
+      task_labels_list = task_labels_list,
+      L = L,
+      ...
+    )
   }
 }

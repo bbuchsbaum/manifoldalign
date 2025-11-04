@@ -1,16 +1,10 @@
 # tests/testthat/test-coupled_diagonalization.R
 # Unit tests for coupled_diagonalization()
 
-library(testthat)
-library(Matrix)
-# Don't load manifoldalign here - testthat will handle it
-
 set.seed(123)
 
 test_that("coupled_diagonalization works with basic hyperdesign input", {
-  skip_if_not_installed("multidesign")
-  skip_if_not_installed("multivarious")
-  skip_if_not_installed("neighborweights")
+  skip_if_missing_cd_deps()
   
   # Create simple test data
   n <- 50
@@ -18,12 +12,6 @@ test_that("coupled_diagonalization works with basic hyperdesign input", {
   X2 <- matrix(rnorm(n * 4), n, 4)
   
   # Create multidesign objects
-  suppressPackageStartupMessages({
-    require(multidesign)
-    require(multivarious)
-    require(tibble)  # Required for multidesign
-  })
-  
   design1 <- data.frame(sample_id = 1:n)
   design2 <- data.frame(sample_id = 1:n)
   
@@ -54,9 +42,7 @@ test_that("coupled_diagonalization works with basic hyperdesign input", {
 })
 
 test_that("coupled_diagonalization handles different domain sizes", {
-  skip_if_not_installed("multidesign")
-  skip_if_not_installed("multivarious")
-  skip_if_not_installed("tibble")
+  skip_if_missing_cd_deps()
   
   # Different number of samples
   n1 <- 40
@@ -83,9 +69,7 @@ test_that("coupled_diagonalization handles different domain sizes", {
 })
 
 test_that("coupled_diagonalization with custom correspondence matrices", {
-  skip_if_not_installed("multidesign")
-  skip_if_not_installed("multivarious")
-  skip_if_not_installed("tibble")
+  skip_if_missing_cd_deps()
   
   n <- 50
   X1 <- matrix(rnorm(n * 3), n, 3)
@@ -113,8 +97,7 @@ test_that("coupled_diagonalization with custom correspondence matrices", {
 })
 
 test_that("coupled_diagonalization validates inputs", {
-  skip_if_not_installed("multidesign")
-  skip_if_not_installed("tibble")
+  skip_if_missing_cd_deps()
   
   # Single domain should error
   X1 <- matrix(rnorm(30), 10, 3)
@@ -138,9 +121,7 @@ test_that("coupled_diagonalization validates inputs", {
 })
 
 test_that("coupled_diagonalization convergence behavior", {
-  skip_if_not_installed("multidesign")
-  skip_if_not_installed("multivarious")
-  skip_if_not_installed("tibble")
+  skip_if_missing_cd_deps()
   
   # Create simple data - coupled diagonalization is challenging to optimize
   n <- 30
@@ -179,9 +160,7 @@ test_that("coupled_diagonalization convergence behavior", {
 })
 
 test_that("coupled_diagonalization preprocessing works", {
-  skip_if_not_installed("multidesign")
-  skip_if_not_installed("multivarious")
-  skip_if_not_installed("tibble")
+  skip_if_missing_cd_deps()
   
   n <- 40
   # Create data with different scales
@@ -204,4 +183,98 @@ test_that("coupled_diagonalization preprocessing works", {
   
   expect_true(inherits(result, "multiblock_biprojector"))
   expect_true(inherits(result$preproc, "concat_pre_processor"))
+})
+
+test_that("coupled_diagonalization records diagnostics and drops trivial mode", {
+  skip_if_missing_cd_deps()
+  n <- 32
+  X1 <- matrix(rnorm(n * 3), n, 3)
+  X2 <- matrix(rnorm(n * 5), n, 5)
+  hd <- multidesign::hyperdesign(list(
+    domain1 = multidesign::multidesign(X1, data.frame(sample_id = seq_len(n))),
+    domain2 = multidesign::multidesign(X2, data.frame(sample_id = seq_len(n)))
+  ))
+
+  q <- 16L
+  F1 <- Matrix::sparseMatrix(i = seq_len(q), j = seq_len(q), x = 1, dims = c(n, q))
+  F2 <- Matrix::sparseMatrix(i = seq_len(q), j = seq_len(q), x = 1, dims = c(n, q))
+
+  result <- coupled_diagonalization(
+    hd,
+    correspondence = list(F1, F2),
+    ncomp = 2,
+    ncomp_per_domain = 4,
+    mu_coupling = 0.5,
+    knn = 6,
+    max_iter = 40,
+    tol = 1e-5,
+    verbose = FALSE
+  )
+
+  eig_vals <- result$eigenvalues
+  expect_length(eig_vals, 2)
+  expect_true(all(vapply(eig_vals, function(v) all(v >= 1e-10), logical(1))))
+  scale_factors <- vapply(eig_vals, function(v) attr(v, "scale_factor"), numeric(1))
+  expect_true(all(scale_factors > 0))
+
+  diag_info <- result$diagnostics
+  expect_type(diag_info$cost_history, "double")
+  expect_equal(length(diag_info$coupling_scale), 2)
+  expect_equal(diag_info$coupling_scale[[1]], sqrt(q))
+  expect_named(diag_info$component_history)
+  expect_equal(length(diag_info$stiefel_factors), 2)
+  expect_equal(nrow(result$v), ncol(X1) + ncol(X2))
+  expect_equal(ncol(result$v), 2)
+})
+
+test_that("alpha_match respects provided lambda_target", {
+  skip_if_missing_cd_deps()
+  n <- 28
+  X1 <- matrix(rnorm(n * 3), n, 3)
+  X2 <- matrix(rnorm(n * 4), n, 4)
+  hd <- multidesign::hyperdesign(list(
+    domain1 = multidesign::multidesign(X1, data.frame(sample_id = seq_len(n))),
+    domain2 = multidesign::multidesign(X2, data.frame(sample_id = seq_len(n)))
+  ))
+
+  baseline <- coupled_diagonalization(
+    hd,
+    ncomp = 2,
+    ncomp_per_domain = 4,
+    mu_coupling = 0.5,
+    knn = 6,
+    max_iter = 20,
+    tol = 1e-4,
+    verbose = FALSE
+  )
+
+  lambda_target <- lapply(baseline$eigenvalues, function(vals) {
+    diag(vals[seq_len(2)])
+  })
+
+  matched <- coupled_diagonalization(
+    hd,
+    ncomp = 2,
+    ncomp_per_domain = 4,
+    mu_coupling = 0.5,
+    alpha_match = 5,
+    lambda_target = lambda_target,
+    knn = 6,
+    max_iter = 40,
+    tol = 1e-5,
+    verbose = FALSE
+  )
+
+  Lambda <- matched$eigenvalues
+  A_list <- matched$diagnostics$stiefel_factors
+  residuals <- vapply(seq_along(A_list), function(i) {
+    Ai <- A_list[[i]]
+    lambda_i <- pmax(Lambda[[i]], 1e-8)
+    LiAi <- sweep(Ai, 1L, lambda_i, `*`)
+    Mi <- crossprod(Ai, LiAi)
+    target_vec <- diag(lambda_target[[i]])
+    sqrt(mean((diag(Mi) - target_vec)^2))
+  }, numeric(1))
+
+  expect_lt(max(residuals), 5e-2)
 })

@@ -4,7 +4,7 @@
 \alias{solve_procrustes_cone}
 \title{Solve Procrustes Problem for CONE-Align}
 \usage{
-solve_procrustes_cone(Z1, Z2, P, lambda)
+solve_procrustes_cone(Z1, Z2, P, lambda = 0)
 }
 \arguments{
 \item{Z1}{Source embedding matrix}

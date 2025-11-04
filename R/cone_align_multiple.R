@@ -90,7 +90,7 @@ cone_align_multiple.hyperdesign <- function(data,
   # Call multi-graph fitting function
   cone_align_multiple_fit(pdata, proc, ref_idx, ncomp, sigma, lambda,
                          use_laplacian, solver, max_iter, tol, knn,
-                         block_indices)
+                         feature_block_indices(pdata))
 }
 
 #' CONE-Align Multiple for List of Matrices
@@ -166,7 +166,7 @@ cone_align_multiple.default <- function(data, ...) {
 #' @param max_iter Maximum iterations
 #' @param tol Convergence tolerance
 #' @param knn Number of nearest neighbors
-#' @param block_indices Block index structure
+#' @param feature_blocks Feature block index structure
 #'
 #' @return multiblock_biprojector object with multi-graph alignment results
 #' @keywords internal
@@ -190,7 +190,7 @@ cone_align_multiple.default <- function(data, ...) {
 cone_align_multiple_fit <- function(strata, proc, ref_idx,
                                    ncomp, sigma, lambda, use_laplacian,
                                    solver, max_iter, tol, knn,
-                                   block_indices) {
+                                   feature_blocks) {
   
   m <- length(strata)
   
@@ -208,7 +208,7 @@ cone_align_multiple_fit <- function(strata, proc, ref_idx,
   alignments <- lapply(seq_len(m), function(g) {
     if (g == ref_idx) {
       list(P = seq_len(nrow(embeddings[[g]])),
-           Q = diag(ncomp),
+           Q = diag(ncol(embeddings[[g]])),
            iterations = 0L)
     } else {
       .align_two_embeddings(embeddings[[ref_idx]], embeddings[[g]],
@@ -225,14 +225,13 @@ cone_align_multiple_fit <- function(strata, proc, ref_idx,
     if (is.null(alignments[[g]])) {
       return(NULL)
     }
-    
-    P_g <- alignments[[g]]$P
+
     Q_g <- alignments[[g]]$Q
-    
+
     if (g == ref_idx) {
       embeddings[[g]] %*% Q_g
     } else {
-      (embeddings[[g]][P_g, , drop = FALSE] %*% Q_g)
+      embeddings[[g]] %*% t(Q_g)
     }
   })
   
@@ -243,7 +242,7 @@ cone_align_multiple_fit <- function(strata, proc, ref_idx,
   s <- do.call(rbind, s_list)
 
   # Compute primal vectors (following cone_align pattern)
-  v <- do.call(rbind, lapply(seq_len(m), function(i) {
+  loadings <- do.call(rbind, lapply(seq_len(m), function(i) {
     xi <- strata[[i]]$x
     alpha_i <- embeddings[[i]]
     Matrix::crossprod(xi, alpha_i)
@@ -255,48 +254,27 @@ cone_align_multiple_fit <- function(strata, proc, ref_idx,
       message("Maximum iterations reached in one or more pairwise alignments.")
   }
 
-  # Compute feature block indices for multiblock_biprojector
-  feat_per_block <- vapply(strata, function(b) ncol(b$x), integer(1))
-  end_idx   <- cumsum(feat_per_block)
-  start_idx <- c(1L, head(end_idx, -1) + 1L)
-  
-  feature_block_idx <- lapply(seq_along(feat_per_block), function(i) {
-    start_idx[i]:end_idx[i]
-  })
-  names(feature_block_idx) <- paste0("block_", seq_along(feature_block_idx))
-
   # Construct the final multiblock_biprojector object
-  if (is.null(proc)) {
-    result <- structure(
-      list(
-        s = s,
-        v = v, 
-        assignment = P,
-        rotation = Q,
-        sdev = apply(s, 2, sd),
-        preproc = NULL,
-        block_indices = feature_block_idx,
-        n_domains = m,
-        ref_idx = ref_idx,
-        iterations = max(iterations)
-      ),
-      class = c("cone_align_multiple", "multiblock_biprojector")
-    )
-  } else {
-    result <- multivarious::multiblock_biprojector(
-      v = v,
-      s = s,
-      sdev = apply(s, 2, sd),
-      preproc = proc,
-      block_indices = feature_block_idx,
+  rotations_to_ref <- lapply(seq_len(m), function(g) {
+    if (g == ref_idx) {
+      diag(ncol(embeddings[[g]]))
+    } else {
+      t(Q[[g]])
+    }
+  })
+  
+  new_alignment_result(
+    scores = s,
+    loadings = loadings,
+    preproc = proc,
+    feature_blocks = feature_blocks,
+    subclass = "cone_align_multiple",
+    extras = list(
       assignment = P,
-      rotation = Q,
+      rotation = rotations_to_ref,
       n_domains = m,
       ref_idx = ref_idx,
       iterations = max(iterations)
     )
-    class(result) <- c("cone_align_multiple", class(result))
-  }
-  
-  result
-} 
+  )
+}
