@@ -189,6 +189,18 @@ fpgw.hyperdesign <- function(data,
       # Uniform marginals (can be customized later)
       p <- rep(1 / n_samples[i], n_samples[i])
       q <- rep(1 / n_samples[j], n_samples[j])
+
+      # Short-circuit perfectly identical domains in the classical setting
+      if (lambda == 0 && is.null(rho) &&
+          n_samples[i] == n_samples[j] &&
+          isTRUE(all.equal(X_list[[i]], X_list[[j]], tolerance = 1e-10))) {
+        ident_plan <- diag(1 / n_samples[i], n_samples[i])
+        transport_list[[pair]] <- ident_plan
+        dist_mat[i, j] <- dist_mat[j, i] <- 0
+        conv[i, j] <- conv[j, i] <- TRUE
+        pair <- pair + 1
+        next
+      }
       
       C_feat <- compute_feature_cost(X_list[[i]], X_list[[j]], metric)
       Cx <- C_list[[i]]
@@ -446,6 +458,9 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
   const_P <- outer(const1_P, rep(1, n2)) + outer(rep(1, n1), const2_P)
   M_P_final <- const_P - 2 * Cx %*% P %*% t(Cy)
   distance <- sqrt(max(0, sum(P * (feature_weight * C + struct_weight * M_P_final))))
+  if (distance < 1e-8) {
+    distance <- 0
+  }
   
   # Return with objective trace as attribute
   result <- list(P = P, distance = distance, converged = converged, iterations = iter, 
@@ -480,14 +495,14 @@ partial_ot_mass <- function(cost, p, q, rho, method = c("lpSolve", "Rsymphony"))
   # Row sum constraints: sum_j gamma_ij <= p_i
   row_constraints <- matrix(0, n, n * m)
   for (i in 1:n) {
-    idx <- ((i-1)*m + 1):(i*m)
+    idx <- seq(i, n * m, by = n)
     row_constraints[i, idx] <- 1
   }
   
   # Column sum constraints: sum_i gamma_ij <= q_j  
   col_constraints <- matrix(0, m, n * m)
   for (j in 1:m) {
-    idx <- seq(j, n*m, by = m)
+    idx <- ((j - 1) * n + 1):(j * n)
     col_constraints[j, idx] <- 1
   }
   
@@ -509,7 +524,10 @@ partial_ot_mass <- function(cost, p, q, rho, method = c("lpSolve", "Rsymphony"))
     warning("lpSolve did not find optimal solution, status = ", lp$status)
   }
   
-  matrix(lp$solution, n, m)
+  plan <- matrix(lp$solution, n, m)
+  plan[abs(plan) < 1e-12] <- 0
+  plan <- round(plan, 10)
+  plan
 }
 
 #' Classical OT linear program
@@ -543,14 +561,14 @@ classical_ot_lp_r <- function(cost, p, q) {
   # Row sum constraints
   row_constraints <- matrix(0, n, n * m)
   for (i in 1:n) {
-    idx <- ((i-1)*m + 1):(i*m)
+    idx <- seq(i, n * m, by = n)
     row_constraints[i, idx] <- 1
   }
   
   # Column sum constraints
   col_constraints <- matrix(0, m, n * m)
   for (j in 1:m) {
-    idx <- seq(j, n*m, by = m)
+    idx <- ((j - 1) * n + 1):(j * n)
     col_constraints[j, idx] <- 1
   }
   
@@ -565,7 +583,10 @@ classical_ot_lp_r <- function(cost, p, q) {
     warning("lpSolve did not find optimal solution, status = ", lp$status)
   }
   
-  matrix(lp$solution, n, m)
+  plan <- matrix(lp$solution, n, m)
+  plan[abs(plan) < 1e-12] <- 0
+  plan <- round(plan, 10)
+  plan
 }
 
 #' TV-penalized oracle
@@ -718,10 +739,11 @@ print.fpgw <- function(x, ...) {
 #' @param newdata New data from one domain to transport
 #' @param from Source domain index or name
 #' @param to Target domain index or name
-#' @param type Type of prediction: "transport" (default) or "embedding"
+#' @param type Type of prediction: "transport" (default), "weights", or "embedding"
+#' @param k Number of nearest neighbors used for barycentric interpolation
 #' @param ... Additional arguments
 #' 
-#' @return Transported samples or embeddings
+#' @return Transported samples, barycentric weights, or embeddings (when implemented)
 #' 
 #' @details
 #' This method provides out-of-sample extension for FPGW by:
@@ -745,13 +767,15 @@ print.fpgw <- function(x, ...) {
 #' }
 #' 
 #' @export
-predict.fpgw <- function(object, newdata, from, to, type = "transport", ...) {
+predict.fpgw <- function(object, newdata, from, to,
+                         type = c("transport", "weights", "embedding"),
+                         k = NULL, ...) {
   # Validate inputs
   if (!inherits(object, "fpgw")) {
     stop("object must be an fpgw result", call. = FALSE)
   }
   
-  type <- match.arg(type, c("transport", "embedding"))
+  type <- match.arg(type)
   
   # Convert domain names to indices if needed
   if (is.character(from)) {
@@ -771,11 +795,12 @@ predict.fpgw <- function(object, newdata, from, to, type = "transport", ...) {
   }
   
   # Get the appropriate transport plan
+  n_domains <- length(object$domain_names)
   if (from < to) {
-    pair_idx <- (from - 1) * length(object$domain_names) - 
+    pair_idx <- (from - 1) * n_domains - 
                 from * (from - 1) / 2 + (to - from)
   } else {
-    pair_idx <- (to - 1) * length(object$domain_names) - 
+    pair_idx <- (to - 1) * n_domains - 
                 to * (to - 1) / 2 + (from - to)
   }
   
@@ -790,7 +815,7 @@ predict.fpgw <- function(object, newdata, from, to, type = "transport", ...) {
     P <- t(P)
   }
   
-  if (type == "transport") {
+  if (type %in% c("transport", "weights")) {
     if (is.null(object$training_data)) {
       stop("Training data not stored in object; cannot perform barycentric mapping",
            call. = FALSE)
@@ -802,24 +827,54 @@ predict.fpgw <- function(object, newdata, from, to, type = "transport", ...) {
            call. = FALSE)
     }
 
-    k <- min(5L, nrow(X_source))
-    nn <- RANN::nn2(X_source, newdata, k = k)
-    idx <- nn$nn.idx
-    dists <- nn$nn.dists
-    w <- 1 / (dists + 1e-8)
-    w <- w / rowSums(w)
-
-    n_new <- nrow(newdata)
-    res <- matrix(0, n_new, ncol(P))
-    for (i in seq_len(n_new)) {
-      res[i, ] <- w[i, ] %*% P[idx[i, ], , drop = FALSE]
+    if (is.null(k)) {
+      k <- min(5L, nrow(X_source))
+    } else {
+      k <- as.integer(k)
+      if (is.na(k) || k <= 0) {
+        stop("k must be a positive integer", call. = FALSE)
+      }
+      k <- min(k, nrow(X_source))
+    }
+    if (k < 1) {
+      stop("k must be at least 1", call. = FALSE)
     }
 
-    return(res)
-    
-  } else {
-    # Return embeddings in shared space
-    stop("Embedding prediction not yet implemented for FPGW", call. = FALSE)
-  }
-}
+    nn <- RANN::nn2(X_source, newdata, k = k)
+    idx <- as.matrix(nn$nn.idx)
+    dists <- as.matrix(nn$nn.dists)
+    w <- 1 / (dists + 1e-8)
+    w_den <- rowSums(w)
+    w_den[w_den == 0] <- 1
+    w <- w / w_den
 
+    n_new <- nrow(newdata)
+    plan_mass <- rowSums(P)
+    safe_mass <- plan_mass
+    safe_mass[safe_mass == 0] <- 1
+    normalized_plan <- sweep(P, 1, safe_mass, "/")
+    normalized_plan[plan_mass == 0, ] <- 0
+
+    bary_weights <- matrix(0, n_new, ncol(P))
+    for (i in seq_len(n_new)) {
+      plan_rows <- normalized_plan[idx[i, ], , drop = FALSE]
+      bary_weights[i, ] <- w[i, ] %*% plan_rows
+      weights_sum <- sum(bary_weights[i, ])
+      if (weights_sum > 0) {
+        bary_weights[i, ] <- bary_weights[i, ] / weights_sum
+      } else {
+        bary_weights[i, ] <- rep(1 / ncol(P), ncol(P))
+      }
+    }
+
+    if (type == "weights") {
+      return(bary_weights)
+    }
+
+    X_target <- object$training_data[[to]]
+    transported <- bary_weights %*% X_target
+    return(transported)
+  }
+  
+  stop("Embedding prediction not yet implemented for FPGW", call. = FALSE)
+}

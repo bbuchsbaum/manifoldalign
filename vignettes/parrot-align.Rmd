@@ -169,3 +169,48 @@ bary_df <- tibble(
   domain 2 collapsing neatly onto domain 1.
 - The same dataset underpins the `cone_align`, `gpca_align`, and `kema`
   vignettes, enabling like-for-like comparison across alignment strategies.
+
+## Multi-domain consensus and diagnostics (align_many)
+
+For three or more domains, you can use the generic orchestrator `align_many()`
+with the PARROT adapter and a global, cycle-consistent permutation consensus.
+Diagnostics such as edge and cycle residuals and entropy metrics are returned.
+
+```r
+# Example (not run): align 3 domains and inspect diagnostics
+# (eval=FALSE to keep vignette light)
+
+# pick three domains from the benchmark
+triplet <- alignment_benchmark$domains[1:3]
+X_list <- lapply(triplet, `[[`, "x")
+
+# Run PARROT across all three with spectral permutation consensus
+res <- align_many(
+  domains = X_list,
+  algo = parrot_aligner(),
+  graph = "auto",
+  sync = list(perm = list(mode = "spectral", rounding = "sinkhorn"))
+)
+
+# Inspect diagnostics
+res$diagnostics$edge_residuals           # per-edge constraint residuals
+res$diagnostics$mean_edge_residual       # global mean
+res$diagnostics$cycle_residuals          # per-triangle residuals (if any)
+res$diagnostics$entropy                  # per-domain soft-assignment entropy
+
+# Barycentric embeddings to the consensus for domain 1
+Z1 <- res$embeddings[[1]]
+
+# Visualise cycle-consistency as a heatmap (min over paths)
+library(ggplot2)
+p_cc <- plot_cycle_consistency(res$diagnostics, aggregate = "min")
+print(p_cc)
+
+# Visualise edge residuals as a heatmap
+p_er <- plot_edge_residuals_heatmap(res$diagnostics)
+print(p_er)
+
+# Summarize worst edges (top 5 by residual)
+summarize_bad_edges(res$diagnostics, top = 5)
+```
+```

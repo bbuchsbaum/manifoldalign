@@ -187,14 +187,16 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
     }
     
     # Construct graph using package patterns (Patch 2)
+    # Auto-tune sigma for graph construction via median distance heuristic
+    sigma_g <- tryCatch(choose_sigma(stratum$x), error = function(e) 0.5)
     graph_weights <- tryCatch(
       neighborweights::graph_weights(
         stratum$x,
         weight_mode = "normalized",
         neighbor_mode = "knn",
-        k = min(max(3, nrow(stratum$x) %/% 3), nrow(stratum$x) - 1),
+        k = min(max(5, nrow(stratum$x) %/% 3), nrow(stratum$x) - 1),
         type = "normal",
-        sigma = 0.5
+        sigma = sigma_g
       ),
       error = function(e) {
         stop("Graph construction failed: ", e$message, call. = FALSE)
@@ -467,18 +469,36 @@ compute_grasp_assignment <- function(basis1, basis2, desc1, desc2, M,
   # Block E: Final embeddings and assignment
   embed1 <- as.matrix(phi1)
   embed2 <- as.matrix(phi2_aligned %*% C)
+
+  # Augment with descriptor-driven embeddings for robustness (mirrors multiset features)
+  B_proj <- as.matrix(desc1 %*% B_prime)           # n1 x k
+  A_proj <- as.matrix(desc2 %*% (A_prime %*% C))   # n2 x k
+  # Balance scales to avoid one dominating
+  fn1 <- sqrt(sum(embed1^2)); fnB <- sqrt(sum(B_proj^2)); s1 <- if (fnB > 0) fn1 / fnB else 1
+  fn2 <- sqrt(sum(embed2^2)); fnA <- sqrt(sum(A_proj^2)); s2 <- if (fnA > 0) fn2 / fnA else 1
+  embed1 <- cbind(embed1, B_proj * s1)
+  embed2 <- cbind(embed2, A_proj * s2)
   
-  # Improved distance computation (cosine similarity)
+  # Improved distance computation (cosine + small Euclidean blend)
   if (distance_method == "cosine") {
     # Robust cosine computation without external dependencies
     embed1_norms <- sqrt(rowSums(embed1^2) + 1e-12)
     embed2_norms <- sqrt(rowSums(embed2^2) + 1e-12)
     embed1_norm <- embed1 / embed1_norms
     embed2_norm <- embed2 / embed2_norms
-    
+
     sim_matrix <- embed1_norm %*% t(embed2_norm)
-    cost_matrix <- 1 - sim_matrix
-    cost_matrix[cost_matrix < 0] <- 0  # Clamp negative values to preserve matrix structure
+    cost_cos <- 1 - sim_matrix
+    cost_cos[cost_cos < 0] <- 0
+
+    # Small Euclidean component to break cosine ties and stabilize
+    e1_sq <- rowSums(embed1^2)
+    e2_sq <- rowSums(embed2^2)
+    dm <- sqrt(pmax(outer(e1_sq, e2_sq, "+") - 2 * (embed1 %*% t(embed2)), 0))
+    if (max(dm) > 0) dm <- dm / max(dm)
+
+    alpha <- 0.85
+    cost_matrix <- alpha * cost_cos + (1 - alpha) * dm
   } else {
     # Efficient Euclidean distance computation
     embed1_sq_norms <- rowSums(embed1^2)

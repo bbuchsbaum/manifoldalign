@@ -5,6 +5,60 @@
 #include <cmath>
 #include <cassert>
 #include <limits>
+#include <algorithm>
+
+namespace {
+
+arma::mat rebalance_plan(const arma::mat& P,
+                         const arma::vec& a,
+                         const arma::vec& b,
+                         double tol = 1e-12,
+                         int max_iter = 10) {
+  arma::mat R = P;
+  if (R.is_empty()) {
+    return R;
+  }
+
+  for (int iter = 0; iter < max_iter; ++iter) {
+    arma::vec row_sums = arma::sum(R, 1);
+    for (arma::uword i = 0; i < row_sums.n_elem; ++i) {
+      double denom = row_sums(i);
+      if (!std::isfinite(denom) || denom < tol) {
+        continue;
+      }
+      double scale = a(i) / denom;
+      if (std::abs(scale - 1.0) > tol) {
+        R.row(i) *= scale;
+      }
+    }
+
+    arma::vec col_sums = arma::sum(R, 0).t();
+    for (arma::uword j = 0; j < col_sums.n_elem; ++j) {
+      double denom = col_sums(j);
+      if (!std::isfinite(denom) || denom < tol) {
+        continue;
+      }
+      double scale = b(j) / denom;
+      if (std::abs(scale - 1.0) > tol) {
+        R.col(j) *= scale;
+      }
+    }
+
+    double row_err = arma::max(arma::abs(a - arma::sum(R, 1)));
+    double col_err = arma::max(arma::abs(b - arma::sum(R, 0).t()));
+    if (row_err < tol && col_err < tol) {
+      break;
+    }
+  }
+
+  R.transform([tol](double val) {
+    return (std::abs(val) < tol) ? 0.0 : val;
+  });
+
+  return R;
+}
+
+}  // namespace
 
 // Check if we have the LEMON headers available
 #ifdef __has_include
@@ -161,7 +215,8 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
     }
     
     // Remove padding and return
-    return extractSolution(P_padded, n_orig, m_orig);
+    arma::mat P = extractSolution(P_padded, n_orig, m_orig);
+    return rebalance_plan(P, a, b);
     
   } else {
     // Even sizes - no padding needed
@@ -259,13 +314,14 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
       }
     }
     
-    return P;
+    return rebalance_plan(P, a, b);
   }
   
 #else
   // Fallback to existing implementation with warning
   Rcpp::warning("LEMON network simplex not available, using fallback solver (may be less accurate)");
-  return fallback::network_simplex_ot(cost, a, b, eps);
+  arma::mat fallback_plan = fallback::network_simplex_ot(cost, a, b, eps);
+  return rebalance_plan(fallback_plan, a, b);
 #endif
 }
 

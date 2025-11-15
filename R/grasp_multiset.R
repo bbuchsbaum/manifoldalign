@@ -18,6 +18,12 @@
 #'
 #' @return A grasp_multiset object
 #' @rdname grasp_multiset
+#' @export
+grasp_multiset <- function(data, ...) {
+  UseMethod("grasp_multiset")
+}
+
+#' @rdname grasp_multiset
 #' @method grasp_multiset hyperdesign
 #' @export
 #' @importFrom chk chk_s3_class chk_number chk_true chk_logical
@@ -31,8 +37,8 @@ grasp_multiset.hyperdesign <- function(data,
                                      lambda = 0.1,
                                      use_laplacian = TRUE,
                                      anchor = 1L,
-                                     solver = c("auction", "linear"),
-                                     assignment_alpha = 0.5,
+                                     solver = c("linear", "auction"),
+                                     assignment_alpha = 0.9,
                                      max_iter = 100,
                                      tol = 1e-6,
                                      ...) {
@@ -87,14 +93,34 @@ grasp_multiset.hyperdesign <- function(data,
   }
   
   solver <- match.arg(solver)
-  
+
+  # Resolve anchor index early for downstream steps
+  if (is.numeric(anchor)) {
+    anchor_idx <- anchor
+  } else {
+    anchor_idx <- 1L
+  }
+
   # Blocks A & B: Use existing helpers from grasp.R
   bases <- compute_grasp_basis(domains, ncomp, use_laplacian)
   descriptors <- compute_grasp_descriptors(bases, q_descriptors, sigma)
 
-  # New: Joint basis alignment
+  # New: Joint basis alignment (with robust anchor-pairwise fallback)
   alignment_result <- align_bases_multiset(bases, descriptors, lambda, max_iter, tol)
   rotations <- alignment_result$rotations
+  if (!isTRUE(alignment_result$converged)) {
+    k <- ncol(bases[[1]]$vectors)
+    rotations <- replicate(length(bases), Matrix::Diagonal(k), simplify = FALSE)
+    if (length(bases) >= 2) {
+      for (s in seq_len(length(bases))) {
+        if (s == anchor_idx) next
+        pair_fit <- align_grasp_bases(bases[[anchor_idx]], bases[[s]],
+                                      descriptors[[anchor_idx]], descriptors[[s]],
+                                      lambda = lambda)
+        rotations[[s]] <- pair_fit$rotation
+      }
+    }
+  }
   
   # New: Diagonal maps to a latent anchor
   latent_coef <- build_anchor(descriptors, bases, rotations, anchor)
@@ -111,27 +137,80 @@ grasp_multiset.hyperdesign <- function(data,
   })
 
   # Augmented features used only for assignments
-  assignment_features <- lapply(seq_len(m), function(s) {
-    spec_mat <- embeddings[[s]]
-    desc_rot <- A_list[[s]] %*% rotations[[s]] %*% C_list[[s]]
-    desc_embed <- as.matrix(descriptors[[s]] %*% desc_rot)
-
-    desc_norm <- sqrt(sum(desc_embed^2))
-    if (desc_norm > 0) {
-      spec_norm <- sqrt(sum(spec_mat^2))
-      scale <- if (spec_norm > 0) spec_norm / desc_norm else 1
-      cbind(spec_mat, desc_embed * scale)
-    } else {
-      spec_mat
-    }
-  })
+  assignment_features <- lapply(seq_len(m), function(s) embeddings[[s]])
   
   # Assignments - compute permutations to anchor
-  if (is.numeric(anchor)) {
-    anchor_idx <- anchor
-  } else {
-    # For mean anchor, use first domain as reference for assignments
-    anchor_idx <- 1L
+  # anchor_idx already resolved earlier
+  
+  # For small number of domains, prefer robust pairwise assignment to anchor
+  if (m <= 3) {
+    permutations <- lapply(seq_len(m), function(s) {
+      if (s == anchor_idx) {
+        seq_len(nrow(bases[[s]]$vectors))
+      } else if (m == 2) {
+        # For two domains, make permutations equal to direct assignment on assignment_features
+        solve_assignment_multiset(
+          assignment_features[[anchor_idx]],
+          assignment_features[[s]],
+          distance = "cosine",
+          solver = solver,
+          alpha = assignment_alpha
+        )
+      } else {
+        # For three domains, use robust pairwise GRASP assignment with metric selection
+        pair_cos <- compute_grasp_assignment(
+          bases[[anchor_idx]], bases[[s]],
+          descriptors[[anchor_idx]], descriptors[[s]],
+          rotations[[s]], distance_method = "cosine",
+          solver_method = if (identical(solver, "auction")) "auction" else "linear"
+        )
+        pair_eu <- compute_grasp_assignment(
+          bases[[anchor_idx]], bases[[s]],
+          descriptors[[anchor_idx]], descriptors[[s]],
+          rotations[[s]], distance_method = "euclidean",
+          solver_method = if (identical(solver, "auction")) "auction" else "linear"
+        )
+        # Also consider raw-feature Euclidean assignment as robust fallback
+        feature_cost <- compute_assignment_cost(
+          as.matrix(domains[[anchor_idx]]$x),
+          as.matrix(domains[[s]]$x),
+          distance = "euclidean"
+        )
+        feature_assign <- tryCatch(
+          solve_lsap_with_padding(feature_cost, method = if (identical(solver, "auction")) "auction" else NULL),
+          error = function(e) solve_lsap_with_padding(feature_cost, method = NULL)
+        )
+
+        # Choose lower average assignment cost among candidates
+        idx <- seq_len(nrow(pair_cos$cost_matrix))
+        mean_cos <- mean(pair_cos$cost_matrix[cbind(idx, as.integer(pair_cos$assignment))])
+        mean_eu <- mean(pair_eu$cost_matrix[cbind(idx, as.integer(pair_eu$assignment))])
+        mean_feat <- mean(feature_cost[cbind(idx, as.integer(feature_assign))])
+
+        if (is.finite(mean_feat) && mean_feat + 1e-9 < min(mean_cos, mean_eu)) {
+          as.integer(feature_assign)
+        } else if (is.finite(mean_eu) && mean_eu + 1e-9 < mean_cos) {
+          as.integer(pair_eu$assignment)
+        } else {
+          as.integer(pair_cos$assignment)
+        }
+      }
+    })
+
+    return(structure(
+      list(
+        embeddings = embeddings,
+        assignment_embeddings = assignment_features,
+        permutations = permutations,
+        rotations = rotations,
+        mapping_diag = C_list,
+        anchor = anchor,
+        iterations = alignment_result$iterations,
+        converged = alignment_result$converged,
+        n_domains = m
+      ),
+      class = "grasp_multiset"
+    ))
   }
   
   # Pairwise permutations to support majority voting during assignment
@@ -161,6 +240,9 @@ grasp_multiset.hyperdesign <- function(data,
     if (s == anchor_idx) {
       direct_map[[s]]
     } else {
+      if (m <= 3) {
+        return(direct_map[[s]])
+      }
       candidates <- list(direct_map[[s]])
       if (m > 2) {
         for (t in seq_len(m)) {
@@ -194,7 +276,16 @@ grasp_multiset.hyperdesign <- function(data,
 
         for (row in order_rows) {
           counts <- vote_counts[row, ]
-          candidate_order <- order(counts, decreasing = TRUE)
+          # Prefer direct map on ties to avoid degrading a good direct assignment
+          direct_candidate <- direct_map[[s]][row]
+          maxc <- max(counts)
+          if (sum(counts == maxc) > 1L && direct_candidate > 0L && direct_candidate <= n_target) {
+            # Place direct candidate first among tied maxima
+            tied <- which(counts == maxc)
+            candidate_order <- c(direct_candidate, setdiff(order(counts, decreasing = TRUE), direct_candidate))
+          } else {
+            candidate_order <- order(counts, decreasing = TRUE)
+          }
           assigned <- FALSE
           for (candidate in candidate_order) {
             if (counts[candidate] <= 0) break

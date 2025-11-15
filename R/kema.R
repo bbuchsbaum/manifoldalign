@@ -426,8 +426,10 @@ compute_between_graph <- function(strata, y, dfun=NULL) {
       medlabels
     })
     
-    # binary_label_matrix converts NA to "NA" string for semi-supervised learning
-    neighborweights::binary_label_matrix(unlist(dlabels), unlist(dlabels), type="d")
+    # Sanitize labels before constructing between-class graph to avoid NA indices
+    all_dlabels <- unlist(dlabels)
+    all_dlabels[is.na(all_dlabels)] <- "UNLABELED"
+    neighborweights::binary_label_matrix(all_dlabels, all_dlabels, type="d")
   } else {
     dlabels <- unlist(lapply(strata, function(s) {
       s$design %>% select(!!y) %>% pull(!!y)
@@ -553,6 +555,40 @@ normalize_graphs <- function(Sl, Ws, Wd) {
   }
   
   list(W = W, Wr = Wr, Ws = Ws, Wd = Wd)
+}
+
+#' Sanitize labels before computing similarity matrices
+#' 
+#' Ensures there are no NA values passed into simfun by replacing each missing
+#' label with a unique placeholder. Using unique placeholders prevents all
+#' unlabeled samples from being treated as the same class while still keeping
+#' the input compatible with functions like neighborweights::binary_label_matrix,
+#' which cannot accept NA values.
+#'
+#' @param labels Vector of labels that may contain NA entries
+#' @return Vector with the same length and names as `labels` but with all
+#'   missing entries replaced by unique placeholders.
+#' @keywords internal
+sanitize_labels_for_similarity <- function(labels) {
+  if (!anyNA(labels)) {
+    return(labels)
+  }
+  
+  sanitized <- labels
+  if (!is.character(sanitized)) {
+    sanitized <- as.character(sanitized)
+  }
+  
+  missing_idx <- which(is.na(sanitized))
+  if (!length(missing_idx)) {
+    return(sanitized)
+  }
+  
+  sanitized[missing_idx] <- sprintf("__UNLABELED__%05d", missing_idx)
+  if (!is.null(names(labels))) {
+    names(sanitized) <- names(labels)
+  }
+  sanitized
 }
  
 
@@ -951,9 +987,10 @@ kema_fit <- function(strata, proc, ncomp, knn, sigma, u, y, labels, kernel, samp
   
   
   ## class pull
-  # simfun handles NA values by treating them as a separate class
+  # Sanitize labels so simfun never receives NA (avoid sparseMatrix NA indices)
+  labels_for_sim <- sanitize_labels_for_similarity(labels)
   Ws <- safe_compute(
-    simfun(labels),
+    simfun(labels_for_sim),
     "Failed to compute class similarity matrix. This may indicate issues with the similarity function or label structure. For semi-supervised learning, ensure simfun can handle NA values"
   )
   
