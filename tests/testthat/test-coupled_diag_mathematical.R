@@ -191,14 +191,17 @@ test_that("coupled_diagonalization handles decoupled case correctly", {
   md2 <- multidesign(X2, design)
   hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
   
-  # Run with very low coupling
-  result <- coupled_diagonalization(
-    hd,
-    ncomp = 3,
-    mu_coupling = 0.001,  # Very low coupling
-    knn = 10,
-    max_iter = 200,
-    verbose = FALSE
+  # Run with very low coupling.
+  # Expected eigenvector truncation can emit a warning; treat as noise here.
+  result <- suppressWarnings(
+    coupled_diagonalization(
+      hd,
+      ncomp = 3,
+      mu_coupling = 0.001,  # Very low coupling
+      knn = 10,
+      max_iter = 200,
+      verbose = FALSE
+    )
   )
   
   # Bases should be different (low alignment)
@@ -242,15 +245,18 @@ test_that("coupled_diagonalization forcing alignment with high coupling", {
   md2 <- multidesign(X2, design)
   hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
   
-  # Run with very high coupling to force alignment
-  result <- coupled_diagonalization(
-    hd,
-    ncomp = 3,
-    mu_coupling = 100.0,  # Very high coupling
-    knn = 10,
-    max_iter = 300,
-    tol = 1e-5,
-    verbose = FALSE
+  # Run with very high coupling to force alignment.
+  # As above, eigenvector truncation warnings are expected and ignored.
+  result <- suppressWarnings(
+    coupled_diagonalization(
+      hd,
+      ncomp = 3,
+      mu_coupling = 100.0,  # Very high coupling
+      knn = 10,
+      max_iter = 300,
+      tol = 1e-5,
+      verbose = FALSE
+    )
   )
   
   # Bases should be forced to align despite different structures

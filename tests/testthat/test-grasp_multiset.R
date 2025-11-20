@@ -101,9 +101,9 @@ test_that("grasp_multiset handles different anchor choices", {
   ms <- lapply(1:3, function(i) matrix(rnorm(25 * 3), 25, 3))
   
   # Test with different anchor indices
-  result1 <- grasp_multiset(ms, anchor = 1, ncomp = 5, q_descriptors = 10, max_iter = 5)
-  result2 <- grasp_multiset(ms, anchor = 2, ncomp = 5, q_descriptors = 10, max_iter = 5)
-  result_mean <- grasp_multiset(ms, anchor = "mean", ncomp = 5, q_descriptors = 10, max_iter = 5)
+  result1 <- grasp_multiset(ms, anchor = 1, ncomp = 5, q_descriptors = 10, max_iter = 20)
+  result2 <- grasp_multiset(ms, anchor = 2, ncomp = 5, q_descriptors = 10, max_iter = 20)
+  result_mean <- grasp_multiset(ms, anchor = "mean", ncomp = 5, q_descriptors = 10, max_iter = 20)
   
   expect_equal(result1$anchor, 1)
   expect_equal(result2$anchor, 2)
@@ -175,9 +175,9 @@ test_that("grasp_multiset handles solver options", {
   ms <- lapply(1:3, function(i) matrix(rnorm(100 * 5), 100, 5))
   
   result_auction <- grasp_multiset(ms, ncomp = 5, q_descriptors = 10, 
-                                   solver = "auction", max_iter = 5)
+                                   solver = "auction", max_iter = 20)
   result_linear <- grasp_multiset(ms, ncomp = 5, q_descriptors = 10, 
-                                  solver = "linear", max_iter = 5)
+                                  solver = "linear", max_iter = 20)
   
   expect_s3_class(result_auction, "grasp_multiset")
   expect_s3_class(result_linear, "grasp_multiset")

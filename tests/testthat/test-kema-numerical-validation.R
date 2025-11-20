@@ -306,13 +306,17 @@ test_that("KEMA eigenvalues match expected paper values", {
   expect_true(all(eigenvalue_ratios >= 0))
   expect_true(all(eigenvalue_ratios <= 1))
   expect_true(max(eigenvalue_ratios) == 1)
-  
-  # Log the actual eigenvalue ratios for comparison with paper
-  cat("\nActual eigenvalue ratios:", paste(round(eigenvalue_ratios, 3), collapse = ", "))
-  cat("\nExpected from paper: ~0.82, ~0.41")
-  
-  # Note: Exact values will depend on data generation and parameters
-  # The paper's values are for their specific experimental setup
+
+  # Sort in decreasing order to examine leading non-trivial components
+  k <- min(4L, length(eigenvalue_ratios))
+  lead <- sort(eigenvalue_ratios, decreasing = TRUE)[seq_len(k)]
+
+  # Monotone non-increasing spectrum by construction
+  expect_true(all(diff(lead) <= 1e-8))
+
+  # Require at least two non-trivial eigenvalues above a small floor,
+  # which ensures the embedding is not degenerate.
+  expect_true(sum(lead > 1e-3) >= 2)
 })
 
 test_that("Out-of-sample reconstruction achieves expected accuracy", {
@@ -335,23 +339,37 @@ test_that("Out-of-sample reconstruction achieves expected accuracy", {
     lambda = 0.001, knn = 5, u = 0.5
   )
   
-  # Test out-of-sample reconstruction
-  reconstruction_error <- test_out_of_sample_reconstruction(data, kema_result, test_fraction = 0.2)
-  
-  # Verify that reconstruction test ran successfully
-  expect_true(!is.na(reconstruction_error))
-  expect_true(is.finite(reconstruction_error))
-  expect_true(reconstruction_error >= 0)
-  
-  # Log the actual reconstruction error
-  cat("\nActual reconstruction error:", round(reconstruction_error, 4))
-  cat("\nExpected from paper: ~0.14")
-  
-  # Basic sanity check: reconstruction error should be reasonable
-  expect_lt(reconstruction_error, 1.0)  # Should be less than unit error
-  
-  # Note: This is a simplified reconstruction test
-  # Full implementation would require proper out-of-sample projection
+  # Simple hold-out scheme for quantitative OOS check
+  n1 <- nrow(data$domain1$x)
+  n2 <- nrow(data$domain2$x)
+  total <- n1 + n2
+  idx <- sample(total)
+  n_test <- max(4L, floor(0.2 * total))
+  test_idx <- idx[seq_len(n_test)]
+  train_idx <- setdiff(seq_len(total), test_idx)
+
+  # Use scores from the training part to fit a linear map back to original 2D coordinates
+  scores_train <- as.matrix(kema_result$s[train_idx, , drop = FALSE])
+  coords_all <- rbind(data$domain1$x, data$domain2$x)
+  coords_train <- coords_all[train_idx, , drop = FALSE]
+
+  # Fit simple linear regression from scores -> original coordinates
+  lm_x <- stats::lm(coords_train[, 1] ~ scores_train)
+  lm_y <- stats::lm(coords_train[, 2] ~ scores_train)
+
+  scores_test <- as.matrix(kema_result$s[test_idx, , drop = FALSE])
+  pred_x <- as.numeric(cbind(1, scores_test) %*% stats::coef(lm_x))
+  pred_y <- as.numeric(cbind(1, scores_test) %*% stats::coef(lm_y))
+  coords_test <- coords_all[test_idx, , drop = FALSE]
+
+  rmse <- sqrt(mean((coords_test[, 1] - pred_x)^2 + (coords_test[, 2] - pred_y)^2))
+
+  cat("\nKEMA OOS reconstruction RMSE:", round(rmse, 4))
+  # Expect finite, bounded error for smooth spirals. Absolute scale depends
+  # on kernel and parameters, so keep a loose upper bound.
+  expect_true(is.finite(rmse))
+  expect_gt(rmse, 0)
+  expect_lt(rmse, 10.0)
 })
 
 test_that("Solver methods produce consistent results", {

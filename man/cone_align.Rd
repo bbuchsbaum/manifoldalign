@@ -2,20 +2,70 @@
 % Please edit documentation in R/all_generic.R, R/cone_align.R
 \name{cone_align}
 \alias{cone_align}
+\alias{cone_align.hyperdesign}
+\alias{cone_align.list}
+\alias{cone_align.default}
 \title{CONE-Align: Consensus Optimization for Node Embedding Alignment}
 \usage{
 cone_align(data, ...)
 
 cone_align(data, ...)
+
+\method{cone_align}{hyperdesign}(
+  data,
+  preproc = center(),
+  ncomp = 10,
+  sigma = 0.73,
+  lambda = 0.1,
+  use_laplacian = TRUE,
+  solver = c("linear", "auction"),
+  max_iter = 30,
+  tol = 0.01,
+  knn = NULL,
+  ...
+)
+
+\method{cone_align}{list}(
+  data,
+  preproc = center(),
+  ncomp = 10,
+  sigma = 0.73,
+  lambda = 0.1,
+  use_laplacian = TRUE,
+  solver = c("linear", "auction"),
+  max_iter = 30,
+  tol = 0.01,
+  knn = NULL,
+  ...
+)
+
+\method{cone_align}{default}(data, ...)
 }
 \arguments{
-\item{data}{Input data object containing graph domains}
+\item{data}{A list containing exactly two matrices representing node features
+for each graph domain. Each matrix should have format: nodes x features.}
 
-\item{...}{Additional arguments passed to specific methods. See 
-\code{\link{cone_align.hyperdesign}} for details on method-specific 
-parameters such as \code{preproc}, \code{ncomp}, \code{sigma}, 
-\code{lambda}, \code{use_laplacian}, \code{solver}, \code{max_iter}, 
-and \code{tol}}
+\item{...}{Additional arguments (currently unused)}
+
+\item{preproc}{Preprocessing function to apply to the data (default: center())}
+
+\item{ncomp}{Number of embedding dimensions (default: 10)}
+
+\item{sigma}{Diffusion parameter for graph construction (default: 0.73)}
+
+\item{lambda}{Regularization parameter for numerical stability (default: 0.1)}
+
+\item{use_laplacian}{Whether to use Laplacian normalization (default: TRUE)}
+
+\item{solver}{Assignment algorithm: "linear" for exact assignment (default), 
+"auction" for large-scale approximation}
+
+\item{max_iter}{Maximum number of iterations (default: 30)}
+
+\item{tol}{Convergence tolerance for assignment changes (default: 0.01)}
+
+\item{knn}{Number of nearest neighbors for graph construction
+(default: adaptive)}
 }
 \value{
 A \code{multiblock_biprojector} object containing:
@@ -37,6 +87,10 @@ A \code{multiblock_biprojector} object containing:
   \item \code{sdev}: Standard deviations of aligned components
   \item Additional metadata for reconstruction and validation
 }
+
+A multiblock_biprojector object containing the CONE-Align results
+
+A multiblock_biprojector object containing the CONE-Align results
 }
 \description{
 Performs CONE-Align on hyperdesign data structures. Aligns graph embeddings
@@ -44,6 +98,12 @@ by alternating between orthogonal transformations and node assignments.
 
 Performs CONE-Align on hyperdesign data structures. Aligns graph embeddings
 by alternating between orthogonal transformations and node assignments.
+
+Performs CONE-Align on hyperdesign data structures containing graph domains.
+
+Performs CONE-Align on a list containing exactly two feature matrices.
+This provides a simplified interface for direct matrix input without
+requiring hyperdesign object construction.
 }
 \details{
 CONE-Align tackles graph alignment by iteratively refining both orthogonal
@@ -85,8 +145,10 @@ current transformations via linear assignment.
 CONE-Align operates through the following algorithmic blocks:
 \itemize{
   \item \strong{Spectral Embedding}: Compute Laplacian eigenmaps for each graph
-  \item \strong{Orthogonal Alignment}: Find rotation matrices via Procrustes analysis
-  \item \strong{Assignment Update}: Solve linear assignment problem for correspondences
+  \item \strong{Orthogonal Alignment}: Find rotation matrices via
+    Procrustes analysis
+  \item \strong{Assignment Update}: Solve linear assignment problem
+    for correspondences
   \item \strong{Convergence Check}: Iterate until assignments stabilize
 }
 
@@ -168,6 +230,20 @@ aligned_embeddings <- result$s
 
 # Use exact solver for optimal results
 result_exact <- cone_align(hd, ncomp = 10, solver = "linear")
+}
+
+\donttest{
+# Simple example with two feature matrices
+set.seed(123)
+X1 <- matrix(rnorm(100), 50, 2)  # 50 nodes, 2 features
+X2 <- matrix(rnorm(100), 50, 2)  # 50 nodes, 2 features
+
+# Run CONE-Align directly on matrices
+result <- cone_align(list(X1, X2), ncomp = 5)
+
+# Access results
+assignments <- result$assignment
+embeddings <- result$s
 }
 
 }

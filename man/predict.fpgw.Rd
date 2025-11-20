@@ -4,7 +4,15 @@
 \alias{predict.fpgw}
 \title{Predict method for FPGW}
 \usage{
-\method{predict}{fpgw}(object, newdata, from, to, type = "transport", ...)
+\method{predict}{fpgw}(
+  object,
+  newdata,
+  from,
+  to,
+  type = c("transport", "weights", "embedding"),
+  k = NULL,
+  ...
+)
 }
 \arguments{
 \item{object}{An fpgw object}
@@ -15,12 +23,14 @@
 
 \item{to}{Target domain index or name}
 
-\item{type}{Type of prediction: "transport" (default) or "embedding"}
+\item{type}{Type of prediction: "transport" (default), "weights", or "embedding"}
+
+\item{k}{Number of nearest neighbors used for barycentric interpolation}
 
 \item{...}{Additional arguments}
 }
 \value{
-Transported samples or embeddings
+Transported samples, barycentric weights, or embeddings (when implemented)
 }
 \description{
 Transport new samples using learned FPGW alignment
@@ -32,7 +42,8 @@ This method provides out-of-sample extension for FPGW by:
   \item Using the transport plan to map to target domain
   \item Interpolating based on transport weights
 }
-The object must contain the training data used for fitting, otherwise an error is thrown.
+The object must contain the training data used for fitting,
+otherwise an error is thrown.
 }
 \examples{
 \dontrun{

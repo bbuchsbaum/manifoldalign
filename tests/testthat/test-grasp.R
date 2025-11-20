@@ -118,23 +118,17 @@ test_that("GRASP recovers identity mapping on identical graphs (fundamental corr
   # Create hyperdesign with identical domains
   hd <- create_test_hyperdesign(X, X)
   
-  # Run GRASP with conservative parameters for stability
-  result <- tryCatch({
-    # Use GRASP implementation directly for testing
-    bases <- manifoldalign:::compute_grasp_basis(hd, ncomp = 8, use_laplacian = TRUE)
-    descriptors <- manifoldalign:::compute_grasp_descriptors(bases, q_descriptors = 20, sigma = 1.0)
-    alignment <- manifoldalign:::align_grasp_bases(bases[[1]], bases[[2]], 
-                                                  descriptors[[1]], descriptors[[2]], 
-                                                  lambda = 0.05)
-    assignment <- manifoldalign:::compute_grasp_assignment(bases[[1]], bases[[2]], 
-                                                          descriptors[[1]], descriptors[[2]], 
-                                                          alignment$rotation, 
-                                                          distance_method = "cosine", 
-                                                          solver_method = "linear")
-    assignment
-  }, error = function(e) {
-    skip(paste("GRASP computation failed:", e$message))
-  })
+  # Run GRASP with conservative parameters for stability; treat errors as failures
+  bases <- manifoldalign:::compute_grasp_basis(hd, ncomp = 8, use_laplacian = TRUE)
+  descriptors <- manifoldalign:::compute_grasp_descriptors(bases, q_descriptors = 20, sigma = 1.0)
+  alignment <- manifoldalign:::align_grasp_bases(bases[[1]], bases[[2]], 
+                                                descriptors[[1]], descriptors[[2]], 
+                                                lambda = 0.05)
+  result <- manifoldalign:::compute_grasp_assignment(bases[[1]], bases[[2]], 
+                                                    descriptors[[1]], descriptors[[2]], 
+                                                    alignment$rotation, 
+                                                    distance_method = "cosine", 
+                                                    solver_method = "linear")
   
   # Verify result structure
   expect_true(is.list(result))
@@ -172,23 +166,18 @@ test_that("GRASP achieves ≥90% accuracy on isomorphic graphs with noise (robus
   test_case <- create_isomorphic_test_case(n_nodes, permutation = c(2,1,4,3,6,5,8,7,10,9,12,11))
   
   # Run GRASP with parameters tuned for isomorphic detection
-  result <- tryCatch({
-    bases <- manifoldalign:::compute_grasp_basis(test_case$hyperdesign, 
-                                                ncomp = 8, use_laplacian = TRUE)
-    descriptors <- manifoldalign:::compute_grasp_descriptors(bases, 
-                                                            q_descriptors = 50, sigma = 1.2)
-    alignment <- manifoldalign:::align_grasp_bases(bases[[1]], bases[[2]], 
-                                                  descriptors[[1]], descriptors[[2]], 
-                                                  lambda = 0.05)  # Lower lambda for better alignment
-    assignment <- manifoldalign:::compute_grasp_assignment(bases[[1]], bases[[2]], 
-                                                          descriptors[[1]], descriptors[[2]], 
-                                                          alignment$rotation, 
-                                                          distance_method = "cosine", 
-                                                          solver_method = "linear")
-    assignment
-  }, error = function(e) {
-    skip(paste("GRASP computation failed:", e$message))
-  })
+  bases <- manifoldalign:::compute_grasp_basis(test_case$hyperdesign, 
+                                              ncomp = 8, use_laplacian = TRUE)
+  descriptors <- manifoldalign:::compute_grasp_descriptors(bases, 
+                                                          q_descriptors = 50, sigma = 1.2)
+  alignment <- manifoldalign:::align_grasp_bases(bases[[1]], bases[[2]], 
+                                                descriptors[[1]], descriptors[[2]], 
+                                                lambda = 0.05)  # Lower lambda for better alignment
+  result <- manifoldalign:::compute_grasp_assignment(bases[[1]], bases[[2]], 
+                                                    descriptors[[1]], descriptors[[2]], 
+                                                    alignment$rotation, 
+                                                    distance_method = "cosine", 
+                                                    solver_method = "linear")
   
   # Evaluate against true permutation
   eval_result <- evaluate_assignment_accuracy(result$assignment, test_case$true_permutation)
@@ -366,20 +355,10 @@ test_that("GRASP mathematical properties validation", {
   X2 <- X1[sample(n_nodes), ] + matrix(rnorm(n_nodes * 2, 0, 0.1), n_nodes, 2)
   hd <- create_test_hyperdesign(X1, X2)
   
-  result <- tryCatch({
-    bases <- manifoldalign:::compute_grasp_basis(hd, ncomp = 6, use_laplacian = TRUE)
-    descriptors <- manifoldalign:::compute_grasp_descriptors(bases, q_descriptors = 15, sigma = 1.0)
-    alignment <- manifoldalign:::align_grasp_bases(bases[[1]], bases[[2]], 
-                                                  descriptors[[1]], descriptors[[2]], lambda = 0.1)
-    assignment <- manifoldalign:::compute_grasp_assignment(bases[[1]], bases[[2]], 
-                                                          descriptors[[1]], descriptors[[2]], 
-                                                          alignment$rotation, 
-                                                          distance_method = "cosine", 
-                                                          solver_method = "linear")
-    alignment
-  }, error = function(e) {
-    skip(paste("GRASP computation failed:", e$message))
-  })
+  bases <- manifoldalign:::compute_grasp_basis(hd, ncomp = 6, use_laplacian = TRUE)
+  descriptors <- manifoldalign:::compute_grasp_descriptors(bases, q_descriptors = 15, sigma = 1.0)
+  result <- manifoldalign:::align_grasp_bases(bases[[1]], bases[[2]], 
+                                             descriptors[[1]], descriptors[[2]], lambda = 0.1)
   
   # Check rotation matrix orthogonality
   M <- result$rotation

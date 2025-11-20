@@ -76,3 +76,75 @@ test_that("lowrank_align agrees across solver backends", {
   overlap <- svd(crossprod(res_exp$s, res_op$s))
   expect_gt(min(overlap$d), 0.8)
 })
+
+test_that("lowrank_align recovers a linear latent space on synthetic data", {
+  skip_if_not_installed("multidesign")
+  skip_if_not_installed("tibble")
+
+  set.seed(20240501)
+  n <- 80
+  d_lat <- 2
+  d1 <- 5
+  d2 <- 6
+
+  # Latent 2D Gaussian blobs with two classes
+  n1 <- n %/% 2
+  n2 <- n - n1
+  latent_c1 <- matrix(rnorm(n1 * d_lat, mean = -0.7, sd = 0.4), n1, d_lat)
+  latent_c2 <- matrix(rnorm(n2 * d_lat, mean = 0.7, sd = 0.4), n2, d_lat)
+  Z <- rbind(latent_c1, latent_c2)
+  labels <- factor(c(rep("A", n1), rep("B", n2)))
+
+  # Two linear views with different projections and noise
+  W1 <- matrix(rnorm(d_lat * d1), d_lat, d1)
+  W2 <- matrix(rnorm(d_lat * d2), d_lat, d2)
+  X1 <- Z %*% W1 + matrix(rnorm(n * d1, sd = 0.05), n, d1)
+  X2 <- Z %*% W2 + matrix(rnorm(n * d2, sd = 0.05), n, d2)
+
+  if (!("package:tibble" %in% search())) {
+    suppressWarnings(library(tibble))
+  }
+
+  d1_md <- multidesign::multidesign(X1, tibble::tibble(y = labels))
+  d2_md <- multidesign::multidesign(X2, tibble::tibble(y = labels))
+  hd <- multidesign::hyperdesign(list(view1 = d1_md, view2 = d2_md))
+
+  # Simple similarity: same label = 1, different = 0
+  lab_all <- c(labels, labels)
+  lab_pool <- sort(unique(stats::na.omit(lab_all)))
+  S <- diag(length(lab_pool))
+  dimnames(S) <- list(lab_pool, lab_pool)
+  simfun <- createSimFun(S)
+
+  # Fit lowrank_align and extract 2D embedding
+  fit <- lowrank_align(hd, y,
+                       simfun = simfun,
+                       ncomp = 2,
+                       solver = "explicit",
+                       sv_thresh = 0.2,
+                       lambda = 0.01)
+
+  expect_s3_class(fit, c("lowrank_align", "multiblock_biprojector"))
+  expect_equal(nrow(fit$s), 2 * n)
+  expect_equal(ncol(fit$s), 2)
+  expect_true(all(is.finite(fit$s)))
+
+  # Align embedding from first view back to latent space via Procrustes
+  emb1 <- fit$s[seq_len(n), , drop = FALSE]
+
+  if (!requireNamespace("vegan", quietly = TRUE)) {
+    skip("vegan package required for Procrustes analysis - install with: install.packages('vegan')")
+  }
+
+  proc <- vegan::procrustes(as.matrix(Z), as.matrix(emb1), symmetric = FALSE)
+  err <- proc$ss
+  cor_lat <- sqrt(1 - proc$ss / sum(Z^2))
+
+  # On clean linear data, lowrank_align should do at least as well as plain PCA
+  pca_scores <- stats::prcomp(X1, rank. = 2)$x
+  proc_pca <- vegan::procrustes(as.matrix(Z), as.matrix(pca_scores), symmetric = FALSE)
+  err_pca <- proc_pca$ss
+
+  expect_lt(err, 1.2 * err_pca)        # allow 20% slack vs PCA
+  expect_gt(cor_lat, 0.8)              # correlation with latent coordinates should be strong
+})

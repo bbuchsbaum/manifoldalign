@@ -35,7 +35,8 @@
 multiblock_biprojector object with multi-graph alignment results
 }
 \description{
-Internal function that implements the iterative multi-graph alignment algorithm.
+Internal function that implements the iterative multi-graph
+alignment algorithm.
 Uses the helper functions from the pairwise implementation.
 }
 \keyword{internal}

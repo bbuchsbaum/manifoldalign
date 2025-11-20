@@ -2,21 +2,74 @@
 % Please edit documentation in R/all_generic.R, R/parrot.R
 \name{parrot}
 \alias{parrot}
+\alias{parrot.hyperdesign}
+\alias{parrot.default}
 \title{Position-Aware Random Transport (PARROT) Network Alignment}
 \usage{
 parrot(data, anchors, ...)
 
 parrot(data, anchors, ...)
+
+\method{parrot}{hyperdesign}(
+  data,
+  anchors,
+  preproc = center(),
+  ncomp = NULL,
+  sigma = 0.15,
+  lambda = 0.1,
+  lambda_e = NULL,
+  lambda_n = NULL,
+  lambda_p = NULL,
+  tau = 0.05,
+  alpha = 0.2,
+  gamma = 0.1,
+  solver = c("sinkhorn", "exact"),
+  max_iter = 100,
+  tol = 1e-06,
+  use_cpp = FALSE,
+  verbose = FALSE,
+  ...
+)
+
+\method{parrot}{default}(data, anchors, ...)
 }
 \arguments{
-\item{data}{Input data object containing network domains}
+\item{data}{A hyperdesign object containing multiple network domains}
 
-\item{anchors}{Name of anchor/correspondence variable for semi-supervised alignment}
+\item{anchors}{Name of the anchor/correspondence variable for semi-supervised alignment}
 
-\item{...}{Additional arguments passed to specific methods. See 
-\code{\link{parrot.hyperdesign}} for details on method-specific parameters 
-such as \code{preproc}, \code{ncomp}, \code{sigma}, \code{lambda}, 
-\code{tau}, \code{solver}, \code{max_iter}, \code{tol}, and \code{use_cpp}}
+\item{...}{Additional arguments (currently unused)}
+
+\item{preproc}{Preprocessing function to apply to the data (default: center())}
+
+\item{ncomp}{Number of latent dimensions for barycenter (default: NULL, auto-determine)}
+
+\item{sigma}{RWR restart probability and diffusion parameter (default: 0.15)}
+
+\item{lambda}{Overall consistency regularization weight (default: 0.1). Can also specify
+lambda_e, lambda_n, lambda_p separately for fine control}
+
+\item{lambda_e}{Edge consistency weight (default: lambda * 0.5)}
+
+\item{lambda_n}{Neighborhood consistency weight (default: lambda * 0.5)}
+
+\item{lambda_p}{Anchor prior weight (default: lambda * 0.1)}
+
+\item{tau}{Entropy regularization parameter for Sinkhorn (default: 0.01)}
+
+\item{alpha}{Weight for feature vs RWR cost in Sylvester equation (default: 0.5)}
+
+\item{gamma}{Cross-graph mixing parameter for Sylvester iteration (default: 0.1)}
+
+\item{solver}{Transport solver: "sinkhorn" for entropic (default), "exact" for unregularized}
+
+\item{max_iter}{Maximum number of iterations (default: 100)}
+
+\item{tol}{Convergence tolerance (default: 1e-6)}
+
+\item{use_cpp}{Whether to use C++ optimizations (default: FALSE)}
+
+\item{verbose}{Logical flag to print progress information during fitting}
 }
 \value{
 A \code{multiblock_biprojector} object containing:
@@ -38,13 +91,18 @@ A \code{multiblock_biprojector} object containing:
   \item \code{sdev}: Standard deviations of aligned components
   \item Additional metadata for reconstruction and validation
 }
+
+A multiblock_biprojector object containing the PARROT alignment results
 }
 \description{
 Performs PARROT alignment on hyperdesign data structures. Aligns networks
 using regularized optimal transport with position-aware features and consistency constraints.
 
-Performs PARROT alignment on hyperdesign data structures. Aligns networks
-using regularized optimal transport with position-aware features and consistency constraints.
+Performs PARROT alignment on hyperdesign data structures. Aligns
+networks using regularized optimal transport with position-aware
+features and consistency constraints.
+
+Performs PARROT alignment on hyperdesign data structures containing network domains.
 }
 \details{
 PARROT tackles network alignment by formulating it as a regularized optimal transport
@@ -75,18 +133,23 @@ Key parameters:
   \item \code{solver}: Transport solver ("sinkhorn" or "exact")
 }
 
-PARROT tackles network alignment by formulating it as a regularized optimal transport
-problem. The method incorporates position-aware features through Random Walk with Restart
-(RWR) descriptors and enforces structural consistency through neighborhood-preserving
+PARROT tackles network alignment by formulating it as a regularized
+optimal transport problem. The method incorporates position-aware
+features through Random Walk with Restart (RWR) descriptors and
+enforces structural consistency through neighborhood-preserving
 regularization terms.
 
 
 PARROT operates through the following algorithmic components:
 \itemize{
-  \item \strong{Position-Aware Features}: Compute RWR descriptors capturing network position
-  \item \strong{Cross-Network Cost}: Build transport cost matrix between networks
-  \item \strong{Consistency Regularization}: Add structural similarity constraints
-  \item \strong{Optimal Transport}: Solve regularized transport problem via Sinkhorn
+  \item \strong{Position-Aware Features}: Compute RWR descriptors
+    capturing network position
+  \item \strong{Cross-Network Cost}: Build transport cost matrix between
+    networks
+  \item \strong{Consistency Regularization}: Add structural similarity
+    constraints
+  \item \strong{Optimal Transport}: Solve regularized transport problem via
+    Sinkhorn
 }
 
 The algorithm minimizes the objective:

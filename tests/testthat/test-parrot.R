@@ -431,13 +431,15 @@ test_that("PARROT achieves good performance on aligned networks", {
     eval_result <- evaluate_transport_plan(result$transport_plan, permutation)
     results_summary[[scenario_name]] <- eval_result
     
-    # Expect reasonable performance based on difficulty (relaxed thresholds for current implementation)
+    # Expect accuracy comfortably above random for each difficulty level.
+    # Thresholds are calibrated to current stable behavior but still stricter
+    # than the original very relaxed values.
     if (scenario_name == "easy") {
-      expect_gt(eval_result$accuracy, 0.2)  # Relaxed from 0.5
+      expect_gt(eval_result$accuracy, 0.4)
     } else if (scenario_name == "medium") {
-      expect_gt(eval_result$accuracy, 0.15) # Relaxed from 0.3
+      expect_gt(eval_result$accuracy, 0.2)
     } else {
-      expect_gt(eval_result$accuracy, 0.05) # Relaxed from 0.1
+      expect_gt(eval_result$accuracy, 0.1)
     }
   }
   

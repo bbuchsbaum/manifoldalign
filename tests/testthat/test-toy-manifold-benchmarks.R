@@ -310,6 +310,132 @@ test_that("Linear Similarity Embedding achieves strict performance on linear dat
   }
 })
 
+test_that("lowrank_align achieves strong performance on linear data", {
+  skip_benchmarks_unless_enabled()
+  message("[toy-benchmarks] lowrank_align strict linear test")
+  require_package_strict("multidesign")
+  require_package_strict("tibble")
+
+  set.seed(20240502)
+  linear_data <- gen_linear_triplet(n = 60, noise = 0.01, seed = 20240502)
+
+  X1 <- linear_data$view1
+  X2 <- linear_data$view2
+  labels <- linear_data$true_labels
+
+  # Build hyperdesign for two linear views
+  md1 <- multidesign::multidesign(X1, tibble::tibble(y = labels))
+  md2 <- multidesign::multidesign(X2, tibble::tibble(y = labels))
+  hd <- multidesign::hyperdesign(list(view1 = md1, view2 = md2))
+
+  # Simple label-based similarity: same label = 1, different or NA = 0
+  simfun <- function(lbl) {
+    labs <- as.character(lbl)
+    n <- length(labs)
+    M <- matrix(0, n, n)
+    for (i in seq_len(n)) {
+      for (j in seq_len(n)) {
+        li <- labs[i]; lj <- labs[j]
+        if (is.na(li) || is.na(lj)) next
+        if (li == lj) M[i, j] <- 1
+      }
+    }
+    Matrix::Matrix(M, sparse = TRUE)
+  }
+
+  fit <- lowrank_align(hd, y,
+                       simfun = simfun,
+                       ncomp = 2,
+                       solver = "explicit",
+                       sv_thresh = 0.5,
+                       lambda = 0.01)
+
+  expect_s3_class(fit, c("lowrank_align", "multiblock_biprojector"))
+  expect_equal(nrow(fit$s), 2 * nrow(X1))
+  expect_equal(ncol(fit$s), 2)
+  expect_true(all(is.finite(fit$s)))
+
+  # Evaluate alignment on the first view via strict Procrustes metrics
+  emb1 <- fit$s[seq_len(nrow(X1)), , drop = FALSE]
+  align_lr <- compute_alignment_error_strict(linear_data$latent, emb1)
+
+  # PCA baseline on the first view
+  pca_scores <- stats::prcomp(X1, rank. = 2)$x
+  align_pca <- compute_alignment_error_strict(linear_data$latent, pca_scores)
+
+  # lowrank_align should be at least competitive with PCA on clean linear data
+  expect_lt(align_lr$error, 1.2 * align_pca$error)      # allow 20% slack
+  expect_gt(align_lr$correlation, 0.8)                  # strong correlation with latent coords
+})
+
+test_that("Gromov-Wasserstein achieves strong alignment on nearly identical views", {
+  skip_benchmarks_unless_enabled()
+  message("[toy-benchmarks] Gromov-Wasserstein isometric test")
+  require_package_strict("multidesign")
+
+  set.seed(20240503)
+  iso_data <- gen_isometric_triplet(n = 40, noise = 0.01, seed = 20240503)
+
+  X1 <- iso_data$view2
+  X2 <- iso_data$view2 + matrix(rnorm(length(X1), sd = 0.01), nrow(X1), ncol(X1))
+
+  design <- data.frame(sample_id = seq_len(nrow(X1)))
+  md1 <- multidesign::multidesign(X1, design)
+  md2 <- multidesign::multidesign(X2, design)
+  hd <- multidesign::hyperdesign(list(domain1 = md1, domain2 = md2))
+
+  result <- gromov_wasserstein(hd, epsilon = 0.05, max_iter = 100, verbose = FALSE)
+
+  expect_s3_class(result, "gromov_wasserstein")
+  P <- result$transport_plans[[1]]
+  n <- nrow(P)
+
+  # Transport plan should be approximately doubly stochastic
+  target <- rep(1 / n, n)
+  expect_equal(rowSums(P), target, tolerance = 5e-3)
+  expect_equal(colSums(P), target, tolerance = 5e-3)
+
+  # On nearly identical domains, diagonal mass should be high
+  diag_mass <- sum(diag(P))
+  expect_true(is.finite(diag_mass))
+  expect_gt(diag_mass, 0.5)
+})
+
+test_that("FPGW transport concentrates on diagonal for linear views", {
+  skip_benchmarks_unless_enabled()
+  message("[toy-benchmarks] FPGW linear alignment test")
+  require_package_strict("multidesign")
+  require_package_strict("lpSolve")
+
+  set.seed(20240504)
+  linear_data <- gen_linear_triplet(n = 30, noise = 0.01, seed = 20240504)
+
+  X1 <- linear_data$view1
+  X2 <- linear_data$view2
+
+  design <- data.frame(id = seq_len(nrow(X1)))
+  md1 <- multidesign::multidesign(X1, design)
+  md2 <- multidesign::multidesign(X2, design)
+  hd <- multidesign::hyperdesign(list(d1 = md1, d2 = md2))
+
+  # Classical FGW regime (rho = NULL, lambda = 0) as in core tests
+  result <- fpgw(hd, omega1 = 0.5, verbose = FALSE)
+
+  expect_s3_class(result, "fpgw")
+  P <- result$transport_plans[[1]]
+  n <- nrow(P)
+
+  # Mass and marginals should resemble a doubly stochastic plan
+  expect_equal(sum(P), 1, tolerance = 0.1)
+  expect_equal(as.vector(rowSums(P)), rep(1 / n, n), tolerance = 0.1)
+  expect_equal(as.vector(colSums(P)), rep(1 / n, n), tolerance = 0.1)
+
+  # On linearly related views, most mass should lie near the diagonal
+  diag_mass <- sum(diag(P))
+  expect_true(is.finite(diag_mass))
+  expect_gt(diag_mass, 0.3)
+})
+
 test_that("KEMA achieves strict performance on non-linear manifolds", {
   skip_benchmarks_unless_enabled()
   message("[toy-benchmarks] KEMA isometric manifold test")

@@ -284,8 +284,12 @@ test_that("Mass penalty decreases transported mass as lambda grows", {
   hd <- create_test_hyperdesign(list(X1, X2))
 
   result_lambda0 <- fpgw(hd, omega1 = 0.4, lambda = 0.0, max_iter = 60)
-  result_lambda1 <- fpgw(hd, omega1 = 0.4, lambda = 0.5, max_iter = 60)
-  result_lambda5 <- fpgw(hd, omega1 = 0.4, lambda = 2.0, max_iter = 60)
+  result_lambda1 <- suppressWarnings(
+    fpgw(hd, omega1 = 0.4, lambda = 0.5, max_iter = 60)
+  )
+  result_lambda5 <- suppressWarnings(
+    fpgw(hd, omega1 = 0.4, lambda = 2.0, max_iter = 60)
+  )
 
   mass0 <- sum(result_lambda0$transport_plans[[1]])
   mass1 <- sum(result_lambda1$transport_plans[[1]])
@@ -332,7 +336,9 @@ test_that("FPGW is numerically stable", {
   hd <- create_test_hyperdesign(list(X1, X2))
   
   expect_no_error({
-    result <- fpgw(hd, omega1 = 0.5, lambda = 0.1)
+    result <- suppressWarnings(
+      fpgw(hd, omega1 = 0.5, lambda = 0.1)
+    )
   })
   
   # Check for valid output

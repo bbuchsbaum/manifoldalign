@@ -294,3 +294,34 @@ test_that("fpgw out-of-sample transport approximates target samples", {
   transformed <- transform(fit, new_points, source_index = 1, target_index = 2, k = 2)
   expect_equal(dim(transformed), dim(new_points))
 })
+
+test_that("fpgw recovers simple 1D permutation structure", {
+  skip_if_not(have_multidesign, "multidesign not installed")
+  skip_if_not(have_lpSolve, "lpSolve not installed")
+
+  set.seed(20240506)
+  n <- 6
+  X1 <- matrix(seq_len(n), n, 1)
+  X2 <- matrix(rev(seq_len(n)), n, 1)
+
+  design <- data.frame(id = seq_len(n))
+  md1 <- multidesign::multidesign(X1, design)
+  md2 <- multidesign::multidesign(X2, design)
+  hd <- hyperdesign(list(d1 = md1, d2 = md2))
+
+  # Emphasize structural term to mimic pure GW behavior
+  result <- fpgw(hd, omega1 = 0.05, verbose = FALSE)
+
+  P <- result$transport_plans[[1]]
+  expect_equal(dim(P), c(n, n))
+  expect_gt(sum(P), 0)
+
+  true_perm <- rev(seq_len(n))
+  pred_perm <- apply(P, 1L, which.max)
+
+  acc <- mean(pred_perm == true_perm)
+  diag_mass <- sum(P[cbind(seq_len(n), true_perm)])
+
+  expect_gt(acc, 0.66)       # at least 4/6 positions correct
+  expect_gt(diag_mass, 0.4)  # substantial mass on correct permutation
+})
