@@ -125,16 +125,20 @@ grasp_fit <- function(strata, proc, ncomp, q_descriptors, sigma, lambda,
   # Compute scores (following package pattern)
   embed1 <- as.matrix(bases[[1]]$vectors)
   embed2 <- as.matrix(bases[[2]]$vectors %*% alignment_result$rotation %*% assignment_result$mapping_matrix)
-  perm <- assignment_result$assignment
+  perm <- as.integer(assignment_result$assignment)
   embed2_aligned <- embed2
-  valid <- perm > 0 & perm <= nrow(embed2)
-  if (any(valid)) {
-    inverse_perm <- rep(NA_integer_, nrow(embed2))
-    inverse_perm[perm[valid]] <- seq_along(perm)[valid]
-    target_idx <- which(!is.na(inverse_perm))
-    # Fix: Remove drop=FALSE from assignment (not needed, and causes parsing issues)
-    # The result is already a matrix, so drop behavior doesn't matter here
-    embed2_aligned[target_idx, ] <- embed2[inverse_perm[target_idx], ]
+  if (length(perm) == nrow(embed1)) {
+    # assignment maps rows in domain 1 to rows in domain 2, so reorder directly.
+    embed2_aligned <- matrix(0, nrow = nrow(embed1), ncol = ncol(embed2))
+    valid <- perm > 0L & perm <= nrow(embed2)
+    if (any(valid)) {
+      embed2_aligned[valid, ] <- embed2[perm[valid], , drop = FALSE]
+    }
+  } else if (length(perm) == nrow(embed2)) {
+    valid <- perm > 0L & perm <= nrow(embed2)
+    if (all(valid)) {
+      embed2_aligned <- embed2[perm, , drop = FALSE]
+    }
   }
   scores <- rbind(embed1, embed2_aligned)
   
@@ -444,7 +448,8 @@ align_grasp_bases <- function(basis1, basis2, desc1, desc2, lambda = 0.1,
 #' @keywords internal
 compute_grasp_assignment <- function(basis1, basis2, desc1, desc2, M, 
                                    distance_method = "cosine", 
-                                   solver_method = "linear") {
+                                   solver_method = "linear",
+                                   alpha = 0.85) {
   # Validation
   if (!distance_method %in% c("cosine", "euclidean")) {
     stop("distance_method must be 'cosine' or 'euclidean'", call. = FALSE)
@@ -452,6 +457,10 @@ compute_grasp_assignment <- function(basis1, basis2, desc1, desc2, M,
   
   if (!solver_method %in% c("linear", "hungarian", "auction")) {
     stop("solver_method must be 'linear', 'hungarian', or 'auction'", call. = FALSE)
+  }
+  if (!is.numeric(alpha) || length(alpha) != 1L || !is.finite(alpha) ||
+      alpha < 0 || alpha > 1) {
+    stop("alpha must be a finite scalar in [0, 1]", call. = FALSE)
   }
   
   # Block D: Functional correspondence with ridge regularization (your suggestion)
@@ -497,16 +506,15 @@ compute_grasp_assignment <- function(basis1, basis2, desc1, desc2, M,
     dm <- sqrt(pmax(outer(e1_sq, e2_sq, "+") - 2 * (embed1 %*% t(embed2)), 0))
     if (max(dm) > 0) dm <- dm / max(dm)
 
-    alpha <- 0.85
     cost_matrix <- alpha * cost_cos + (1 - alpha) * dm
   } else {
     # Efficient Euclidean distance computation
     embed1_sq_norms <- rowSums(embed1^2)
     embed2_sq_norms <- rowSums(embed2^2)
     cross_product <- embed1 %*% t(embed2)
-    
-    cost_matrix <- sqrt(outer(embed1_sq_norms, embed2_sq_norms, "+") - 2 * cross_product)
-    cost_matrix[cost_matrix < 0] <- 0  # Clamp negative values to preserve matrix structure
+
+    cost_sq <- outer(embed1_sq_norms, embed2_sq_norms, "+") - 2 * cross_product
+    cost_matrix <- sqrt(pmax(cost_sq, 0))
   }
   
   # Assignment solver with auction option (your suggestion)

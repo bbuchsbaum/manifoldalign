@@ -138,6 +138,26 @@ grasp_multiset.hyperdesign <- function(data,
 
   # Augmented features used only for assignments
   assignment_features <- lapply(seq_len(m), function(s) embeddings[[s]])
+
+  permutation_alignment_score <- function(perm, cost_matrix) {
+    perm <- as.integer(perm)
+    n_rows <- nrow(cost_matrix)
+    if (length(perm) != n_rows) {
+      return(Inf)
+    }
+    valid <- perm > 0L & perm <= ncol(cost_matrix)
+    if (!any(valid)) {
+      return(Inf)
+    }
+    idx <- which(valid)
+    base <- mean(cost_matrix[cbind(idx, perm[idx])])
+    penalty_scale <- suppressWarnings(max(cost_matrix[is.finite(cost_matrix)], na.rm = TRUE))
+    if (!is.finite(penalty_scale)) {
+      penalty_scale <- 1
+    }
+    invalid_penalty <- (sum(!valid) / length(valid)) * (penalty_scale + 1)
+    base + invalid_penalty
+  }
   
   # Assignments - compute permutations to anchor
   # anchor_idx already resolved earlier
@@ -162,7 +182,8 @@ grasp_multiset.hyperdesign <- function(data,
           bases[[anchor_idx]], bases[[s]],
           descriptors[[anchor_idx]], descriptors[[s]],
           rotations[[s]], distance_method = "cosine",
-          solver_method = if (identical(solver, "auction")) "auction" else "linear"
+          solver_method = if (identical(solver, "auction")) "auction" else "linear",
+          alpha = assignment_alpha
         )
         pair_eu <- compute_grasp_assignment(
           bases[[anchor_idx]], bases[[s]],
@@ -181,25 +202,33 @@ grasp_multiset.hyperdesign <- function(data,
           error = function(e) solve_lsap_with_padding(feature_cost, method = NULL)
         )
 
-        # Choose lower average assignment cost among candidates
-        idx <- seq_len(nrow(pair_cos$cost_matrix))
-        mean_cos <- mean(pair_cos$cost_matrix[cbind(idx, as.integer(pair_cos$assignment))])
-        mean_eu <- mean(pair_eu$cost_matrix[cbind(idx, as.integer(pair_eu$assignment))])
-        mean_feat <- mean(feature_cost[cbind(idx, as.integer(feature_assign))])
-
-        if (is.finite(mean_feat) && mean_feat + 1e-9 < min(mean_cos, mean_eu)) {
+        candidates <- list(
+          as.integer(pair_cos$assignment),
+          as.integer(pair_eu$assignment),
           as.integer(feature_assign)
-        } else if (is.finite(mean_eu) && mean_eu + 1e-9 < mean_cos) {
-          as.integer(pair_eu$assignment)
-        } else {
-          as.integer(pair_cos$assignment)
-        }
+        )
+        common_cost <- compute_assignment_cost(
+          assignment_features[[anchor_idx]],
+          assignment_features[[s]],
+          distance = "cosine",
+          alpha = assignment_alpha
+        )
+        scores <- vapply(
+          candidates,
+          permutation_alignment_score,
+          numeric(1),
+          cost_matrix = common_cost
+        )
+        candidates[[which.min(scores)]]
       }
     })
 
+    embeddings_aligned <- align_embeddings_to_anchor(embeddings, permutations, anchor_idx)
+
     return(structure(
       list(
-        embeddings = embeddings,
+        embeddings = embeddings_aligned,
+        embeddings_raw = embeddings,
         assignment_embeddings = assignment_features,
         permutations = permutations,
         rotations = rotations,
@@ -322,10 +351,13 @@ grasp_multiset.hyperdesign <- function(data,
     }
   })
 
+  embeddings_aligned <- align_embeddings_to_anchor(embeddings, permutations, anchor_idx)
+
   # Return grasp_multiset object
   structure(
     list(
-      embeddings = embeddings,
+      embeddings = embeddings_aligned,
+      embeddings_raw = embeddings,
       assignment_embeddings = assignment_features,
       permutations = permutations,
       rotations = rotations,
@@ -444,6 +476,8 @@ align_bases_multiset <- function(bases, descriptors, lambda,
   prev_obj <- compute_objective()
 
   for (iter in seq_len(max_iter)) {
+    obj_start_iter <- prev_obj
+    cur_obj <- obj_start_iter
     for (s in seq_len(m)) {
       grad <- gradient_single_multiset(
         basis_s = bases[[s]],
@@ -472,8 +506,8 @@ align_bases_multiset <- function(bases, descriptors, lambda,
         Ms[[s]] <- M_trial
         new_obj <- compute_objective()
 
-        if (is.finite(new_obj) && new_obj < prev_obj) {
-          prev_obj <- new_obj
+        if (is.finite(new_obj) && new_obj < cur_obj) {
+          cur_obj <- new_obj
           break
         } else {
           Ms[[s]] <- M_old
@@ -482,8 +516,7 @@ align_bases_multiset <- function(bases, descriptors, lambda,
       }
     }
 
-    cur_obj <- compute_objective()
-    rel <- abs(prev_obj - cur_obj) / max(1, prev_obj)
+    rel <- abs(obj_start_iter - cur_obj) / max(1, abs(obj_start_iter))
     if (iter > 5 && rel < tol) {
       message("Joint alignment converged after ", iter, " iterations")
       return(list(rotations = Ms, iterations = iter, converged = TRUE))
@@ -638,4 +671,24 @@ compute_assignment_cost <- function(E_source, E_target, distance = "cosine",
     e2 <- rowSums(E_target^2)
     sqrt(pmax(outer(e1, e2, "+") - 2 * (E_source %*% t(E_target)), 0))
   }
+}
+
+align_embeddings_to_anchor <- function(embeddings, permutations, anchor_idx) {
+  n_anchor <- nrow(embeddings[[anchor_idx]])
+  lapply(seq_along(embeddings), function(s) {
+    if (s == anchor_idx) {
+      return(as.matrix(embeddings[[s]]))
+    }
+    emb <- as.matrix(embeddings[[s]])
+    perm <- as.integer(permutations[[s]])
+    if (length(perm) != n_anchor) {
+      return(emb)
+    }
+    out <- matrix(0, nrow = n_anchor, ncol = ncol(emb))
+    valid <- perm > 0L & perm <= nrow(emb)
+    if (any(valid)) {
+      out[valid, ] <- emb[perm[valid], , drop = FALSE]
+    }
+    out
+  })
 }
