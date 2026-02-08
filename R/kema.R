@@ -248,8 +248,9 @@ class_medoids <- function(X, L) {
 #' @noRd
 compute_local_similarity <- function(strata, y, knn, weight_mode, type, sigma, repulsion=TRUE) {
   y <- rlang::enquo(y)
+  y_name <- rlang::as_name(y)
   Sl <- purrr::map(strata, function(x) {
-    labs <- x$design %>% select(!!y) %>% pull(!!y)
+    labs <- x$design[[y_name]]
     
     # SEMI-SUPERVISED: Handle missing labels
     # neighborweights functions can handle NA values in labels
@@ -285,7 +286,15 @@ compute_local_similarity <- function(strata, y, knn, weight_mode, type, sigma, r
       })
       list(G=neighborweights::adjacency(g), R=neighborweights::adjacency(r))
     } else {
-      list(G=neighborweights::adjacency(g), R=sparseMatrix(length(labs), length(labs)))
+      list(
+        G = neighborweights::adjacency(g),
+        R = Matrix::sparseMatrix(
+          i = integer(0),
+          j = integer(0),
+          x = numeric(0),
+          dims = c(length(labs), length(labs))
+        )
+      )
     }
     
     
@@ -380,10 +389,11 @@ compute_laplacians <- function(Ws, Wr, W, Wd, use_laplacian) {
 #' @keywords internal
 compute_between_graph <- function(strata, y, dfun=NULL) {
   y <- rlang::enquo(y)
+  y_name <- rlang::as_name(y)
   
   if (is.null(dfun)) {
     dlabels <- lapply(strata, function(s) {
-      labs <- s$design %>% select(!!y) %>% pull(!!y)
+      labs <- s$design[[y_name]]
     
       # Only compute medoids for labeled samples
       non_missing_mask <- !is.na(labs)
@@ -432,7 +442,7 @@ compute_between_graph <- function(strata, y, dfun=NULL) {
     neighborweights::binary_label_matrix(all_dlabels, all_dlabels, type="d")
   } else {
     dlabels <- unlist(lapply(strata, function(s) {
-      s$design %>% select(!!y) %>% pull(!!y)
+      s$design[[y_name]]
     }))
     
     # Pass labels with NAs to custom function
@@ -681,8 +691,6 @@ kema.multidesign <- function(data, y,
   
   subject <- rlang::enquo(subject)
   y <- rlang::enquo(y)
-  subjects <- factor(data$design %>% select(!!subject) %>% pull(!!subject))
-  subject_set <- levels(subjects)
   
   strata <- multidesign::hyperdesign(split(data, subject))
   kema.hyperdesign(strata, !!y, preproc, ncomp, knn, sigma, u, kernel, 
@@ -712,7 +720,7 @@ kema.multidesign <- function(data, y,
 #' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
 #' @param solver Solver method: "regression" for fast approximation (default) 
 #'   or "exact" for precise solution
-#' @param dweight Weight for dissimilarity/repulsion terms (default: 0)
+#' @param dweight Weight for dissimilarity/repulsion terms (default: 0.1)
 #' @param rweight Weight for repulsion graph (default: 0)
 #' @param simfun Function to compute similarity between labels
 #' @param disfun Function to compute dissimilarity between labels (optional)
@@ -802,7 +810,7 @@ kema.hyperdesign <- function(data, y,
                              sample_frac=1,
                              use_laplacian=TRUE, 
                              solver="regression",
-                             dweight=0,
+                             dweight=.1,
                              rweight=0,
                              simfun=neighborweights::binary_label_matrix,
                              disfun=NULL,
@@ -845,11 +853,26 @@ kema.hyperdesign <- function(data, y,
   y_char <- rlang::as_name(y)
   
   # Manually apply preprocessing to each domain
-  proc_template <- multivarious::prep(preproc)
   pdata <- data
-  proclist <- list()
-  
+  proclist <- vector("list", length(data))
+
+  is_stateful_preproc <- inherits(preproc, "prepper") || inherits(preproc, "pre_processor")
+  if (is_stateful_preproc) {
+    preproc_list <- replicate(
+      length(data),
+      unserialize(serialize(preproc, connection = NULL)),
+      simplify = FALSE
+    )
+  } else {
+    preproc_list <- rep(list(preproc), length(data))
+  }
+
   for (i in seq_along(data)) {
+    pre_i <- preproc_list[[i]]
+    if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
+      pre_i <- unserialize(serialize(pre_i, connection = NULL))
+    }
+    proc_template <- multivarious::prep(pre_i)
     transformed_x <- multivarious::init_transform(proc_template, data[[i]]$x)
     pdata[[i]]$x <- transformed_x
     # Store the processor - use the attribute if available, otherwise use the template
@@ -1650,15 +1673,6 @@ kema_landmark_solver <- function(strata, Z, Ks, Lap, kernel_indices, solver, nco
       eigenvalue_info <- result$eigenvalues
     }
     
-    # FAIL-SOFT GUARD: Assess regression quality for REKEMA
-    quality <- assess_regression_quality(Y_mat, Y_hat_mat, "REKEMA regression")
-    regression_quality <- list(
-      is_poor = quality$is_poor,
-      subspace_distance = quality$distance,
-      best_match = quality$best_match,
-      angle_deg = quality$angle_deg
-    )
-    
     # Enhanced quality check using rotation-invariant subspace metric for REKEMA
     Z <- as(Z, "dgCMatrix")
     Y_hat <- Z %*% vectors
@@ -1682,6 +1696,15 @@ kema_landmark_solver <- function(strata, Z, Ks, Lap, kernel_indices, solver, nco
            angle_deg = max_angle * 180 / pi)
     }, "Could not compute REKEMA regression quality", 
     warning_fn = function(w) { list(distance = 0, best_match = 1.0, angle_deg = 0) })
+    
+    # FAIL-SOFT GUARD: Assess regression quality for REKEMA
+    quality <- assess_regression_quality(Y_mat, Y_hat_mat, "REKEMA regression")
+    regression_quality <- list(
+      is_poor = quality$is_poor,
+      subspace_distance = quality$distance,
+      best_match = quality$best_match,
+      angle_deg = quality$angle_deg
+    )
     
     if (is.finite(subspace_quality$distance) && subspace_quality$distance > 0.1) {
       k_rank <- safe_compute(Matrix::rankMatrix(Z)[1], "rank computation failed", 
@@ -1749,6 +1772,10 @@ kema_landmark_solver <- function(strata, Z, Ks, Lap, kernel_indices, solver, nco
     } else {
       rcond_B <- safe_compute(Matrix::rcond(B_reduced), "rcond failed", 
                               warning_fn = function(w) { 1.0 })
+      rcond_B <- suppressWarnings(as.numeric(rcond_B))
+      if (length(rcond_B) != 1L || !is.finite(rcond_B)) {
+        rcond_B <- 0
+      }
       
       if (rcond_B < 1e-12) {
         reg_amount <- max(lambda_scaled, 1e-8)

@@ -51,3 +51,19 @@ fit_many.cone_multi_aligner <- function(algo, domains, ...) {
   stop("cone_multi_aligner: fit_many expects a hyperdesign or list of matrices.")
 }
 
+#' Global geometry aligner (native multi-view)
+#' @export
+global_geo_aligner <- function() {
+  new_aligner("global_geo", group = "GL", supports_multi = TRUE)
+}
+
+#' @export
+fit_many.global_geo_aligner <- function(algo, domains, ...) {
+  if (inherits(domains, "hyperdesign")) {
+    return(global_geo_align(domains, ...))
+  }
+  if (is.list(domains) && all(vapply(domains, is.matrix, logical(1)))) {
+    return(global_geo_align(domains, ...))
+  }
+  stop("global_geo_aligner: fit_many expects a hyperdesign or list of matrices.")
+}
