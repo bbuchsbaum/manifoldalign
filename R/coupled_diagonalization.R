@@ -24,6 +24,10 @@
 #' @param knn Number of nearest neighbors for graph construction (default: 10)
 #' @param sigma Gaussian kernel bandwidth for graph weights. If NULL (default), 
 #'   uses median of nearest neighbor distances.
+#' @param spectral_cache Optional precomputed spectral cache to reuse
+#'   Laplacian subspaces across repeated runs (for example
+#'   \code{previous_fit$diagnostics$spectral_cache}). When supplied,
+#'   graph/Laplacian/eigendecomposition steps are skipped.
 #' @param max_iter Maximum iterations for Stiefel manifold optimization
 #'   (default: 200)
 #' @param step_size Base step size for gradient descent (default: 0.3)
@@ -53,22 +57,23 @@
 #' 
 #' It uses projected gradient descent on the Stiefel manifold to maintain
 #' orthogonality of the coupling matrices A_i.
-#' When \code{alpha_match > 0}, the diagonal term also nudges the joint modes
-#' toward user-specified target eigenvalues as described in Eynard et al. (2015, Eq. 9).
+#' When \code{alpha_match > 0}, the optional match term nudges the diagonal
+#' entries of \code{A_i^T Lambda_i A_i} toward user-specified target eigenvalues
+#' (without adding extra off-diagonal penalty).
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' library(multidesign)
 #' # Create synthetic multi-modal data
 #' X1 <- matrix(rnorm(150), 50, 3)
 #' X2 <- matrix(rnorm(200), 50, 4)
-#' 
+#'
 #' # Create hyperdesign
 #' hd <- hyperdesign(list(
 #'   domain1 = multidesign(X1, data.frame(id = 1:50)),
 #'   domain2 = multidesign(X2, data.frame(id = 1:50))
 #' ))
-#' 
+#'
 #' # Run coupled diagonalization
 #' result <- coupled_diagonalization(hd, ncomp = 3)
 #' }
@@ -94,6 +99,7 @@ coupled_diagonalization.hyperdesign <- function(data,
                                               lambda_target = NULL,
                                               knn = 10,
                                               sigma = NULL,
+                                              spectral_cache = NULL,
                                               max_iter = 200,
                                               step_size = 0.3,
                                               tol = 1e-6,
@@ -123,6 +129,7 @@ coupled_diagonalization.hyperdesign <- function(data,
   if (m < 2) {
     stop("Coupled diagonalization requires at least 2 domains", call. = FALSE)
   }
+  user_lambda_target_supplied <- !is.null(lambda_target)
   if (!is.null(lambda_target)) {
     if (!is.list(lambda_target) || length(lambda_target) != m) {
       stop("lambda_target must be a list with one element per domain", call. = FALSE)
@@ -136,9 +143,76 @@ coupled_diagonalization.hyperdesign <- function(data,
   }
   
   # Apply preprocessing to each domain
-  pdata <- multivarious::init_transform(data, preproc)
-  proclist <- attr(pdata, "preproc")
-  
+  pdata <- data
+  nb <- m
+
+  if (is.null(preproc)) {
+    proclist <- rep(list(NULL), nb)
+    for (i in seq_len(nb)) {
+      pdata[[i]]$x <- as.matrix(pdata[[i]]$x)
+    }
+  } else {
+    is_stateful_preproc <- inherits(preproc, "prepper") || inherits(preproc, "pre_processor")
+    broadcast_preproc <- is.function(preproc) || is_stateful_preproc
+    if (broadcast_preproc) {
+      if (is_stateful_preproc) {
+        preproc <- replicate(
+          nb,
+          unserialize(serialize(preproc, connection = NULL)),
+          simplify = FALSE
+        )
+      } else {
+        preproc <- rep(list(preproc), nb)
+      }
+    } else if (is.list(preproc) && length(preproc) != nb) {
+      stop(
+        "Length of `preproc` list (",
+        length(preproc),
+        ") must match number of domains (",
+        nb,
+        ").",
+        call. = FALSE
+      )
+    }
+
+    proclist <- vector("list", nb)
+    for (i in seq_len(nb)) {
+      Xi <- as.matrix(data[[i]]$x)
+      pre_i <- preproc[[i]]
+
+      if (is.null(pre_i)) {
+        pdata[[i]]$x <- Xi
+        proclist[[i]] <- NULL
+        next
+      }
+
+      # Functions are applied directly (avoid deprecated multivarious::prep()).
+      if (is.function(pre_i)) {
+        Xi_tf <- pre_i(Xi)
+        pdata[[i]]$x <- Xi_tf
+        proclist[[i]] <- pre_i
+        next
+      }
+
+      if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
+        pre_i <- unserialize(serialize(pre_i, connection = NULL))
+      }
+
+      if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
+        ft <- multivarious::fit_transform(pre_i, Xi)
+        pdata[[i]]$x <- ft$transformed
+        proclist[[i]] <- ft$preproc
+      } else {
+        # Back-compat for older multivarious versions
+        templ <- multivarious::prep(pre_i)
+        Xi_tf <- multivarious::init_transform(templ, Xi)
+        pdata[[i]]$x <- Xi_tf
+        proc_attr <- attr(Xi_tf, "preproc")
+        proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
+      }
+    }
+  }
+
   names(proclist) <- names(pdata)
   
   # Get sample block indices using the exported function
@@ -198,142 +272,170 @@ coupled_diagonalization.hyperdesign <- function(data,
     }
   }
   
-  # Build graph Laplacians using neighborweights
-  if (verbose) message("Building graph Laplacians...")
-  
-  Laplacians <- vector("list", m)
+  used_spectral_cache <- !is.null(spectral_cache)
   eigendecomps <- vector("list", m)
   
-  for (i in seq_len(m)) {
-    domain_name <- if (!is.null(names(data)) && length(names(data)) >= i) {
-      names(data)[i]
-    } else {
-      paste0("domain_", i)
-    }
-    # Use neighborweights for consistency with package
-    W_graph <- neighborweights::graph_weights(X_list[[i]], 
-                                            k = knn,
-                                            weight_mode = "heat",
-                                            sigma = sigma)
-    W <- neighborweights::adjacency(W_graph)
-    # Symmetrize weights in case the builder returned a directed graph
-    W <- 0.5 * (W + Matrix::t(W))
-    Matrix::diag(W) <- 0
+  if (!used_spectral_cache) {
+    # Build graph Laplacians using neighborweights
+    if (verbose) message("Building graph Laplacians...")
     
-    # Compute normalized Laplacian
-    d <- Matrix::rowSums(W)
-    d[d == 0] <- 1
-    Dm12 <- Matrix::Diagonal(x = 1 / sqrt(d))
-    L <- Matrix::forceSymmetric(Matrix::Diagonal(nrow(W)) - Dm12 %*% W %*% Dm12)
-    
-    # Store Laplacian
-    Laplacians[[i]] <- L
-    
-    # Compute eigendecomposition
-    # Request one additional eigenpair so we can drop the trivial λ≈0 mode
-    n_eigs_total <- min(ncomp_per_domain + 1L, nrow(L))
-    eig <- tryCatch({
-      if (requireNamespace("RSpectra", quietly = TRUE) && n_eigs_total < nrow(L)) {
-        RSpectra::eigs_sym(L, n_eigs_total, which = "SM")
-      } else if (n_eigs_total < nrow(L) / 2 && nrow(L) > 50) {
-        PRIMME::eigs_sym(L, NEig = n_eigs_total, which = "SA",
-                        method = "PRIMME_DEFAULT_MIN_MATVECS")
+    for (i in seq_len(m)) {
+      domain_name <- if (!is.null(names(data)) && length(names(data)) >= i) {
+        names(data)[i]
       } else {
+        paste0("domain_", i)
+      }
+      # Use neighborweights for consistency with package
+      W_graph <- neighborweights::graph_weights(X_list[[i]],
+                                              k = knn,
+                                              weight_mode = "heat",
+                                              sigma = sigma)
+      W <- neighborweights::adjacency(W_graph)
+      # Symmetrize weights in case the builder returned a directed graph
+      W <- 0.5 * (W + Matrix::t(W))
+      Matrix::diag(W) <- 0
+      
+      # Compute normalized Laplacian
+      d <- Matrix::rowSums(W)
+      d[d == 0] <- 1
+      Dm12 <- Matrix::Diagonal(x = 1 / sqrt(d))
+      L <- Matrix::forceSymmetric(Matrix::Diagonal(nrow(W)) - Dm12 %*% W %*% Dm12)
+      
+      # Compute eigendecomposition
+      # Request one additional eigenpair so we can drop the trivial λ≈0 mode
+      n_eigs_total <- min(ncomp_per_domain + 1L, nrow(L))
+      eig <- tryCatch({
+        if (requireNamespace("RSpectra", quietly = TRUE) && n_eigs_total < nrow(L)) {
+          RSpectra::eigs_sym(L, n_eigs_total, which = "SM")
+        } else if (n_eigs_total < nrow(L) / 2 && nrow(L) > 50) {
+          PRIMME::eigs_sym(L, NEig = n_eigs_total, which = "SA",
+                          method = "PRIMME_DEFAULT_MIN_MATVECS")
+        } else {
+          eig_full <- eigen(as.matrix(L), symmetric = TRUE)
+          idx <- order(eig_full$values)[seq_len(n_eigs_total)]
+          list(
+            vectors = eig_full$vectors[, idx, drop = FALSE],
+            values = eig_full$values[idx]
+          )
+        }
+      }, error = function(e) {
+        if (verbose) message("Sparse eigensolver failed, using base eigen: ", e$message)
         eig_full <- eigen(as.matrix(L), symmetric = TRUE)
         idx <- order(eig_full$values)[seq_len(n_eigs_total)]
         list(
           vectors = eig_full$vectors[, idx, drop = FALSE],
           values = eig_full$values[idx]
         )
+      })
+      
+      ord <- order(eig$values)
+      vals <- eig$values[ord]
+      vecs <- eig$vectors[, ord, drop = FALSE]
+      non_trivial <- vals > 1e-12
+      if (!any(non_trivial)) {
+        stop("No non-trivial Laplacian eigenvalues found for domain ", domain_name,
+             call. = FALSE)
       }
-    }, error = function(e) {
-      if (verbose) message("Sparse eigensolver failed, using base eigen: ", e$message)
-      eig_full <- eigen(as.matrix(L), symmetric = TRUE)
-      idx <- order(eig_full$values)[seq_len(n_eigs_total)]
-      list(
-        vectors = eig_full$vectors[, idx, drop = FALSE],
-        values = eig_full$values[idx]
+      keep <- head(which(non_trivial), ncomp_per_domain)
+      if (length(keep) < ncomp_per_domain) {
+        warning("Domain ", domain_name, ": only ", length(keep),
+                " non-trivial eigenvectors available; reducing ncomp_per_domain.",
+                call. = FALSE)
+      }
+      keep <- keep[keep <= ncol(vecs)]
+      U_i <- vecs[, keep, drop = FALSE]
+      lambda_i <- vals[keep]
+      # Normalize spectra so diagonalization terms are comparable across domains
+      lambda_ref_idx <- max(1L, min(length(lambda_i), ncomp))
+      lambda_ref <- lambda_i[lambda_ref_idx]
+      scale_factor <- max(lambda_ref, 1e-8)
+      lambda_i <- lambda_i / scale_factor
+      attr(lambda_i, "scale_factor") <- scale_factor
+      
+      eigendecomps[[i]] <- list(
+        vectors = U_i,
+        values = lambda_i
       )
-    })
-    
-    ord <- order(eig$values)
-    vals <- eig$values[ord]
-    vecs <- eig$vectors[, ord, drop = FALSE]
-    non_trivial <- vals > 1e-12
-    if (!any(non_trivial)) {
-      stop("No non-trivial Laplacian eigenvalues found for domain ", domain_name,
-           call. = FALSE)
     }
-    keep <- head(which(non_trivial), ncomp_per_domain)
-    if (length(keep) < ncomp_per_domain) {
-      warning("Domain ", domain_name, ": only ", length(keep),
-              " non-trivial eigenvectors available; reducing ncomp_per_domain.",
+  } else {
+    if (verbose) message("Using cached spectral decomposition.")
+    parsed_cache <- parse_spectral_cache_cd(spectral_cache, m)
+    Ubar_cache <- parsed_cache$Ubar
+    Lambda_cache <- parsed_cache$Lambda
+    min_cached <- min(vapply(Ubar_cache, ncol, integer(1)))
+    if (min_cached < ncomp) {
+      stop("spectral_cache provides only ", min_cached,
+           " components per domain, but ncomp = ", ncomp, ".", call. = FALSE)
+    }
+    if (min_cached < ncomp_per_domain) {
+      warning("spectral_cache provides only ", min_cached,
+              " components per domain. Reducing ncomp_per_domain.",
               call. = FALSE)
+      ncomp_per_domain <- min_cached
     }
-    keep <- keep[keep <= ncol(vecs)]
-    U_i <- vecs[, keep, drop = FALSE]
-    lambda_i <- vals[keep]
-    # Normalize spectra so diagonalization terms are comparable across domains
-    lambda_ref_idx <- max(1L, min(length(lambda_i), ncomp))
-    lambda_ref <- lambda_i[lambda_ref_idx]
-    scale_factor <- max(lambda_ref, 1e-8)
-    lambda_i <- lambda_i / scale_factor
-    attr(lambda_i, "scale_factor") <- scale_factor
-    
-    eigendecomps[[i]] <- list(
-      vectors = U_i,
-      values = lambda_i
-    )
+    for (i in seq_len(m)) {
+      vals_i <- Lambda_cache[[i]][seq_len(ncomp_per_domain)]
+      sf_i <- attr(Lambda_cache[[i]], "scale_factor")
+      if (!is.null(sf_i) && is.finite(sf_i) && sf_i > 0) {
+        attr(vals_i, "scale_factor") <- as.numeric(sf_i)
+      }
+      eigendecomps[[i]] <- list(
+        vectors = Ubar_cache[[i]][, seq_len(ncomp_per_domain), drop = FALSE],
+        values = vals_i
+      )
+    }
   }
   
   # Extract eigenvectors and eigenvalues
   Ubar <- lapply(eigendecomps, function(x) x$vectors)
   Lambda <- lapply(eigendecomps, function(x) x$values)
-  if (alpha_match > 0 && is.null(lambda_target)) {
-    lambda_target <- lapply(seq_len(m), function(i) {
-      vals <- Lambda[[i]]
-      if (length(vals) == 0) {
-        numeric(0)
-      } else {
-        vals[seq_len(min(ncomp, length(vals)))]
-      }
-    })
-  }
   
-  # Precompute F_i^T U_i for efficiency
-  FiUbar <- lapply(seq_len(m), function(i) {
-    crossprod(correspondence[[i]], Ubar[[i]])
-  })
-  coupling_sizes <- vapply(FiUbar, nrow, integer(1))
-  coupling_scale <- sqrt(pmax(1, coupling_sizes))
-  FiUbar <- Map(function(mat, s) {
-    if (is.null(mat) || length(mat) == 0L || s <= 0) {
-      return(mat)
-    }
-    mat / s
-  }, FiUbar, coupling_scale)
-
-  sum_matrix_list <- function(lst) {
-    lst <- Filter(function(x) !is.null(x), lst)
-    if (length(lst) == 0) return(NULL)
-    acc <- lst[[1]]
-    if (length(lst) > 1) {
-      for (k in 2:length(lst)) {
-        acc <- acc + lst[[k]]
-      }
-    }
-    acc
-  }
-  
-  # Initialize coupling matrices A_i on Stiefel manifold
   # Check that we have enough eigenvectors for the requested components
   min_eigenvecs <- min(sapply(eigendecomps, function(x) ncol(x$vectors)))
   if (min_eigenvecs < ncomp) {
-    warning("Requested ", ncomp, " components but only ", min_eigenvecs, 
+    warning("Requested ", ncomp, " components but only ", min_eigenvecs,
             " eigenvectors available. Reducing ncomp.", call. = FALSE)
     ncomp <- min_eigenvecs
   }
   
+  scale_factors <- vapply(Lambda, function(vals) {
+    sf <- attr(vals, "scale_factor")
+    if (is.null(sf) || !is.finite(sf) || sf <= 0) 1 else as.numeric(sf)
+  }, numeric(1))
+  
+  if (alpha_match > 0) {
+    if (is.null(lambda_target)) {
+      lambda_target <- lapply(seq_len(m), function(i) {
+        vals <- Lambda[[i]]
+        if (length(vals) == 0) numeric(0) else vals[seq_len(min(ncomp, length(vals)))]
+      })
+    } else if (user_lambda_target_supplied) {
+      # Targets are interpreted in the raw (pre-normalization) eigenvalue scale.
+      lambda_target <- Map(function(target_vec, sf) {
+        if (is.null(target_vec)) return(NULL)
+        as.numeric(target_vec) / max(sf, 1e-8)
+      }, lambda_target, scale_factors)
+    }
+    lambda_target <- lapply(lambda_target, normalize_lambda_target_cd, ncomp = ncomp)
+  } else {
+    lambda_target <- NULL
+  }
+  
+  # Precompute F_i^T U_i
+  FiUbar <- lapply(seq_len(m), function(i) crossprod(correspondence[[i]], Ubar[[i]]))
+  coupling_sizes <- vapply(FiUbar, nrow, integer(1))
+  coupling_scale <- sqrt(pmax(1, coupling_sizes))
+  FiUbar <- Map(function(mat, s) {
+    if (is.null(mat) || length(mat) == 0L || s <= 0) return(mat)
+    mat / s
+  }, FiUbar, coupling_scale)
+  
+  coupling_gram <- NULL
+  if (mu_coupling > 0 && m > 1) {
+    coupling_gram <- compute_coupling_gram_cd(FiUbar)
+  }
+  
+  # Initialize coupling matrices A_i on Stiefel manifold
   A <- lapply(seq_len(m), function(i) {
     n_vecs <- ncol(eigendecomps[[i]]$vectors)
     M <- matrix(0, n_vecs, ncomp)
@@ -341,53 +443,84 @@ coupled_diagonalization.hyperdesign <- function(data,
     M
   })
   
+  # Initialize objective state
+  domain_components <- lapply(seq_len(m), function(i) {
+    compute_domain_cost_components_cd(
+      A[[i]],
+      Lambda[[i]],
+      if (alpha_match > 0) lambda_target[[i]] else NULL
+    )
+  })
+  diag_costs <- vapply(domain_components, function(x) x$diagonal, numeric(1))
+  match_costs <- vapply(domain_components, function(x) x$match, numeric(1))
+  diag_sum <- sum(diag_costs)
+  match_sum <- sum(match_costs)
+  
+  gram_sum <- vector("list", m)
+  coupling_diag_terms <- numeric(m)
+  cross_sum <- 0
+  coupling_cost <- 0
+  if (!is.null(coupling_gram)) {
+    gram_sum <- compute_gram_sum_cd(coupling_gram, A)
+    coupling_diag_terms <- vapply(seq_len(m), function(i) {
+      sum(A[[i]] * (coupling_gram[[i]][[i]] %*% A[[i]]))
+    }, numeric(1))
+    cross_sum <- sum(vapply(seq_len(m), function(i) {
+      sum(A[[i]] * gram_sum[[i]])
+    }, numeric(1)))
+    coupling_cost <- m * sum(coupling_diag_terms) - cross_sum
+  }
+  
   # Optimization on Stiefel manifold with backtracking line search
   converged <- FALSE
   beta_backtrack <- 0.5
   armijo_c <- 1e-4
   max_backtracks <- 12L
   current_step_size <- step_size
-  best_cost <- Inf
+  
+  cost_current <- diag_sum + alpha_match * match_sum + mu_coupling * coupling_cost
+  best_cost <- cost_current
   best_A <- A
-  cost_history <- numeric(0)
-  component_history <- vector("list", max_iter)
-
-  cost_val <- compute_cost_cd(A, Lambda, FiUbar, mu_coupling, lambda_target, alpha_match)
-  cost_current <- as.numeric(cost_val)
-  component_history[[1]] <- attr(cost_val, "components")
+  best_components <- list(diagonal = diag_sum, coupling = coupling_cost, match = match_sum)
+  
+  cost_history <- rep(NA_real_, max_iter + 1L)
+  component_history <- vector("list", max_iter + 1L)
   cost_history[1] <- cost_current
+  component_history[[1]] <- list(diagonal = diag_sum, coupling = coupling_cost, match = match_sum)
   
   for (iter in seq_len(max_iter)) {
     cost_before_iter <- cost_current
     A_prev <- A
-    B <- lapply(seq_len(m), function(j) {
-      if (!is.null(FiUbar[[j]]) && length(FiUbar[[j]]) > 0L) {
-        FiUbar[[j]] %*% A[[j]]
-      } else {
-        NULL
-      }
-    })
-    sumB <- sum_matrix_list(B)
     any_update <- FALSE
-
+    
     for (i in seq_len(m)) {
-      grad_i <- compute_gradient_cd(i, A, Lambda, FiUbar, mu_coupling,
-                                    B, sumB, lambda_target, alpha_match)
+      grad_i <- compute_gradient_cd(
+        idx = i,
+        A = A,
+        Lambda = Lambda,
+        FiUbar = FiUbar,
+        mu_coupling = mu_coupling,
+        FiUbarA = NULL,
+        sumB = NULL,
+        lambda_target = lambda_target,
+        alpha_match = alpha_match,
+        coupling_gram = coupling_gram,
+        gram_sum = gram_sum
+      )
       if (any(!is.finite(grad_i))) {
         warning("Invalid gradient at iteration ", iter, " for domain ", i,
                 ". Skipping update.", call. = FALSE)
         next
       }
+      grad_i <- project_stiefel_gradient_cd(A[[i]], grad_i)
       gnorm <- sqrt(sum(grad_i * grad_i))
-      if (gnorm < 1e-12) {
-        next
-      }
+      if (gnorm < 1e-12) next
+      
       direction <- grad_i / gnorm
       step_try <- current_step_size
       accepted <- FALSE
       old_Ai <- A[[i]]
-      old_Bi <- B[[i]]
-
+      
       for (ls in seq_len(max_backtracks)) {
         candidate <- old_Ai - step_try * direction
         candidate <- qr.Q(qr(candidate))[, seq_len(ncomp), drop = FALSE]
@@ -395,40 +528,66 @@ coupled_diagonalization.hyperdesign <- function(data,
         align <- sign(diag(overlap))
         align[align == 0] <- 1
         candidate <- sweep(candidate, 2L, align, `*`)
-
-        B_candidate <- if (!is.null(FiUbar[[i]]) && length(FiUbar[[i]]) > 0L) {
-          FiUbar[[i]] %*% candidate
+        
+        domain_trial <- compute_domain_cost_components_cd(
+          candidate,
+          Lambda[[i]],
+          if (alpha_match > 0) lambda_target[[i]] else NULL
+        )
+        diag_sum_trial <- diag_sum - diag_costs[i] + domain_trial$diagonal
+        match_sum_trial <- match_sum - match_costs[i] + domain_trial$match
+        
+        if (!is.null(coupling_gram)) {
+          deltaA <- candidate - old_Ai
+          gram_sum_trial <- vector("list", m)
+          for (j in seq_len(m)) {
+            gram_sum_trial[[j]] <- gram_sum[[j]] + coupling_gram[[j]][[i]] %*% deltaA
+          }
+          
+          coupling_diag_terms_trial <- coupling_diag_terms
+          coupling_diag_terms_trial[i] <- sum(candidate * (coupling_gram[[i]][[i]] %*% candidate))
+          cross_sum_trial <- 0
+          for (j in seq_len(m)) {
+            Aj_trial <- if (j == i) candidate else A[[j]]
+            cross_sum_trial <- cross_sum_trial + sum(Aj_trial * gram_sum_trial[[j]])
+          }
+          coupling_cost_trial <- m * sum(coupling_diag_terms_trial) - cross_sum_trial
         } else {
-          NULL
+          gram_sum_trial <- gram_sum
+          coupling_diag_terms_trial <- coupling_diag_terms
+          cross_sum_trial <- cross_sum
+          coupling_cost_trial <- 0
         }
-
-        A_trial <- A
-        A_trial[[i]] <- candidate
-        cost_trial_val <- compute_cost_cd(A_trial, Lambda, FiUbar, mu_coupling,
-                                          lambda_target, alpha_match)
-        cost_trial <- as.numeric(cost_trial_val)
-
+        
+        cost_trial <- diag_sum_trial +
+          alpha_match * match_sum_trial +
+          mu_coupling * coupling_cost_trial
+        
+        # Armijo condition for normalized steepest-descent direction.
         if (is.finite(cost_trial) &&
-            cost_trial <= cost_current - armijo_c * step_try * gnorm * gnorm) {
+            cost_trial <= cost_current - armijo_c * step_try * gnorm) {
           A[[i]] <- candidate
-          B[[i]] <- B_candidate
-          sumB <- sum_matrix_list(B)
+          diag_costs[i] <- domain_trial$diagonal
+          match_costs[i] <- domain_trial$match
+          diag_sum <- diag_sum_trial
+          match_sum <- match_sum_trial
+          gram_sum <- gram_sum_trial
+          coupling_diag_terms <- coupling_diag_terms_trial
+          cross_sum <- cross_sum_trial
+          coupling_cost <- coupling_cost_trial
           cost_current <- cost_trial
-          component_history[[iter]] <- attr(cost_trial_val, "components")
           accepted <- TRUE
           any_update <- TRUE
           break
         }
         step_try <- step_try * beta_backtrack
       }
-
-      if (!accepted) {
-        # restore on rejection
-        A[[i]] <- old_Ai
-        B[[i]] <- old_Bi
+      
+      if (!accepted && verbose) {
+        message("Backtracking rejected domain ", i, " at iteration ", iter)
       }
     }
-
+    
     if (!any_update) {
       if (verbose) message("No successful updates at iteration ", iter)
       if (iter > 1) {
@@ -436,57 +595,61 @@ coupled_diagonalization.hyperdesign <- function(data,
         break
       }
     }
-
+    
     if (cost_current < best_cost) {
       best_cost <- cost_current
       best_A <- A
+      best_components <- list(diagonal = diag_sum, coupling = coupling_cost, match = match_sum)
     }
-
-    cost_history[iter + 1] <- cost_current
-    if (is.null(component_history[[iter]])) {
-      component_history[[iter]] <- attr(
-        compute_cost_cd(A, Lambda, FiUbar, mu_coupling, lambda_target, alpha_match),
-        "components"
-      )
-    }
-
+    
+    cost_history[iter + 1L] <- cost_current
+    component_history[[iter + 1L]] <- list(
+      diagonal = diag_sum,
+      coupling = coupling_cost,
+      match = match_sum
+    )
+    
     if (verbose && iter %% 10 == 0) {
       message(sprintf("Iteration %3d   cost = %.6e", iter, cost_current))
     }
-
+    
     rel_change <- abs(cost_before_iter - cost_current) / (abs(cost_before_iter) + 1e-9)
     if (rel_change < tol) {
       converged <- TRUE
       if (verbose) message("Converged at iteration ", iter)
       break
     }
-
+    
     if (cost_current > cost_before_iter) {
       current_step_size <- max(current_step_size * beta_backtrack, 1e-6)
     } else {
       current_step_size <- min(current_step_size * 1.05, step_size * 5)
     }
   }
-
+  
   if (!converged && verbose) {
     warning("Did not converge within ", max_iter, " iterations", call. = FALSE)
   }
-
+  
   if (best_cost < cost_current) {
     A <- best_A
     cost_current <- best_cost
+    diag_sum <- best_components$diagonal
+    coupling_cost <- best_components$coupling
+    match_sum <- best_components$match
   }
-
+  
   final_cost <- cost_current
   iterations_run <- if (exists("iter")) iter else max_iter
-  cost_history_valid <- cost_history[!is.na(cost_history)]
-  component_history_valid <- component_history[seq_len(min(iterations_run, length(component_history)))]
+  n_history <- min(iterations_run + 1L, length(cost_history))
+  cost_history_valid <- cost_history[seq_len(n_history)]
+  component_history_valid <- component_history[seq_len(n_history)]
   component_history_valid <- Filter(function(x) !is.null(x), component_history_valid)
   if (length(cost_history_valid) > 0) {
     names(cost_history_valid) <- paste0("iter_", seq_along(cost_history_valid) - 1L)
   }
   if (length(component_history_valid) > 0) {
-    names(component_history_valid) <- paste0("iter_", seq_along(component_history_valid))
+    names(component_history_valid) <- paste0("iter_", seq_along(component_history_valid) - 1L)
   }
 
   # Compute final coupled bases V_i = U_i A_i
@@ -517,6 +680,13 @@ coupled_diagonalization.hyperdesign <- function(data,
     cost_history = cost_history_valid,
     component_history = component_history_valid,
     coupling_scale = coupling_scale,
+    lambda_scale_factors = scale_factors,
+    lambda_target_scaled = lambda_target,
+    used_spectral_cache = used_spectral_cache,
+    spectral_cache = list(
+      subspace_bases = Ubar,
+      eigenvalues = Lambda
+    ),
     stiefel_factors = A,
     subspace_bases = Ubar
   )
@@ -538,20 +708,121 @@ coupled_diagonalization.hyperdesign <- function(data,
   )
 }
 
+parse_spectral_cache_cd <- function(spectral_cache, m) {
+  if (!is.list(spectral_cache)) {
+    stop("spectral_cache must be a list.", call. = FALSE)
+  }
+  Ubar <- spectral_cache$subspace_bases
+  if (is.null(Ubar)) Ubar <- spectral_cache$Ubar
+  if (is.null(Ubar)) Ubar <- spectral_cache$vectors
+  Lambda <- spectral_cache$eigenvalues
+  if (is.null(Lambda)) Lambda <- spectral_cache$Lambda
+  if (is.null(Lambda)) Lambda <- spectral_cache$values
+  
+  if (!is.list(Ubar) || !is.list(Lambda) || length(Ubar) != m || length(Lambda) != m) {
+    stop("spectral_cache must provide list entries `subspace_bases`/`Ubar` and ",
+         "`eigenvalues`/`Lambda` with one element per domain.", call. = FALSE)
+  }
+  
+  Ubar_out <- vector("list", m)
+  Lambda_out <- vector("list", m)
+  for (i in seq_len(m)) {
+    Ui <- as.matrix(Ubar[[i]])
+    li_raw <- Lambda[[i]]
+    if (is.matrix(li_raw)) {
+      li_raw <- diag(li_raw)
+    }
+    li <- as.numeric(li_raw)
+    if (ncol(Ui) == 0L || length(li) == 0L) {
+      stop("spectral_cache domain ", i, " has empty basis/eigenvalues.", call. = FALSE)
+    }
+    if (length(li) < ncol(Ui)) {
+      stop("spectral_cache domain ", i, " has fewer eigenvalues (", length(li),
+           ") than basis vectors (", ncol(Ui), ").", call. = FALSE)
+    }
+    li <- li[seq_len(ncol(Ui))]
+    sf <- attr(Lambda[[i]], "scale_factor")
+    if (is.null(sf) || !is.finite(sf) || sf <= 0) sf <- 1
+    attr(li, "scale_factor") <- as.numeric(sf)
+    Ubar_out[[i]] <- Ui
+    Lambda_out[[i]] <- li
+  }
+  
+  list(Ubar = Ubar_out, Lambda = Lambda_out)
+}
+
+normalize_lambda_target_cd <- function(target_vec, ncomp) {
+  if (is.null(target_vec)) return(NULL)
+  if (is.matrix(target_vec)) target_vec <- diag(target_vec)
+  target_vec <- as.numeric(target_vec)
+  if (length(target_vec) == 0L) return(rep(0, ncomp))
+  if (length(target_vec) < ncomp) {
+    target_vec <- c(target_vec, rep(tail(target_vec, 1L), ncomp - length(target_vec)))
+  }
+  target_vec[seq_len(ncomp)]
+}
+
+compute_domain_cost_components_cd <- function(Ai, lambda_i, target_vec = NULL) {
+  lambda_i <- pmax(lambda_i, 1e-8)
+  LiAi <- Ai * lambda_i
+  Mi <- crossprod(Ai, LiAi)
+  off_diag <- Mi - diag(diag(Mi))
+  diagonal_cost <- sum(off_diag * off_diag)
+  match_cost <- 0
+  if (!is.null(target_vec)) {
+    target_vec <- normalize_lambda_target_cd(target_vec, ncol(Ai))
+    diag_residual <- diag(Mi) - target_vec
+    match_cost <- sum(diag_residual * diag_residual)
+  }
+  list(diagonal = diagonal_cost, match = match_cost)
+}
+
+compute_coupling_gram_cd <- function(FiUbar) {
+  m <- length(FiUbar)
+  gram <- vector("list", m)
+  for (i in seq_len(m)) {
+    gram[[i]] <- vector("list", m)
+    for (j in seq_len(m)) {
+      gram[[i]][[j]] <- crossprod(FiUbar[[i]], FiUbar[[j]])
+    }
+  }
+  gram
+}
+
+compute_gram_sum_cd <- function(coupling_gram, A) {
+  m <- length(A)
+  gram_sum <- vector("list", m)
+  for (i in seq_len(m)) {
+    acc <- matrix(0, nrow(A[[i]]), ncol(A[[i]]))
+    for (j in seq_len(m)) {
+      acc <- acc + coupling_gram[[i]][[j]] %*% A[[j]]
+    }
+    gram_sum[[i]] <- acc
+  }
+  gram_sum
+}
+
+project_stiefel_gradient_cd <- function(Ai, G) {
+  AtG <- crossprod(Ai, G)
+  G - Ai %*% (0.5 * (AtG + t(AtG)))
+}
+
 # Helper function: compute gradient for domain i
 compute_gradient_cd <- function(idx,
                                 A,
                                 Lambda,
                                 FiUbar,
                                 mu_coupling,
-                                FiUbarA,
-                                sumB,
+                                FiUbarA = NULL,
+                                sumB = NULL,
                                 lambda_target = NULL,
-                                alpha_match = 0) {
+                                alpha_match = 0,
+                                coupling_gram = NULL,
+                                gram_sum = NULL) {
   m <- length(A)
   Ai <- A[[idx]]
   lambda_i <- pmax(Lambda[[idx]], 1e-8)
-  LiAi <- sweep(Ai, 1L, lambda_i, `*`)
+  LiAi <- Ai * lambda_i
   Mi <- crossprod(Ai, LiAi)
   S <- Mi - diag(diag(Mi))
   
@@ -560,25 +831,34 @@ compute_gradient_cd <- function(idx,
   
   grad_match <- 0
   if (alpha_match > 0 && !is.null(lambda_target) && !is.null(lambda_target[[idx]])) {
-    target_vec <- lambda_target[[idx]]
-    if (is.matrix(target_vec)) {
-      target_vec <- diag(target_vec)
-    }
-    if (length(target_vec) < ncol(Ai)) {
-      target_vec <- c(target_vec, rep(tail(target_vec, 1L), ncol(Ai) - length(target_vec)))
-    }
-    target_vec <- target_vec[seq_len(ncol(Ai))]
-    match_residual <- Mi
-    diag(match_residual) <- diag(match_residual) - target_vec
-    grad_match <- 4 * (LiAi %*% match_residual)
+    target_vec <- normalize_lambda_target_cd(lambda_target[[idx]], ncol(Ai))
+    diag_residual <- diag(Mi) - target_vec
+    grad_match <- 4 * sweep(LiAi, 2L, diag_residual, `*`)
   }
   
-  Bi <- FiUbarA[[idx]]
   grad_coupling <- 0
-  if (mu_coupling > 0 && m > 1 && !is.null(Bi) && !is.null(sumB) && !is.null(FiUbar[[idx]])) {
-    grad_coupling <- 2 * mu_coupling * (
-      m * crossprod(FiUbar[[idx]], Bi) - crossprod(FiUbar[[idx]], sumB)
-    )
+  if (mu_coupling > 0 && m > 1) {
+    if (!is.null(coupling_gram)) {
+      sumGA_i <- if (!is.null(gram_sum)) {
+        gram_sum[[idx]]
+      } else {
+        acc <- matrix(0, nrow(Ai), ncol(Ai))
+        for (j in seq_len(m)) {
+          acc <- acc + coupling_gram[[idx]][[j]] %*% A[[j]]
+        }
+        acc
+      }
+      grad_coupling <- 2 * mu_coupling * (
+        m * (coupling_gram[[idx]][[idx]] %*% Ai) - sumGA_i
+      )
+    } else {
+      Bi <- if (!is.null(FiUbarA)) FiUbarA[[idx]] else NULL
+      if (!is.null(Bi) && !is.null(sumB) && !is.null(FiUbar[[idx]])) {
+        grad_coupling <- 2 * mu_coupling * (
+          m * crossprod(FiUbar[[idx]], Bi) - crossprod(FiUbar[[idx]], sumB)
+        )
+      }
+    }
   }
   
   grad_diag + grad_coupling + alpha_match * grad_match
@@ -590,55 +870,61 @@ compute_cost_cd <- function(A,
                             FiUbar,
                             mu_coupling,
                             lambda_target = NULL,
-                            alpha_match = 0) {
+                            alpha_match = 0,
+                            coupling_gram = NULL) {
   m <- length(A)
   cost_d <- 0
   cost_match <- 0
-  B <- vector("list", m)
-  norms_B <- numeric(m)
   
   for (i in seq_len(m)) {
     Ai <- A[[i]]
     lambda_i <- pmax(Lambda[[i]], 1e-8)
-    LiAi <- sweep(Ai, 1L, lambda_i, `*`)
+    LiAi <- Ai * lambda_i
     Mi <- crossprod(Ai, LiAi)
     off_diag <- Mi - diag(diag(Mi))
     cost_d <- cost_d + sum(off_diag * off_diag)
     if (alpha_match > 0 && !is.null(lambda_target) && !is.null(lambda_target[[i]])) {
-      target_vec <- lambda_target[[i]]
-      if (is.matrix(target_vec)) {
-        target_vec <- diag(target_vec)
-      }
-      if (length(target_vec) < ncol(Ai)) {
-        target_vec <- c(target_vec, rep(tail(target_vec, 1L), ncol(Ai) - length(target_vec)))
-      }
-      target_vec <- target_vec[seq_len(ncol(Ai))]
-      match_residual <- Mi
-      diag(match_residual) <- diag(match_residual) - target_vec
-      cost_match <- cost_match + sum(match_residual * match_residual)
+      target_vec <- normalize_lambda_target_cd(lambda_target[[i]], ncol(Ai))
+      diag_residual <- diag(Mi) - target_vec
+      cost_match <- cost_match + sum(diag_residual * diag_residual)
     }
-    if (!is.null(FiUbar[[i]]) && length(FiUbar[[i]]) > 0L) {
-      B[[i]] <- FiUbar[[i]] %*% Ai
-    } else {
-      B[[i]] <- NULL
-    }
-    norms_B[i] <- if (!is.null(B[[i]])) sum(B[[i]] * B[[i]]) else 0
   }
   
   cost_c <- 0
   if (mu_coupling > 0 && m > 1) {
-    non_null_B <- Filter(function(x) !is.null(x), B)
-    if (length(non_null_B) > 0) {
-      sumB <- non_null_B[[1]]
-      if (length(non_null_B) > 1) {
-        for (idx in 2:length(non_null_B)) {
-          sumB <- sumB + non_null_B[[idx]]
+    if (!is.null(coupling_gram)) {
+      gram_sum <- compute_gram_sum_cd(coupling_gram, A)
+      diag_terms <- vapply(seq_len(m), function(i) {
+        sum(A[[i]] * (coupling_gram[[i]][[i]] %*% A[[i]]))
+      }, numeric(1))
+      cross_sum <- sum(vapply(seq_len(m), function(i) {
+        sum(A[[i]] * gram_sum[[i]])
+      }, numeric(1)))
+      cost_c <- m * sum(diag_terms) - cross_sum
+    } else {
+      B <- vector("list", m)
+      norms_B <- numeric(m)
+      for (i in seq_len(m)) {
+        if (!is.null(FiUbar[[i]]) && length(FiUbar[[i]]) > 0L) {
+          B[[i]] <- FiUbar[[i]] %*% A[[i]]
+          norms_B[i] <- sum(B[[i]] * B[[i]])
+        } else {
+          B[[i]] <- NULL
         }
       }
-      cost_c <- m * sum(norms_B) - sum(sumB * sumB)
+      non_null_B <- Filter(function(x) !is.null(x), B)
+      if (length(non_null_B) > 0) {
+        sumB <- non_null_B[[1]]
+        if (length(non_null_B) > 1) {
+          for (idx in 2:length(non_null_B)) {
+            sumB <- sumB + non_null_B[[idx]]
+          }
+        }
+        cost_c <- m * sum(norms_B) - sum(sumB * sumB)
+      }
     }
   }
-
+  
   total <- cost_d + mu_coupling * cost_c + alpha_match * cost_match
   attr(total, "components") <- list(
     diagonal = cost_d,

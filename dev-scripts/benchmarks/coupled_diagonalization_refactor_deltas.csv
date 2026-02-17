@@ -1,0 +1,5 @@
+"scenario","compared_method","speedup_baseline_over_method","final_cost_delta_method_minus_baseline","pair_cosine_delta_method_minus_baseline","latent_recovery_delta_method_minus_baseline"
+"default_quality","current_refactor_uncached",1.01808634772462,-0.0205006136387506,0.0971946321688746,0.0145678737517008
+"default_quality","current_refactor_cached",1.00172215843858,-0.0205006136387506,0.0971946321688746,0.0145678737517008
+"high_q_speed","current_refactor_uncached",1.03931082285375,-0.00495260603116027,0.107975064146739,-0.0103324994886982
+"high_q_speed","current_refactor_cached",1.04157983526843,-0.00495260603116027,0.107975064146739,-0.0103324994886982

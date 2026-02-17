@@ -361,6 +361,47 @@ test_that("coupled_diagonalization with partial correspondence", {
             label = "Corresponding pairs should be appreciably closer than shuffled pairs")
 })
 
+test_that("alpha_match term penalizes diagonal mismatch only", {
+  skip_if_not_installed("multidesign")
+  skip_if_not_installed("multivarious")
+  
+  set.seed(2468)
+  k_prime <- 5
+  k <- 3
+  A <- list(random_ortho(k_prime, k), random_ortho(k_prime, k))
+  Lambda <- list(c(0.15, 0.35, 0.55, 0.75, 0.95), c(0.2, 0.4, 0.6, 0.8, 1.0))
+  FiUbar <- list(diag(k_prime), diag(k_prime))
+  
+  lambda_target <- lapply(seq_along(A), function(i) {
+    Ai <- A[[i]]
+    LiAi <- sweep(Ai, 1L, pmax(Lambda[[i]], 1e-8), `*`)
+    Mi <- crossprod(Ai, LiAi)
+    diag(Mi)
+  })
+  
+  cost_base <- manifoldalign:::compute_cost_cd(
+    A = A,
+    Lambda = Lambda,
+    FiUbar = FiUbar,
+    mu_coupling = 0,
+    alpha_match = 0
+  )
+  cost_match <- manifoldalign:::compute_cost_cd(
+    A = A,
+    Lambda = Lambda,
+    FiUbar = FiUbar,
+    mu_coupling = 0,
+    alpha_match = 10,
+    lambda_target = lambda_target
+  )
+  
+  expect_equal(
+    as.numeric(cost_match),
+    as.numeric(cost_base),
+    tolerance = 1e-10
+  )
+})
+
 test_that("coupled_diagonalization gradient computation is correct", {
   skip_if_not_installed("multidesign")
   skip_if_not_installed("multivarious")

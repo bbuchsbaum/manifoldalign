@@ -227,6 +227,45 @@ test_that("coupled_diagonalization records diagnostics and drops trivial mode", 
   expect_equal(ncol(result$v), 2)
 })
 
+test_that("coupled_diagonalization can reuse spectral_cache", {
+  skip_if_missing_cd_deps()
+  n <- 30
+  X1 <- matrix(rnorm(n * 3), n, 3)
+  X2 <- matrix(rnorm(n * 4), n, 4)
+  hd <- multidesign::hyperdesign(list(
+    domain1 = multidesign::multidesign(X1, data.frame(sample_id = seq_len(n))),
+    domain2 = multidesign::multidesign(X2, data.frame(sample_id = seq_len(n)))
+  ))
+  
+  params <- list(
+    ncomp = 2,
+    ncomp_per_domain = 5,
+    mu_coupling = 0.6,
+    knn = 6,
+    max_iter = 25,
+    tol = 1e-5,
+    verbose = FALSE
+  )
+  
+  set.seed(987)
+  fit_uncached <- do.call(coupled_diagonalization, c(list(data = hd), params))
+  cache <- fit_uncached$diagnostics$spectral_cache
+  
+  expect_true(is.list(cache))
+  expect_true(isFALSE(fit_uncached$diagnostics$used_spectral_cache))
+  
+  set.seed(987)
+  fit_cached <- do.call(coupled_diagonalization, c(
+    list(data = hd),
+    params,
+    list(spectral_cache = cache)
+  ))
+  
+  expect_true(isTRUE(fit_cached$diagnostics$used_spectral_cache))
+  expect_equal(fit_cached$final_cost, fit_uncached$final_cost, tolerance = 1e-7)
+  expect_equal(fit_cached$s, fit_uncached$s, tolerance = 1e-7)
+})
+
 test_that("alpha_match respects provided lambda_target", {
   skip_if_missing_cd_deps()
   n <- 28
@@ -249,7 +288,8 @@ test_that("alpha_match respects provided lambda_target", {
   )
 
   lambda_target <- lapply(baseline$eigenvalues, function(vals) {
-    diag(vals[seq_len(2)])
+    sf <- attr(vals, "scale_factor")
+    diag(vals[seq_len(2)] * sf)
   })
 
   matched <- coupled_diagonalization(
@@ -259,6 +299,7 @@ test_that("alpha_match respects provided lambda_target", {
     mu_coupling = 0.5,
     alpha_match = 5,
     lambda_target = lambda_target,
+    spectral_cache = baseline$diagnostics$spectral_cache,
     knn = 6,
     max_iter = 40,
     tol = 1e-5,
@@ -272,7 +313,8 @@ test_that("alpha_match respects provided lambda_target", {
     lambda_i <- pmax(Lambda[[i]], 1e-8)
     LiAi <- sweep(Ai, 1L, lambda_i, `*`)
     Mi <- crossprod(Ai, LiAi)
-    target_vec <- diag(lambda_target[[i]])
+    sf <- max(1e-8, attr(Lambda[[i]], "scale_factor"))
+    target_vec <- diag(lambda_target[[i]]) / sf
     sqrt(mean((diag(Mi) - target_vec)^2))
   }, numeric(1))
 
