@@ -1,19 +1,57 @@
 #' Shared Utilities for Optimal Transport Methods
-#' 
+#'
 #' Internal functions shared between gromov_wasserstein and fpgw implementations.
+#' @return NULL (documentation page only).
 #' @keywords internal
 #' @name utils-ot
 NULL
 
 #' Compute Distance Matrix
-#' 
+#'
 #' Memory-efficient distance computation that avoids creating full distance matrix
 #' @param X Data matrix (samples x features)
 #' @param metric Distance metric to use (default: "euclidean")
 #' @param chunk_size Chunk size for memory-efficient computation
+#' @return A symmetric numeric distance matrix of dimension n x n.
 #' @keywords internal
 compute_distance_matrix <- function(X, metric = "euclidean", chunk_size = 1000) {
   n <- nrow(X)
+
+  if (metric == "cosine") {
+    X <- as.matrix(X)
+    norms <- sqrt(rowSums(X^2))
+    norms[norms < 1e-12] <- 1e-12
+    Xn <- X / norms
+
+    # For small matrices, compute directly.
+    if (n <= chunk_size || n * n * 8 < 1e8) { # < 100MB
+      sim <- tcrossprod(Xn)
+      sim <- pmin(pmax(sim, -1), 1)
+      D <- 1 - sim
+      diag(D) <- 0
+      return(D)
+    }
+
+    # For large matrices, compute in chunks.
+    D <- matrix(0, n, n)
+    for (i in seq(1, n, by = chunk_size)) {
+      i_end <- min(i + chunk_size - 1, n)
+      Xi <- Xn[i:i_end, , drop = FALSE]
+      for (j in seq(i, n, by = chunk_size)) {
+        j_end <- min(j + chunk_size - 1, n)
+        Xj <- Xn[j:j_end, , drop = FALSE]
+        sim_block <- Xi %*% t(Xj)
+        sim_block <- pmin(pmax(sim_block, -1), 1)
+        D_block <- 1 - sim_block
+        D[i:i_end, j:j_end] <- D_block
+        if (i != j) {
+          D[j:j_end, i:i_end] <- t(D_block)
+        }
+      }
+    }
+    diag(D) <- 0
+    return(D)
+  }
   
   # For small matrices, use standard approach
   if (n <= chunk_size || n * n * 8 < 1e8) { # < 100MB
@@ -88,6 +126,7 @@ compute_distance_matrix <- function(X, metric = "euclidean", chunk_size = 1000) 
 }
 
 #' Validate marginal distributions
+#' @return A list of validated and normalized marginal distribution vectors, each summing to 1.
 #' @keywords internal
 validate_marginals <- function(marginals, n_samples, n_domains) {
   if (is.null(marginals)) {
@@ -127,6 +166,7 @@ validate_marginals <- function(marginals, n_samples, n_domains) {
 }
 
 #' Extract data from hyperdesign and apply preprocessing
+#' @return A list with elements `X_list` (list of data matrices), `n_samples` (integer vector), `n_domains` (integer), `domain_names` (character vector), and `data` (the preprocessed hyperdesign).
 #' @keywords internal
 prepare_ot_data <- function(data, preproc = NULL) {
   if (!inherits(data, "hyperdesign")) {
@@ -163,6 +203,7 @@ prepare_ot_data <- function(data, preproc = NULL) {
 }
 
 #' Compute feature cost matrix between two domains
+#' @return A numeric cost matrix of dimension n1 x n2.
 #' @keywords internal
 compute_feature_cost <- function(X1, X2, metric = "euclidean") {
   n1 <- nrow(X1)
@@ -202,6 +243,7 @@ compute_feature_cost <- function(X1, X2, metric = "euclidean") {
 }
 
 #' Normalize transport plan rows to probability distributions
+#' @return A row-normalized matrix where each row sums to 1.
 #' @keywords internal
 normalize_plan_rows <- function(plan) {
   if (!is.matrix(plan)) {
@@ -223,6 +265,7 @@ normalize_plan_rows <- function(plan) {
 }
 
 #' Compute K-nearest neighbours under supported metrics
+#' @return A list with elements `idx` (integer matrix of neighbor indices) and `dists` (numeric matrix of distances).
 #' @keywords internal
 find_knn_indices <- function(query, data, k = 5, metric = "euclidean") {
   if (!is.matrix(query)) query <- as.matrix(query)
@@ -252,6 +295,7 @@ find_knn_indices <- function(query, data, k = 5, metric = "euclidean") {
 }
 
 #' Compute distances between a point and all rows of a matrix
+#' @return A numeric vector of distances from the query point to each row of `data`.
 #' @keywords internal
 compute_point_distance <- function(point, data, metric, data_norm = NULL) {
   if (metric == "euclidean") {
@@ -274,6 +318,7 @@ compute_point_distance <- function(point, data, metric, data_norm = NULL) {
 }
 
 #' Combine neighbour plans into barycentric weights
+#' @return A numeric matrix of dimension n_query x n_target containing barycentric interpolation weights.
 #' @keywords internal
 aggregate_barycentric_weights <- function(plan_rows, neighbor_idx, neighbor_dists) {
   n_query <- nrow(neighbor_idx)
@@ -306,6 +351,7 @@ aggregate_barycentric_weights <- function(plan_rows, neighbor_idx, neighbor_dist
 }
 
 #' Resolve domain input (index or name)
+#' @return An integer domain index.
 #' @keywords internal
 resolve_domain_index <- function(x, domain_names) {
   if (is.character(x)) {
@@ -324,6 +370,7 @@ resolve_domain_index <- function(x, domain_names) {
 }
 
 #' Compute linear index for upper-triangular pair
+#' @return An integer index into the upper-triangular list of transport plans.
 #' @keywords internal
 get_plan_index <- function(n_domains, from_idx, to_idx) {
   if (from_idx >= to_idx) {
@@ -334,6 +381,7 @@ get_plan_index <- function(n_domains, from_idx, to_idx) {
 }
 
 #' Extract transport plan for an ordered domain pair
+#' @return A transport plan matrix for the specified domain pair. If from > to, the transposed plan is returned.
 #' @keywords internal
 extract_transport_plan <- function(plans, from_idx, to_idx, n_domains) {
   if (from_idx == to_idx) {

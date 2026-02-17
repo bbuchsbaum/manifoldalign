@@ -11,19 +11,6 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// debug_network_simplex
-arma::mat debug_network_simplex(arma::mat cost, arma::vec a, arma::vec b);
-RcppExport SEXP _manifoldalign_debug_network_simplex(SEXP costSEXP, SEXP aSEXP, SEXP bSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::mat >::type cost(costSEXP);
-    Rcpp::traits::input_parameter< arma::vec >::type a(aSEXP);
-    Rcpp::traits::input_parameter< arma::vec >::type b(bSEXP);
-    rcpp_result_gen = Rcpp::wrap(debug_network_simplex(cost, a, b));
-    return rcpp_result_gen;
-END_RCPP
-}
 // linear_sim_embed_cpp
 Rcpp::List linear_sim_embed_cpp(const arma::mat& X, const arma::mat& T, const arma::mat& M, double sigma_P, int ncomp, double alpha_p, int maxit, double tol);
 RcppExport SEXP _manifoldalign_linear_sim_embed_cpp(SEXP XSEXP, SEXP TSEXP, SEXP MSEXP, SEXP sigma_PSEXP, SEXP ncompSEXP, SEXP alpha_pSEXP, SEXP maxitSEXP, SEXP tolSEXP) {
@@ -236,6 +223,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sinkhorn_unified_potentials
+Rcpp::List sinkhorn_unified_potentials(const arma::mat& cost, const arma::vec& a, const arma::vec& b, double epsilon, Rcpp::Nullable<Rcpp::NumericVector> log_u0, Rcpp::Nullable<Rcpp::NumericVector> log_v0, int max_iter, double tol, bool stabilized);
+RcppExport SEXP _manifoldalign_sinkhorn_unified_potentials(SEXP costSEXP, SEXP aSEXP, SEXP bSEXP, SEXP epsilonSEXP, SEXP log_u0SEXP, SEXP log_v0SEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP stabilizedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type a(aSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type log_u0(log_u0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type log_v0(log_v0SEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< bool >::type stabilized(stabilizedSEXP);
+    rcpp_result_gen = Rcpp::wrap(sinkhorn_unified_potentials(cost, a, b, epsilon, log_u0, log_v0, max_iter, tol, stabilized));
+    return rcpp_result_gen;
+END_RCPP
+}
 // solve_sinkhorn_stabilized_cpp
 arma::mat solve_sinkhorn_stabilized_cpp(const arma::mat& C_in, double tau, int max_iter, double tol);
 RcppExport SEXP _manifoldalign_solve_sinkhorn_stabilized_cpp(SEXP C_inSEXP, SEXP tauSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
@@ -276,16 +282,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// test_network_simplex_minimal
-arma::mat test_network_simplex_minimal();
-RcppExport SEXP _manifoldalign_test_network_simplex_minimal() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(test_network_simplex_minimal());
-    return rcpp_result_gen;
-END_RCPP
-}
 // apply_tv_proximal_cpp
 arma::mat apply_tv_proximal_cpp(const arma::mat& Y, double lambda);
 RcppExport SEXP _manifoldalign_apply_tv_proximal_cpp(SEXP YSEXP, SEXP lambdaSEXP) {
@@ -295,6 +291,238 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
     Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
     rcpp_result_gen = Rcpp::wrap(apply_tv_proximal_cpp(Y, lambda));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_apply_map_dense_vec_cpp
+arma::vec uot_apply_map_dense_vec_cpp(const arma::mat& cost, const arma::vec& alpha, const arma::vec& beta, const arma::vec& fbar, const arma::vec& gbar, double epsilon, const arma::vec& signal, double delta);
+RcppExport SEXP _manifoldalign_uot_apply_map_dense_vec_cpp(SEXP costSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP fbarSEXP, SEXP gbarSEXP, SEXP epsilonSEXP, SEXP signalSEXP, SEXP deltaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type fbar(fbarSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type gbar(gbarSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type signal(signalSEXP);
+    Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_apply_map_dense_vec_cpp(cost, alpha, beta, fbar, gbar, epsilon, signal, delta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_apply_map_dense_mat_cpp
+arma::mat uot_apply_map_dense_mat_cpp(const arma::mat& cost, const arma::vec& alpha, const arma::vec& beta, const arma::vec& fbar, const arma::vec& gbar, double epsilon, const arma::mat& signal, double delta);
+RcppExport SEXP _manifoldalign_uot_apply_map_dense_mat_cpp(SEXP costSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP fbarSEXP, SEXP gbarSEXP, SEXP epsilonSEXP, SEXP signalSEXP, SEXP deltaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type fbar(fbarSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type gbar(gbarSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type signal(signalSEXP);
+    Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_apply_map_dense_mat_cpp(cost, alpha, beta, fbar, gbar, epsilon, signal, delta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_apply_map_sparse_vec_cpp
+arma::vec uot_apply_map_sparse_vec_cpp(const Rcpp::IntegerVector& row_ptr, const Rcpp::IntegerVector& col_idx, const Rcpp::NumericVector& cost, int n_rows, int n_cols, const arma::vec& alpha, const arma::vec& beta, const arma::vec& fbar, const arma::vec& gbar, double epsilon, const arma::vec& signal, double delta);
+RcppExport SEXP _manifoldalign_uot_apply_map_sparse_vec_cpp(SEXP row_ptrSEXP, SEXP col_idxSEXP, SEXP costSEXP, SEXP n_rowsSEXP, SEXP n_colsSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP fbarSEXP, SEXP gbarSEXP, SEXP epsilonSEXP, SEXP signalSEXP, SEXP deltaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_ptr(row_ptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type col_idx(col_idxSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< int >::type n_rows(n_rowsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_cols(n_colsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type fbar(fbarSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type gbar(gbarSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type signal(signalSEXP);
+    Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_apply_map_sparse_vec_cpp(row_ptr, col_idx, cost, n_rows, n_cols, alpha, beta, fbar, gbar, epsilon, signal, delta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_apply_map_sparse_mat_cpp
+arma::mat uot_apply_map_sparse_mat_cpp(const Rcpp::IntegerVector& col_ptr, const Rcpp::IntegerVector& row_idx, const Rcpp::NumericVector& cost_csc, int n_rows, int n_cols, const arma::vec& alpha, const arma::vec& beta, const arma::vec& fbar, const arma::vec& gbar, double epsilon, const arma::mat& signal, double delta);
+RcppExport SEXP _manifoldalign_uot_apply_map_sparse_mat_cpp(SEXP col_ptrSEXP, SEXP row_idxSEXP, SEXP cost_cscSEXP, SEXP n_rowsSEXP, SEXP n_colsSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP fbarSEXP, SEXP gbarSEXP, SEXP epsilonSEXP, SEXP signalSEXP, SEXP deltaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type col_ptr(col_ptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_idx(row_idxSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type cost_csc(cost_cscSEXP);
+    Rcpp::traits::input_parameter< int >::type n_rows(n_rowsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_cols(n_colsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type fbar(fbarSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type gbar(gbarSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type signal(signalSEXP);
+    Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_apply_map_sparse_mat_cpp(col_ptr, row_idx, cost_csc, n_rows, n_cols, alpha, beta, fbar, gbar, epsilon, signal, delta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_extract_coupling_sparse_csc_cpp
+Rcpp::List uot_extract_coupling_sparse_csc_cpp(const Rcpp::IntegerVector& col_ptr, const Rcpp::IntegerVector& row_idx, const Rcpp::NumericVector& cost_csc, int n_rows, int n_cols, const arma::vec& alpha, const arma::vec& beta, const arma::vec& fbar, const arma::vec& gbar, double epsilon, int weight_type, double delta, int topk_col, double threshold);
+RcppExport SEXP _manifoldalign_uot_extract_coupling_sparse_csc_cpp(SEXP col_ptrSEXP, SEXP row_idxSEXP, SEXP cost_cscSEXP, SEXP n_rowsSEXP, SEXP n_colsSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP fbarSEXP, SEXP gbarSEXP, SEXP epsilonSEXP, SEXP weight_typeSEXP, SEXP deltaSEXP, SEXP topk_colSEXP, SEXP thresholdSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type col_ptr(col_ptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_idx(row_idxSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type cost_csc(cost_cscSEXP);
+    Rcpp::traits::input_parameter< int >::type n_rows(n_rowsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_cols(n_colsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type fbar(fbarSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type gbar(gbarSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< int >::type weight_type(weight_typeSEXP);
+    Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
+    Rcpp::traits::input_parameter< int >::type topk_col(topk_colSEXP);
+    Rcpp::traits::input_parameter< double >::type threshold(thresholdSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_extract_coupling_sparse_csc_cpp(col_ptr, row_idx, cost_csc, n_rows, n_cols, alpha, beta, fbar, gbar, epsilon, weight_type, delta, topk_col, threshold));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_kl_logpi2_meanF_dense_cpp
+Rcpp::List uot_kl_logpi2_meanF_dense_cpp(const arma::mat& cost, const arma::vec& alpha, const arma::vec& beta, const arma::vec& fbar, const arma::vec& gbar, double epsilon, Rcpp::Nullable<arma::mat> F);
+RcppExport SEXP _manifoldalign_uot_kl_logpi2_meanF_dense_cpp(SEXP costSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP fbarSEXP, SEXP gbarSEXP, SEXP epsilonSEXP, SEXP FSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type fbar(fbarSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type gbar(gbarSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<arma::mat> >::type F(FSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_kl_logpi2_meanF_dense_cpp(cost, alpha, beta, fbar, gbar, epsilon, F));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_kl_logpi2_meanF_sparse_cpp
+Rcpp::List uot_kl_logpi2_meanF_sparse_cpp(const Rcpp::IntegerVector& row_ptr, const Rcpp::IntegerVector& col_idx, const Rcpp::NumericVector& cost, int n_rows, int n_cols, const arma::vec& alpha, const arma::vec& beta, const arma::vec& fbar, const arma::vec& gbar, double epsilon, Rcpp::Nullable<arma::mat> F);
+RcppExport SEXP _manifoldalign_uot_kl_logpi2_meanF_sparse_cpp(SEXP row_ptrSEXP, SEXP col_idxSEXP, SEXP costSEXP, SEXP n_rowsSEXP, SEXP n_colsSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP fbarSEXP, SEXP gbarSEXP, SEXP epsilonSEXP, SEXP FSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_ptr(row_ptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type col_idx(col_idxSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< int >::type n_rows(n_rowsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_cols(n_colsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type fbar(fbarSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type gbar(gbarSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<arma::mat> >::type F(FSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_kl_logpi2_meanF_sparse_cpp(row_ptr, col_idx, cost, n_rows, n_cols, alpha, beta, fbar, gbar, epsilon, F));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_build_sparse_cost_knn_cpp
+Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx, const Rcpp::NumericMatrix& nn_dists, int n_cols, double lambda_anat, Rcpp::Nullable<arma::mat> F, Rcpp::Nullable<arma::mat> G, double lambda_feat, double max_dist, Rcpp::Nullable<Rcpp::IntegerVector> extra_i, Rcpp::Nullable<Rcpp::IntegerVector> extra_j, Rcpp::Nullable<Rcpp::NumericVector> extra_dists, Rcpp::Nullable<arma::mat> Y_template, Rcpp::Nullable<Rcpp::IntegerVector> prior_map, double lambda_prior, double prior_sigma);
+RcppExport SEXP _manifoldalign_uot_build_sparse_cost_knn_cpp(SEXP nn_idxSEXP, SEXP nn_distsSEXP, SEXP n_colsSEXP, SEXP lambda_anatSEXP, SEXP FSEXP, SEXP GSEXP, SEXP lambda_featSEXP, SEXP max_distSEXP, SEXP extra_iSEXP, SEXP extra_jSEXP, SEXP extra_distsSEXP, SEXP Y_templateSEXP, SEXP prior_mapSEXP, SEXP lambda_priorSEXP, SEXP prior_sigmaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerMatrix& >::type nn_idx(nn_idxSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericMatrix& >::type nn_dists(nn_distsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_cols(n_colsSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_anat(lambda_anatSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<arma::mat> >::type F(FSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<arma::mat> >::type G(GSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_feat(lambda_featSEXP);
+    Rcpp::traits::input_parameter< double >::type max_dist(max_distSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type extra_i(extra_iSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type extra_j(extra_jSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type extra_dists(extra_distsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<arma::mat> >::type Y_template(Y_templateSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type prior_map(prior_mapSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_prior(lambda_priorSEXP);
+    Rcpp::traits::input_parameter< double >::type prior_sigma(prior_sigmaSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_build_sparse_cost_knn_cpp(nn_idx, nn_dists, n_cols, lambda_anat, F, G, lambda_feat, max_dist, extra_i, extra_j, extra_dists, Y_template, prior_map, lambda_prior, prior_sigma));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_ti_sinkhorn_kl_dense_cpp
+Rcpp::List uot_ti_sinkhorn_kl_dense_cpp(const arma::mat& cost, const arma::vec& alpha, const arma::vec& beta, double epsilon, double rho1, double rho2, int max_iter, double tol);
+RcppExport SEXP _manifoldalign_uot_ti_sinkhorn_kl_dense_cpp(SEXP costSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP epsilonSEXP, SEXP rho1SEXP, SEXP rho2SEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< double >::type rho1(rho1SEXP);
+    Rcpp::traits::input_parameter< double >::type rho2(rho2SEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_ti_sinkhorn_kl_dense_cpp(cost, alpha, beta, epsilon, rho1, rho2, max_iter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_ti_sinkhorn_kl_sparse_cpp
+Rcpp::List uot_ti_sinkhorn_kl_sparse_cpp(const Rcpp::IntegerVector& row_ptr, const Rcpp::IntegerVector& col_idx, const Rcpp::NumericVector& cost, int n_rows, int n_cols, const arma::vec& alpha, const arma::vec& beta, double epsilon, double rho1, double rho2, int max_iter, double tol);
+RcppExport SEXP _manifoldalign_uot_ti_sinkhorn_kl_sparse_cpp(SEXP row_ptrSEXP, SEXP col_idxSEXP, SEXP costSEXP, SEXP n_rowsSEXP, SEXP n_colsSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP epsilonSEXP, SEXP rho1SEXP, SEXP rho2SEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_ptr(row_ptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type col_idx(col_idxSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< int >::type n_rows(n_rowsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_cols(n_colsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< double >::type rho1(rho1SEXP);
+    Rcpp::traits::input_parameter< double >::type rho2(rho2SEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_ti_sinkhorn_kl_sparse_cpp(row_ptr, col_idx, cost, n_rows, n_cols, alpha, beta, epsilon, rho1, rho2, max_iter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// uot_ti_sinkhorn_kl_sparse_csr_csc_cpp
+Rcpp::List uot_ti_sinkhorn_kl_sparse_csr_csc_cpp(const Rcpp::IntegerVector& row_ptr, const Rcpp::IntegerVector& col_idx, const Rcpp::NumericVector& cost, const Rcpp::IntegerVector& col_ptr, const Rcpp::IntegerVector& row_idx, const Rcpp::NumericVector& cost_csc, int n_rows, int n_cols, const arma::vec& alpha, const arma::vec& beta, double epsilon, double rho1, double rho2, int max_iter, double tol);
+RcppExport SEXP _manifoldalign_uot_ti_sinkhorn_kl_sparse_csr_csc_cpp(SEXP row_ptrSEXP, SEXP col_idxSEXP, SEXP costSEXP, SEXP col_ptrSEXP, SEXP row_idxSEXP, SEXP cost_cscSEXP, SEXP n_rowsSEXP, SEXP n_colsSEXP, SEXP alphaSEXP, SEXP betaSEXP, SEXP epsilonSEXP, SEXP rho1SEXP, SEXP rho2SEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_ptr(row_ptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type col_idx(col_idxSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type cost(costSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type col_ptr(col_ptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_idx(row_idxSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type cost_csc(cost_cscSEXP);
+    Rcpp::traits::input_parameter< int >::type n_rows(n_rowsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_cols(n_colsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< double >::type rho1(rho1SEXP);
+    Rcpp::traits::input_parameter< double >::type rho2(rho2SEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(uot_ti_sinkhorn_kl_sparse_csr_csc_cpp(row_ptr, col_idx, cost, col_ptr, row_idx, cost_csc, n_rows, n_cols, alpha, beta, epsilon, rho1, rho2, max_iter, tol));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -313,10 +541,7 @@ BEGIN_RCPP
 END_RCPP
 }
 
-RcppExport SEXP symbol(/* FIXME */);
-
 static const R_CallMethodDef CallEntries[] = {
-    {"_manifoldalign_debug_network_simplex", (DL_FUNC) &_manifoldalign_debug_network_simplex, 3},
     {"_manifoldalign_linear_sim_embed_cpp", (DL_FUNC) &_manifoldalign_linear_sim_embed_cpp, 8},
     {"_manifoldalign_network_simplex_ot_cpp", (DL_FUNC) &_manifoldalign_network_simplex_ot_cpp, 4},
     {"_manifoldalign_fallback_network_simplex_ot_cpp", (DL_FUNC) &_manifoldalign_fallback_network_simplex_ot_cpp, 3},
@@ -331,13 +556,23 @@ static const R_CallMethodDef CallEntries[] = {
     {"_manifoldalign_compute_rwr_vectorized_cpp", (DL_FUNC) &_manifoldalign_compute_rwr_vectorized_cpp, 5},
     {"_manifoldalign_compute_parrot_cost_cpp", (DL_FUNC) &_manifoldalign_compute_parrot_cost_cpp, 9},
     {"_manifoldalign_sinkhorn_unified", (DL_FUNC) &_manifoldalign_sinkhorn_unified, 7},
+    {"_manifoldalign_sinkhorn_unified_potentials", (DL_FUNC) &_manifoldalign_sinkhorn_unified_potentials, 9},
     {"_manifoldalign_solve_sinkhorn_stabilized_cpp", (DL_FUNC) &_manifoldalign_solve_sinkhorn_stabilized_cpp, 4},
     {"_manifoldalign_sinkhorn_ot_cpp", (DL_FUNC) &_manifoldalign_sinkhorn_ot_cpp, 6},
     {"_manifoldalign_has_lemon_network_simplex", (DL_FUNC) &_manifoldalign_has_lemon_network_simplex, 0},
-    {"_manifoldalign_test_network_simplex_minimal", (DL_FUNC) &_manifoldalign_test_network_simplex_minimal, 0},
     {"_manifoldalign_apply_tv_proximal_cpp", (DL_FUNC) &_manifoldalign_apply_tv_proximal_cpp, 2},
+    {"_manifoldalign_uot_apply_map_dense_vec_cpp", (DL_FUNC) &_manifoldalign_uot_apply_map_dense_vec_cpp, 8},
+    {"_manifoldalign_uot_apply_map_dense_mat_cpp", (DL_FUNC) &_manifoldalign_uot_apply_map_dense_mat_cpp, 8},
+    {"_manifoldalign_uot_apply_map_sparse_vec_cpp", (DL_FUNC) &_manifoldalign_uot_apply_map_sparse_vec_cpp, 12},
+    {"_manifoldalign_uot_apply_map_sparse_mat_cpp", (DL_FUNC) &_manifoldalign_uot_apply_map_sparse_mat_cpp, 12},
+    {"_manifoldalign_uot_extract_coupling_sparse_csc_cpp", (DL_FUNC) &_manifoldalign_uot_extract_coupling_sparse_csc_cpp, 14},
+    {"_manifoldalign_uot_kl_logpi2_meanF_dense_cpp", (DL_FUNC) &_manifoldalign_uot_kl_logpi2_meanF_dense_cpp, 7},
+    {"_manifoldalign_uot_kl_logpi2_meanF_sparse_cpp", (DL_FUNC) &_manifoldalign_uot_kl_logpi2_meanF_sparse_cpp, 11},
+    {"_manifoldalign_uot_build_sparse_cost_knn_cpp", (DL_FUNC) &_manifoldalign_uot_build_sparse_cost_knn_cpp, 15},
+    {"_manifoldalign_uot_ti_sinkhorn_kl_dense_cpp", (DL_FUNC) &_manifoldalign_uot_ti_sinkhorn_kl_dense_cpp, 8},
+    {"_manifoldalign_uot_ti_sinkhorn_kl_sparse_cpp", (DL_FUNC) &_manifoldalign_uot_ti_sinkhorn_kl_sparse_cpp, 12},
+    {"_manifoldalign_uot_ti_sinkhorn_kl_sparse_csr_csc_cpp", (DL_FUNC) &_manifoldalign_uot_ti_sinkhorn_kl_sparse_csr_csc_cpp, 15},
     {"_manifoldalign_w2_cost_matrix_1d", (DL_FUNC) &_manifoldalign_w2_cost_matrix_1d, 4},
-    {"symbol", (DL_FUNC) &symbol, -1},
     {NULL, NULL, 0}
 };
 
