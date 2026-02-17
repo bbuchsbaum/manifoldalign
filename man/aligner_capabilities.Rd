@@ -6,6 +6,16 @@
 \usage{
 aligner_capabilities(algo)
 }
+\arguments{
+\item{algo}{An aligner object created by new_aligner or an aligner constructor}
+}
+\value{
+A list with elements group (character) and supports_multi (logical)
+}
 \description{
 Capabilities for an aligner
+}
+\examples{
+algo <- new_aligner("test", group = "O")
+caps <- aligner_capabilities(algo)
 }

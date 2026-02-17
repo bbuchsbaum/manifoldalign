@@ -4,10 +4,10 @@
 \alias{transform.fpgw}
 \title{Transform new data using FPGW alignment}
 \usage{
-\method{transform}{fpgw}(x, newdata, source_index = 1, target_index = 2, ...)
+\method{transform}{fpgw}(`_data`, newdata, source_index = 1, target_index = 2, ...)
 }
 \arguments{
-\item{x}{An fpgw object}
+\item{_data}{An fpgw object}
 
 \item{newdata}{New data to transform}
 
@@ -22,4 +22,19 @@ Transformed samples in the target domain feature space.
 }
 \description{
 Transform new data using FPGW alignment
+}
+\examples{
+\donttest{
+set.seed(1)
+X1 <- matrix(rnorm(30), 10, 3)
+X2 <- matrix(rnorm(30), 10, 3)
+library(multidesign)
+md1 <- multidesign(X1, data.frame(id = 1:10))
+md2 <- multidesign(X2, data.frame(id = 1:10))
+hd <- hyperdesign(list(d1 = md1, d2 = md2))
+res <- fpgw(hd)
+X_new <- matrix(rnorm(15), 5, 3)
+transformed <- transform(res, X_new, source_index = 1, target_index = 2)
+}
+
 }

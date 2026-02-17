@@ -6,6 +6,33 @@
 \usage{
 fit_many(algo, domains, ...)
 }
+\arguments{
+\item{algo}{An aligner object that supports multi-domain fitting}
+
+\item{domains}{A hyperdesign object or list of domain data}
+
+\item{...}{Additional arguments passed to methods}
+}
+\value{
+The return value depends on the aligner method. Typically a
+  multiblock_biprojector or similar alignment result object.
+}
 \description{
 Native multi-domain entry point (optional)
+}
+\examples{
+\donttest{
+set.seed(1)
+library(multidesign)
+X1 <- matrix(rnorm(60), 30, 2)
+X2 <- matrix(rnorm(60), 30, 2)
+labels <- sample(c("A", "B"), 30, TRUE)
+design1 <- data.frame(labels = labels)
+design2 <- data.frame(labels = labels)
+md1 <- multidesign(X1, design1)
+md2 <- multidesign(X2, design2)
+hd <- hyperdesign(list(d1 = md1, d2 = md2))
+algo <- kema_aligner()
+result <- fit_many(algo, hd, y = labels, ncomp = 2)
+}
 }

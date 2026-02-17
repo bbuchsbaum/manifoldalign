@@ -6,6 +6,31 @@
 \usage{
 fit_pair(algo, X_i, X_j, links = NULL, ...)
 }
+\arguments{
+\item{algo}{An aligner object created by an aligner constructor}
+
+\item{X_i}{First domain data matrix (samples x features)}
+
+\item{X_j}{Second domain data matrix (samples x features)}
+
+\item{links}{Optional correspondence links between domains}
+
+\item{...}{Additional arguments passed to methods}
+}
+\value{
+A pairwise fit object whose class depends on the method (e.g.,
+  grasp_pair_fit, parrot_pair_fit). Contains alignment results including
+  transform parameters and loss.
+}
 \description{
 Fit a pairwise alignment model
+}
+\examples{
+\donttest{
+set.seed(1)
+X1 <- matrix(rnorm(50), 25, 2)
+X2 <- matrix(rnorm(50), 25, 2)
+algo <- grasp_aligner()
+fit <- fit_pair(algo, X1, X2)
+}
 }

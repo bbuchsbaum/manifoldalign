@@ -6,6 +6,21 @@
 \usage{
 invert_transform(transform, ...)
 }
+\arguments{
+\item{transform}{An alignment transform object to invert}
+
+\item{...}{Additional arguments passed to methods}
+}
+\value{
+An align_transform object representing the inverse transform, with
+  from and to swapped.
+}
 \description{
 Invert a transform
+}
+\examples{
+# Create and invert an orthogonal transform
+R <- matrix(c(cos(pi/4), -sin(pi/4), sin(pi/4), cos(pi/4)), 2, 2)
+tr <- new_align_transform("O", R, from = 1, to = 2)
+tr_inv <- invert_transform(tr)
 }

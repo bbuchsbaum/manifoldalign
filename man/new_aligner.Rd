@@ -27,3 +27,6 @@ Adapters for concrete methods (e.g., GRASP, PARROT, GPA, KEMA) should
 implement these generics for their aligner classes.
 Create a simple aligner descriptor
 }
+\examples{
+algo <- new_aligner("my_method", group = "O")
+}

@@ -19,3 +19,12 @@ Symmetric dense matrix.
 \description{
 Generic helper for Z^T A Z using an operator.
 }
+\examples{
+\donttest{
+library(Matrix)
+K1 <- Matrix(rnorm(20), 10, 2)
+Zop <- make_Zop_from_Ks(list(K1))
+A <- Diagonal(10, 1)
+G <- gram_Z_A_Z(Zop, A)
+}
+}

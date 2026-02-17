@@ -29,3 +29,9 @@ List with two networks and ground truth alignment
 \description{
 Creates two networks with known correspondence for validating PARROT
 }
+\examples{
+\donttest{
+vdata <- generate_parrot_validation_data(n_nodes = 20, n_anchors = 5)
+str(vdata$ground_truth)
+}
+}

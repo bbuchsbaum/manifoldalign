@@ -17,3 +17,12 @@ Symmetric dense matrix of size r x r.
 \description{
 Compute Z^T Z without forming Z explicitly.
 }
+\examples{
+\donttest{
+library(Matrix)
+K1 <- Matrix(rnorm(20), 10, 2)
+K2 <- Matrix(rnorm(20), 10, 2)
+Zop <- make_Zop_from_Ks(list(K1, K2))
+G <- gram_ZZ(Zop)
+}
+}

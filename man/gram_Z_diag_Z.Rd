@@ -19,3 +19,12 @@ Symmetric dense matrix.
 \description{
 Fast path for diagonal A in Z^T A Z.
 }
+\examples{
+\donttest{
+library(Matrix)
+K1 <- Matrix(rnorm(20), 10, 2)
+Zop <- make_Zop_from_Ks(list(K1))
+diag_vals <- rep(1, 10)
+G <- gram_Z_diag_Z(Zop, diag_vals)
+}
+}

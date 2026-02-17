@@ -3,6 +3,9 @@
 \name{parrot-benchmark}
 \alias{parrot-benchmark}
 \title{PARROT Performance Benchmarking}
+\value{
+NULL (documentation page only).
+}
 \description{
 Functions for benchmarking PARROT performance on large-scale networks
 }

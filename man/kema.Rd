@@ -43,7 +43,7 @@ kema(data, y, ...)
   sample_frac = 1,
   use_laplacian = TRUE,
   solver = "regression",
-  dweight = 0,
+  dweight = 0.1,
   rweight = 0,
   simfun = neighborweights::binary_label_matrix,
   disfun = NULL,
@@ -86,7 +86,7 @@ center())}
 \item{solver}{Solver method: "regression" for fast approximation (default) 
 or "exact" for precise solution}
 
-\item{dweight}{Weight for dissimilarity/repulsion terms (default: 0)}
+\item{dweight}{Weight for dissimilarity/repulsion terms (default: 0.1)}
 
 \item{rweight}{Weight for repulsion graph (default: 0)}
 
@@ -267,8 +267,6 @@ result_semi <- kema(md_semi, y = condition, subject = subject, ncomp = 2)
 
 \donttest{
 # Example with hyperdesign data
-library(multidesign)
-
 # Create synthetic multi-domain data
 set.seed(123)
 domain1 <- list(
@@ -279,14 +277,15 @@ domain2 <- list(
   x = matrix(rnorm(100), 50, 2),
   design = data.frame(labels = sample(c("A", "B"), 50, TRUE))
 )
-hd <- list(domain1 = domain1, domain2 = domain2)
+hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign")
 
 # Run KEMA with default settings
 result <- kema(hd, y = labels, ncomp = 2)
 
 # Semi-supervised learning with missing labels
-domain1$design$labels[1:10] <- NA  # Mark some samples as unlabeled
-result_semi <- kema(hd, y = labels, ncomp = 2)
+hd_semi <- hd
+hd_semi$domain1$design$labels[1:10] <- NA  # Mark some samples as unlabeled
+result_semi <- kema(hd_semi, y = labels, ncomp = 2)
 
 # Use exact solver for highest accuracy
 result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)

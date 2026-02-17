@@ -17,3 +17,12 @@ Symmetric dense matrix.
 \description{
 Z^T L_d Z = Z^T D_d Z + (Z^T C)(Z^T C)^T - (Z^T ell)(Z^T ell)^T
 }
+\examples{
+\donttest{
+library(Matrix)
+K1 <- Matrix(rnorm(20), 10, 2)
+Zop <- make_Zop_from_Ks(list(K1))
+# F <- label_factors(...)  # Requires label factors
+# G <- gram_Ld(Zop, F)
+}
+}

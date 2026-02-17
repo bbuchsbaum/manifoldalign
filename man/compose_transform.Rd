@@ -6,6 +6,25 @@
 \usage{
 compose_transform(T_ab, T_bc, ...)
 }
+\arguments{
+\item{T_ab}{An alignment transform from domain a to domain b}
+
+\item{T_bc}{An alignment transform from domain b to domain c}
+
+\item{...}{Additional arguments passed to methods}
+}
+\value{
+An align_transform object representing the composed transform from
+  domain a to domain c.
+}
 \description{
 Compose two transforms (a->b and b->c)
+}
+\examples{
+# Compose two orthogonal transforms
+R1 <- diag(3)
+R2 <- diag(3)
+T_ab <- new_align_transform("O", R1, from = 1, to = 2)
+T_bc <- new_align_transform("O", R2, from = 2, to = 3)
+T_ac <- compose_transform(T_ab, T_bc)
 }

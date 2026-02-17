@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-`gpca_align.hyperdesign()` implements the Generalized PCA alignment described in
+`gpca_align()` implements the Generalized PCA alignment described in
 `R/gpca_align.R`.  It constructs a coupled metric across domains and then solves
 a generalized PCA problem to obtain a shared latent embedding.  The helper
 `gpca_align_control()` exposes safeguards for graph sparsification, label
@@ -25,7 +25,7 @@ balancing and dense-matrix memory limits, making it practical on real data.
 This vignette walks through a minimal pipeline:
 
 1. Load a reusable **hyperdesign** dataset with three related domains.
-2. Run `gpca_align.hyperdesign()` and inspect the aligned scores.
+2. Run `gpca_align()` and inspect the aligned scores.
 3. Tune graph sparsity and balancing with `gpca_align_control()`.
 
 The code below only relies on public package APIs, so you can copy–paste it when
@@ -70,12 +70,13 @@ zscore_columns <- function(mat) {
 }
 ```
 
-`gpca_align.hyperdesign()` expects the label column name via the `y` argument.
+When `data` is a `hyperdesign`, call `gpca_align()` and supply the label column
+name via the `y` argument.
 
 ```{r run-gpca-align}
 base_preproc <- replicate(length(domain_names), multivarious::pass(), simplify = FALSE)
 
-gpca_fit <- gpca_align.hyperdesign(
+gpca_fit <- gpca_align(
   hd,
   y = condition,
   ncomp = 2,
@@ -165,7 +166,7 @@ ctrl <- gpca_align_control(
   verbose = FALSE
 )
 
-gpca_dense <- gpca_align.hyperdesign(
+gpca_dense <- gpca_align(
   hd,
   y = condition,
   ncomp = 2,
@@ -178,19 +179,19 @@ summary(gpca_dense$sdev)
 
 When working with larger domains, consider leaving `knn = NA` (the default) to
 use fully dense metrics or lower the `max_dense_elems` parameter to enforce a
-safe memory ceiling.  If `gpca_align.hyperdesign()` detects that densifying the block matrix
+safe memory ceiling.  If `gpca_align()` detects that densifying the block matrix
 would exceed the limit, it aborts with a diagnostic message so you can tighten
 the sparsification or dimensionality reduction beforehand.
 
 ## Next Steps
 
-- `gpca_align.hyperdesign()` returns a standard `multivarious` projector, so you can call
+- `gpca_align()` returns a standard `multivarious` projector, so you can call
   `predict()` on new samples (via `multivarious::multiblock_biprojector`).
 - The RMS alignment summary above shows how closely each domain pair agrees in the
   coupled space; values near zero indicate strong agreement.
 - Use `gpca_align_control()` to add sparsification or label balancing when operating
   at larger scale.
-- Pair `gpca_align.hyperdesign()` with `kema()` or `grasp()` in the same pipeline to compare
+- Pair `gpca_align()` with `kema()` or `grasp()` in the same pipeline to compare
   linear vs kernel alignment strategies.
 
 This vignette is intentionally lightweight—swap in your own domains or expand

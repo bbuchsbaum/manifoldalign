@@ -32,6 +32,9 @@ solve_sylvester_rwr(
 
 \item{use_cpp}{Whether to use C++ implementation}
 }
+\value{
+A numeric matrix solving the Sylvester equation for RWR computation
+}
 \description{
 Solve Sylvester Equation for Cross-Graph RWR Cost (Dispatcher)
 }

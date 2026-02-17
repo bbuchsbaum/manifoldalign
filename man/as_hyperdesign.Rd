@@ -28,3 +28,18 @@ Builds a minimal 'hyperdesign' object (list of domains with fields `x` and
 `design`) from a list of matrices and optional label vectors. This avoids
 requiring the multidesign package for simple use cases.
 }
+\examples{
+# Create hyperdesign from list of matrices
+X1 <- matrix(rnorm(100), 50, 2)
+X2 <- matrix(rnorm(100), 50, 2)
+X3 <- matrix(rnorm(100), 50, 2)
+hd <- as_hyperdesign(list(X1, X2, X3))
+
+# With labels
+labels <- list(
+  rep(c("A", "B"), each = 25),
+  rep(c("A", "B"), each = 25),
+  rep(c("A", "B"), each = 25)
+)
+hd_labeled <- as_hyperdesign(list(X1, X2, X3), labels = labels)
+}

@@ -15,3 +15,8 @@ List with memory usage statistics
 \description{
 Estimates memory usage for different network sizes
 }
+\examples{
+\donttest{
+mem_profile <- profile_parrot_memory(n_nodes = 50)
+}
+}

@@ -17,3 +17,12 @@ Dense matrix with r rows.
 \description{
 Apply Z^T to arbitrary multi-vectors without forming Z.
 }
+\examples{
+\donttest{
+library(Matrix)
+K1 <- Matrix(rnorm(20), 10, 2)
+Zop <- make_Zop_from_Ks(list(K1))
+S <- matrix(rnorm(30), 10, 3)
+result <- Zt_times(Zop, S)
+}
+}

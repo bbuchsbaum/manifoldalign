@@ -24,3 +24,7 @@ List with domain data and labels
 Creates the synthetic spiral dataset used in KEMA paper Figure 2
 for numerical validation.
 }
+\examples{
+data <- generate_spiral_validation_data(n_per_domain = 50, seed = 123)
+str(data)
+}

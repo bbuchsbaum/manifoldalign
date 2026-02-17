@@ -11,7 +11,8 @@ compute_grasp_assignment(
   desc2,
   M,
   distance_method = "cosine",
-  solver_method = "linear"
+  solver_method = "linear",
+  alpha = 0.85
 )
 }
 \arguments{

@@ -6,6 +6,9 @@
 \usage{
 get_plan_index(n_domains, from_idx, to_idx)
 }
+\value{
+An integer index into the upper-triangular list of transport plans.
+}
 \description{
 Compute linear index for upper-triangular pair
 }

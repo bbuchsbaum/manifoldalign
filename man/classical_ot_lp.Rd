@@ -6,6 +6,9 @@
 \usage{
 classical_ot_lp(cost, p, q)
 }
+\value{
+A numeric matrix representing the optimal transport plan.
+}
 \description{
 Classical OT linear program
 }

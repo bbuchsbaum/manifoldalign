@@ -6,6 +6,9 @@
 \usage{
 validate_marginals(marginals, n_samples, n_domains)
 }
+\value{
+A list of validated and normalized marginal distribution vectors, each summing to 1.
+}
 \description{
 Validate marginal distributions
 }

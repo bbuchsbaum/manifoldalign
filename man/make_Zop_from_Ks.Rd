@@ -18,3 +18,12 @@ List with dimensions and forward/transpose operators.
 Build matrix-free operator for block-diagonal kernel matrix constructed from
 pre-computed kernel blocks.
 }
+\examples{
+\donttest{
+library(Matrix)
+K1 <- Matrix(rnorm(20), 10, 2)
+K2 <- Matrix(rnorm(20), 10, 2)
+Zop <- make_Zop_from_Ks(list(K1, K2))
+str(Zop)
+}
+}

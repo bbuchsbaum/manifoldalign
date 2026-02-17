@@ -11,9 +11,11 @@
 | **PARROT** | Graph/Transport | Position-aware features with optimal transport | Semi-supervised network alignment | O(n² × iterations) |
 | **Gromov-Wasserstein** | Optimal Transport | Structural optimal transport | Domain adaptation without correspondence | O(n² × iterations) |
 | **FPGW** | Optimal Transport | Combines features and structure | Partial transport with mixed costs | O(n² × iterations) |
+| **UOT (TI-Sinkhorn)** | Optimal Transport (Unbalanced) | Translation-invariant dual + sparse neighborhoods | Template-based functional alignment with mass drop | O(nnz × iterations) |
 | **Coupled Diagonalization** | Spectral | Joint diagonalization with coupling | Multi-modal manifold analysis | O(n³) + Stiefel optimization |
 | **GPCA Align** | Linear/PCA | Generalized PCA with constraints | Linear multi-domain alignment | O(n³) eigendecomposition |
 | **Linear Similarity Embedding** | Linear/Similarity | Similarity-preserving linear maps | Fast alignment with known similarities | O(n³) or iterative |
+| **Spectral MNN Align** | Spectral/Graph | HKS descriptors + mutual-NN anchors + Procrustes | Fast, correspondence-optional multi-domain alignment | O(nnz × k + n log n) |
 
 ## Common Parameters
 
@@ -28,6 +30,8 @@
 | `solver` | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ |
 | `verbose` | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✓ |
 
+*Notes:* `spectral_mnn_align` uses `refine_rounds` (a small number of refinement iterations) rather than a general-purpose `max_iter`.
+
 ## Input/Output Specifications
 
 | Method | Input Type | Primary Output | Additional Outputs |
@@ -39,9 +43,11 @@
 | **PARROT** | hyperdesign | multiblock_biprojector | transport_plan, alignment_matrix |
 | **Gromov-Wasserstein** | hyperdesign | gromov_wasserstein | transport_plans, distances |
 | **FPGW** | hyperdesign | fpgw | transport_plans, distances |
+| **UOT (TI-Sinkhorn)** | coords/features + masses | uot_pair_fit / multiset_uot_fit | sparse operators, template weights |
 | **Coupled Diagonalization** | hyperdesign | multiblock_biprojector | coupled_bases |
 | **GPCA Align** | hyperdesign | gpca_aligned | loadings, scores |
 | **Linear Similarity Embedding** | matrices + similarity | list | W, objective_values |
+| **Spectral MNN Align** | hyperdesign/list | multiblock_biprojector | rotations, anchors |
 
 ## Method Selection Guide
 
@@ -75,6 +81,7 @@
 | **PARROT** | O(I × n²) | O(n²) | Medium | C++ accelerated |
 | **Gromov-Wasserstein** | O(I × n²) | O(n²) | Medium | Partially |
 | **FPGW** | O(I × n²) | O(n²) | Medium | Partially |
+| **UOT (TI-Sinkhorn)** | O(I × nnz) | O(nnz) | High (sparse voxel mode) | Yes (subject-parallel) |
 | **Coupled Diagonalization** | O(n³ + I×n²k) | O(nk) | Low | Partially |
 | **GPCA Align** | O(n³) | O(n²) | Low | SVD only |
 | **Linear Similarity Embedding** | O(n³) or O(I×n²) | O(n²) | Medium | Solver dependent |
@@ -90,9 +97,11 @@
 | **PARROT** | ✓ (partial anchors) | ✓ | Warm-start | Local minimum |
 | **Gromov-Wasserstein** | ✗ | Moderate | Uniform | Local minimum |
 | **FPGW** | ✓ (partial transport) | ✓ | Entropic warm-start | Local minimum |
+| **UOT (TI-Sinkhorn)** | ✓ (mask/outliers via mass drop) | ✓ | Zero potentials | Global (convex objective) |
 | **Coupled Diagonalization** | ✓ (partial corresp.) | ✓ | Spectral | Local minimum |
 | **GPCA Align** | ✗ | Moderate | PCA-based | Global (convex) |
 | **Linear Similarity Embedding** | ✗ | Depends on similarity | Identity/learned | Depends on solver |
+| **Spectral MNN Align** | ✗ | Moderate | None / MNN anchors | Single-pass (plus optional refinement) |
 
 ## Unique Features
 
@@ -105,6 +114,8 @@
 | **PARROT** | Position-aware features via Random Walk with Restart |
 | **Gromov-Wasserstein** | Pure structural alignment without features |
 | **FPGW** | Flexible feature/structure trade-off, mass constraints |
+| **UOT (TI-Sinkhorn)** | Translation-invariant UOT with sparse neighborhoods + reusable operators |
 | **Coupled Diagonalization** | Simultaneous multi-modal analysis |
 | **GPCA Align** | Interpretable linear transformations |
 | **Linear Similarity Embedding** | Direct optimization of similarity preservation |
+| **Spectral MNN Align** | Intrinsic geometry descriptors (HKS) enable fast unsupervised anchors |

@@ -24,3 +24,9 @@ List with validation results
 Tests whether KEMA produces eigenvalues matching those reported
 in Figure 2 of Tuia & Camps-Valls (2016).
 }
+\examples{
+\donttest{
+result <- validate_kema_eigenvalues()
+print(result$success)
+}
+}

@@ -17,3 +17,12 @@ Symmetric dense matrix of size r x r.
 \description{
 Z^T L_s Z = Z^T D_s Z - (Z^T C)(Z^T C)^T
 }
+\examples{
+\donttest{
+library(Matrix)
+K1 <- Matrix(rnorm(20), 10, 2)
+Zop <- make_Zop_from_Ks(list(K1))
+# F <- label_factors(...)  # Requires label factors
+# G <- gram_Ls(Zop, F)
+}
+}

@@ -39,3 +39,17 @@ Matrix of barycentric weights (`type = "weights"`) or transported
 \description{
 Transport new samples using the learned GW alignment.
 }
+\examples{
+\donttest{
+set.seed(1)
+X1 <- matrix(rnorm(30), 10, 3)
+X2 <- matrix(rnorm(30), 10, 3)
+library(multidesign)
+md1 <- multidesign(X1, data.frame(id = 1:10))
+md2 <- multidesign(X2, data.frame(id = 1:10))
+hd <- hyperdesign(list(d1 = md1, d2 = md2))
+fit <- gromov_wasserstein(hd, epsilon = 0.5, max_iter = 10)
+newX <- matrix(rnorm(6), 2, 3)
+pred <- predict(fit, newX, from = 1, to = 2)
+}
+}

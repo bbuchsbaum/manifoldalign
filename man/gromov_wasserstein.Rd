@@ -43,7 +43,44 @@ gromov_wasserstein(data, ...)
   \item \code{inner_tol}: Convergence tolerance for inner Sinkhorn iterations (default: 1e-9)
   \item \code{dist_chunk_size}: Chunk size for memory-efficient distance computation (default: 1000)
 }}
+
+\item{epsilon}{Entropic regularization parameter. Default: 0.1}
+
+\item{metric}{Distance metric for within-domain distances. Default: "euclidean"}
+
+\item{init}{Initialization method: "uniform" or "random". Default: "uniform"}
+
+\item{max_iter}{Maximum iterations for outer loop. Default: 100}
+
+\item{tol}{Convergence tolerance for outer loop. Default: 1e-9}
+
+\item{verbose}{Print convergence information. Default: FALSE}
+
+\item{marginals}{Optional list of marginal distributions per domain}
+
+\item{scale}{Scaling strategy: "per_domain", "global", or "none". Default: "per_domain"}
+
+\item{inner_max_iter}{Maximum Sinkhorn iterations. Default: 30}
+
+\item{inner_tol}{Sinkhorn convergence tolerance. Default: 1e-9}
+
+\item{dist_chunk_size}{Chunk size for distance computation. Default: 1000}
+}
+\value{
+A `gromov_wasserstein` object containing transport plans, pairwise distances, convergence status, and domain metadata. See `gromov_wasserstein.hyperdesign` for full details.
 }
 \description{
 Generic function for computing Gromov-Wasserstein distance between domains
+}
+\examples{
+\donttest{
+set.seed(1)
+X1 <- matrix(rnorm(30), 10, 3)
+X2 <- matrix(rnorm(30), 10, 3)
+library(multidesign)
+md1 <- multidesign(X1, data.frame(id = 1:10))
+md2 <- multidesign(X2, data.frame(id = 1:10))
+hd <- hyperdesign(list(d1 = md1, d2 = md2))
+result <- gromov_wasserstein(hd, epsilon = 0.5, max_iter = 10)
+}
 }

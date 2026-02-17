@@ -2,13 +2,10 @@ Package: manifoldalign
 Type: Package
 Title: Manifold Alignment for Multi-Domain Data
 Version: 0.1.0
-Author: Brad Buchsbaum
-Maintainer: Brad Buchsbaum <brad.buchsbaum@gmail.com>
 Authors@R: person("Brad", "Buchsbaum", email = "brad.buchsbaum@gmail.com", role = c("aut", "cre"))
 Description: Provides tools for manifold alignment and domain adaptation across multiple data domains. Implements Kernel Manifold Alignment (KEMA) and related algorithms for aligning data manifolds while preserving local structure and class relationships. Features include semi-supervised learning support, efficient sparse matrix operations, and pseudolabeling for unsupervised domain adaptation. The package enables alignment of heterogeneous data types through kernel-based methods while maintaining computational efficiency for large-scale datasets.
 License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
 Imports:
     Matrix,
     PRIMME,
@@ -25,28 +22,36 @@ Imports:
     coop,
     igraph,
     methods,
-    magrittr,
     genpca,
     irlba,
     RANN,
-    Rcpp,
-    RcppArmadillo,
-    roptim,
     clue
 Suggests:
     testthat (>= 3.0.0),
+    FNN,
+    ggplot2,
     knitr,
-    rmarkdown,
-    RcppAnnoy,
     multidesign,
+    pryr,
+    proxy,
+    ps,
+    rmarkdown,
+    Rcpp,
+    RcppAnnoy,
+    Rnanoflann,
+    scales,
+    tidyr,
     tibble,
     lpSolve,
     profvis,
-    microbenchmark
+    microbenchmark,
+    vegan
+Config/testthat/edition: 3
 Depends:
-    R (>= 3.5.0)
+    R (>= 4.4.0)
 LinkingTo:
     Rcpp,
     RcppArmadillo,
     roptim
 RoxygenNote: 7.3.3
+VignetteBuilder: knitr

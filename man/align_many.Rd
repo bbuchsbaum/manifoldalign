@@ -28,6 +28,8 @@ align_many(
 
 \item{parallel}{logical; reserved for future parallel pair fits}
 
+\item{sync}{list of synchronization options (graph, refine, gl, perm settings)}
+
 \item{...}{forwarded to adapter methods}
 }
 \value{
@@ -42,4 +44,15 @@ synchronization to get per-domain transforms into a shared space.
 }
 \details{
 If the adapter reports native multi-view support, dispatches to fit_many().
+}
+\examples{
+\donttest{
+set.seed(1)
+X1 <- matrix(rnorm(50), 10, 5)
+X2 <- matrix(rnorm(50), 10, 5)
+X3 <- matrix(rnorm(50), 10, 5)
+domains <- list(X1, X2, X3)
+# align_many requires an aligner object with adapter methods
+# See package vignettes for complete examples
+}
 }

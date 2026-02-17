@@ -6,8 +6,16 @@
 \usage{
 kema_aligner()
 }
+\value{
+An object of class `c("kema_aligner", "aligner")` representing a
+  KEMA alignment algorithm descriptor.
+}
 \description{
 These adapters declare native multi-domain support and delegate
 to existing multi-view functions in this package.
 KEMA aligner (native multi-view)
+}
+\examples{
+algo <- kema_aligner()
+aligner_capabilities(algo)
 }

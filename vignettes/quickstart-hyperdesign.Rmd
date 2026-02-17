@@ -2,7 +2,7 @@
 title: "Quickstart: Building a hyperdesign and running KEMA/GPA"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Quickstart: hyperdesign for KEMA/GPA}
+  %\VignetteIndexEntry{Quickstart: Building a hyperdesign and running KEMA/GPA}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -44,4 +44,3 @@ hd <- as_hyperdesign(list(X1, X2), labels = list(y1, y2), label_name = "label",
 Tip: For larger N, configure `graph="auto"` and `sync` options in
 `align_many()` to choose spectral permutation consensus, GL least-squares,
 or orthogonal rotation synchronization.
-

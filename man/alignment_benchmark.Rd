@@ -15,7 +15,7 @@ A list with the following components:
 }
 }
 \usage{
-data(alignment_benchmark)
+alignment_benchmark
 }
 \description{
 A small, deterministic multi-domain dataset used across alignment examples and
@@ -25,11 +25,9 @@ matrices/design frames and the class labels so alignment methods can generate
 comparable hyperdesigns on demand.
 }
 \examples{
-data <- manifoldalign::alignment_benchmark
-hd <- multidesign::hyperdesign(lapply(data$domains, function(dom) {
-  multidesign::multidesign(dom$x, dom$design)
-}))
-str(hd, max.level = 1)
+data <- alignment_benchmark
+lapply(data$domains, function(dom) dim(dom$x))
+table(data$labels)
 
 }
 \keyword{datasets}

@@ -6,6 +6,9 @@
 \usage{
 partial_ot_mass(cost, p, q, rho, method = c("lpSolve", "Rsymphony"))
 }
+\value{
+A numeric matrix representing the optimal transport plan.
+}
 \description{
 Mass-constrained partial OT oracle
 }

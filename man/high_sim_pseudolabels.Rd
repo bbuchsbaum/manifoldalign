@@ -49,10 +49,16 @@ documentation:
 }
 \examples{
 \donttest{
-# Assuming you have multi-domain data
-strata <- multidesign::hyperdesign(raw_blocks)
-plabs <- high_sim_pseudolabels(strata, k = 5, cos_thresh = 0.98)
-table(plabs, useNA = "always")
+if (requireNamespace("RcppAnnoy", quietly = TRUE) &&
+    requireNamespace("igraph", quietly = TRUE)) {
+  set.seed(1)
+  strata <- list(
+    list(x = matrix(rnorm(30), 10, 3), design = data.frame(row = 1:10)),
+    list(x = matrix(rnorm(30), 10, 3), design = data.frame(row = 1:10))
+  )
+  plabs <- high_sim_pseudolabels(strata, k = 3, cos_thresh = 0.95, ann_trees = 10)
+  table(plabs, useNA = "always")
+}
 }
 
 }

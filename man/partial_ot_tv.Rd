@@ -6,6 +6,9 @@
 \usage{
 partial_ot_tv(cost, p, q, lambda)
 }
+\value{
+A numeric matrix representing the optimal transport plan.
+}
 \description{
 TV-penalized oracle
 }

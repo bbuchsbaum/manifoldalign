@@ -34,6 +34,6 @@ Cross-graph RWR cost matrix C_rwr
 }
 \description{
 Implements the Sylvester iteration from Eq. 4 in the paper:
-C_rwr = (1+β)C_node + (1-β)γ * W1 * C_rwr * W2^T
+C_rwr = (1+beta) * C_node + (1-beta) * gamma * W1 * C_rwr * W2^T
 }
 \keyword{internal}

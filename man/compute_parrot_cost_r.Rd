@@ -31,7 +31,7 @@ Position-aware cost matrix C_rwr
 }
 \description{
 Follows the two-stage process from the paper:
-1. Compute C_node = α * cost_RWR + (1-α) * cost_attr (Eq. 3)
+1. Compute C_node = alpha * cost_RWR + (1-alpha) * cost_attr (Eq. 3)
 2. Solve Sylvester equation for C_rwr (Eq. 4)
 }
 \keyword{internal}

@@ -6,6 +6,9 @@
 \usage{
 sinkhorn_fgw_warmstart(Cfeat, Cx, Cy, p, q, omega1, eps, iters)
 }
+\value{
+A numeric matrix representing the warm-start transport plan.
+}
 \description{
 Warm-start with entropic FGW
 }

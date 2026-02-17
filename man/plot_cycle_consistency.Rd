@@ -29,3 +29,14 @@ Aggregates triangle (i,j,k) residuals into a per-pair matrix and draws a
 heatmap. Useful for spotting inconsistent domains or weak edges after
 synchronization.
 }
+\examples{
+\donttest{
+# Requires align_many result with diagnostics
+# X1 <- matrix(rnorm(100), 50, 2)
+# X2 <- matrix(rnorm(100), 50, 2)
+# X3 <- matrix(rnorm(100), 50, 2)
+# algo <- grasp_aligner()
+# result <- align_many(list(X1, X2, X3), algo)
+# plot_cycle_consistency(result$diagnostics)
+}
+}

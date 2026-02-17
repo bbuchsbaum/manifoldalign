@@ -64,7 +64,16 @@ Performs CONE-Align on three or more graph domains simultaneously. Extends the
 pairwise CONE-Align algorithm to handle multiple graphs through iterative
 alignment to a common reference frame.
 }
+\examples{
+\donttest{
+set.seed(1)
+X1 <- matrix(rnorm(60), 30, 2)
+X2 <- matrix(rnorm(60), 30, 2)
+X3 <- matrix(rnorm(60), 30, 2)
+result <- cone_align_multiple(list(X1, X2, X3), ncomp = 2)
+}
+}
 \seealso{
-\code{\link{cone_align}} for pairwise alignment, 
+\code{\link{cone_align}} for pairwise alignment,
   \code{\link{cone_align_multiple.hyperdesign}} for detailed documentation
 }

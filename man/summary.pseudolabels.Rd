@@ -11,6 +11,20 @@
 
 \item{...}{Additional arguments (ignored)}
 }
+\value{
+The pseudolabels object, invisibly.
+}
 \description{
 Summary method for pseudolabels objects
+}
+\examples{
+\donttest{
+sim_mat <- Matrix::sparseMatrix(
+  i = c(1,2,1,3,2,3), j = c(2,1,3,1,3,2),
+  x = c(0.9,0.9,0.8,0.8,0.7,0.7), dims = c(5,5)
+)
+pl <- assign_pseudolabels(sim_mat, min_clusters = 1, min_cluster_size = 1)
+summary(pl)
+}
+
 }

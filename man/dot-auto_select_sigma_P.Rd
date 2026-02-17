@@ -18,7 +18,7 @@
 \item{verbose}{Logical for progress reporting}
 }
 \value{
-Optimal sigma_P value
+Numeric scalar giving the optimal sigma_P value
 }
 \description{
 Auto-select sigma_P using histogram-spread heuristic

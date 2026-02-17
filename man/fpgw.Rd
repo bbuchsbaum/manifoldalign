@@ -50,6 +50,24 @@ fpgw(data, ...)
     (default: 50)
   \item \code{verbose}: Print convergence information (default: FALSE)
 }}
+
+\item{omega1}{Weight of the feature term (0 ≤ omega1 ≤ 1). Default: 0.001}
+
+\item{lambda}{Non-negative total variation penalty. Default: 0}
+
+\item{rho}{Mass budget in (0, min(|μ|,|ν|)] for mass-constrained variant}
+
+\item{epsilon}{Initial entropic regularization for warm-start. Default: 0.01}
+
+\item{metric}{Distance metric for within-domain distances. Default: "euclidean"}
+
+\item{max_iter}{Maximum iterations for Frank-Wolfe. Default: 200}
+
+\item{tol}{Convergence tolerance for Frank-Wolfe gap. Default: 1e-6}
+
+\item{inner_max_iter}{Maximum iterations for inner optimization. Default: 50}
+
+\item{verbose}{Print convergence information. Default: FALSE}
 }
 \value{
 An fpgw object (inheriting from multiblock_biprojector) containing:
@@ -88,7 +106,7 @@ The algorithm supports two variants:
 The Frank-Wolfe algorithm is used with closed-form step sizes for efficiency.
 }
 \examples{
-\dontrun{
+\donttest{
 library(multidesign)
 
 # Example 1: Basic FPGW between two domains with different dimensions

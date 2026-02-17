@@ -173,7 +173,6 @@ Key parameters:
 \examples{
 \donttest{
 # Example with hyperdesign graph data
-library(multidesign)
 
 # Create synthetic graph domains
 set.seed(123)
@@ -187,7 +186,7 @@ domain2 <- list(
 )
 
 # Create hyperdesign
-hd <- hyperdesign(list(domain1 = domain1, domain2 = domain2))
+hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign")
 
 # Run CONE-Align with default parameters
 result <- cone_align(hd, ncomp = 10)

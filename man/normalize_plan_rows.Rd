@@ -6,6 +6,9 @@
 \usage{
 normalize_plan_rows(plan)
 }
+\value{
+A row-normalized matrix where each row sums to 1.
+}
 \description{
 Normalize transport plan rows to probability distributions
 }

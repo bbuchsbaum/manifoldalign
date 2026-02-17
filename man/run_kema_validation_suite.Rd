@@ -15,3 +15,9 @@ List with all validation results
 \description{
 Runs all numerical validation tests for KEMA implementation.
 }
+\examples{
+\donttest{
+results <- run_kema_validation_suite(verbose = FALSE)
+print(results$overall_success)
+}
+}

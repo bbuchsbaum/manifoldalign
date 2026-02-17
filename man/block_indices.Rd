@@ -15,3 +15,10 @@ Matrix with start and end indices for each block
 \description{
 Block indices for data list
 }
+\examples{
+data1 <- list(x = matrix(rnorm(20), 10, 2))
+data2 <- list(x = matrix(rnorm(30), 15, 2))
+data_list <- list(data1, data2)
+indices <- block_indices(data_list)
+indices
+}

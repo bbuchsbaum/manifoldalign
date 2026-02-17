@@ -3,6 +3,9 @@
 \name{utils-ot}
 \alias{utils-ot}
 \title{Shared Utilities for Optimal Transport Methods}
+\value{
+NULL (documentation page only).
+}
 \description{
 Internal functions shared between gromov_wasserstein and fpgw implementations.
 }

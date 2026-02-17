@@ -26,6 +26,9 @@ compute_parrot_rwr(
 
 \item{use_cpp}{Whether to use C++ implementation}
 }
+\value{
+A list of RWR feature matrices, one per network
+}
 \description{
 Compute RWR Features for PARROT (Dispatcher)
 }

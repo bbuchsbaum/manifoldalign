@@ -14,8 +14,14 @@ evaluate_parrot_accuracy(parrot_result, ground_truth, k = c(1, 5, 10))
 \item{k}{Top-k accuracy levels to compute (default: c(1, 5, 10))}
 }
 \value{
-List of accuracy metrics
+A list with alignment accuracy metrics including hit rate at various k values
 }
 \description{
 Computes various accuracy metrics for PARROT alignment results
+}
+\examples{
+\donttest{
+vdata <- generate_parrot_validation_data(n_nodes = 20, n_anchors = 5)
+# evaluate_parrot_accuracy(result, vdata$ground_truth)
+}
 }

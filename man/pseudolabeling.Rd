@@ -3,8 +3,11 @@
 \name{pseudolabeling}
 \alias{pseudolabeling}
 \title{Pseudolabeling for Unsupervised Domain Adaptation}
+\value{
+NULL (documentation page only).
+}
 \description{
-Provides pseudolabeling system for unsupervised domain adaptation with 
+Provides pseudolabeling system for unsupervised domain adaptation with
 KEMA. Identifies high-confidence anchor samples to guide domain alignment.
 }
 \details{
@@ -51,5 +54,19 @@ Key parameters:
     points
   \item \strong{min_cluster_size}: Ensures clusters are large enough to be 
     reliable
+}
+}
+\examples{
+\donttest{
+library(Matrix)
+# Create synthetic similarity matrix
+n <- 100
+sim_matrix <- Matrix::rsparsematrix(n, n, density = 0.1, rand.x = runif)
+sim_matrix <- (sim_matrix + Matrix::t(sim_matrix)) / 2
+Matrix::diag(sim_matrix) <- 1
+
+# Assign pseudolabels
+result <- assign_pseudolabels(sim_matrix, min_clusters = 5)
+table(result$labels, useNA = "always")
 }
 }

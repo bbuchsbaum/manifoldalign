@@ -2,7 +2,7 @@
 % Please edit documentation in R/adapters_parrot.R
 \name{fit_pair.parrot_aligner}
 \alias{fit_pair.parrot_aligner}
-\title{Fit PARROT on a pair of domains (adapter)}
+\title{Fit PARROT on a pair of domains}
 \usage{
 \method{fit_pair}{parrot_aligner}(
   algo,
@@ -31,6 +31,73 @@
   ...
 )
 }
+\arguments{
+\item{algo}{A parrot_aligner object}
+
+\item{X_i}{First domain data matrix (samples x features)}
+
+\item{X_j}{Second domain data matrix (samples x features)}
+
+\item{links}{Optional correspondence links; list(vec1, vec2) with label
+vectors or NA for unmatched samples}
+
+\item{ncomp}{Number of spectral components (currently unused)}
+
+\item{sigma}{RWR restart probability}
+
+\item{lambda}{Overall regularization weight}
+
+\item{lambda_e}{Edge/attribute cost weight (defaults to lambda * 0.5)}
+
+\item{lambda_n}{Network/Laplacian regularization (defaults to lambda * 0.5)}
+
+\item{lambda_p}{Anchor prior weight (defaults to lambda)}
+
+\item{tau}{Entropic regularization parameter for Sinkhorn}
+
+\item{alpha}{Mixing parameter for cost matrix}
+
+\item{gamma}{Network structure penalty weight}
+
+\item{solver}{Transport solver method ("sinkhorn")}
+
+\item{max_iter}{Maximum iterations for RWR and Sinkhorn}
+
+\item{tol}{Convergence tolerance}
+
+\item{use_cpp}{Logical; use C++ implementation if available}
+
+\item{anchors_policy}{Policy when no anchors provided: "warn", "off", "error"}
+
+\item{unsup_strategy}{Unsupervised seeding strategy: "mnn_bootstrap",
+"attribute_only", or "self_training"}
+
+\item{conf_threshold}{Confidence threshold for self-training}
+
+\item{max_rounds}{Maximum rounds for iterative strategies}
+
+\item{seed_strength}{Anchor prior strength when using MNN seeds}
+
+\item{laplacian_reg}{Alternative to lambda_n for Laplacian regularization}
+
+\item{...}{Additional arguments (unused)}
+}
+\value{
+An object of class parrot_pair_fit containing transport (n1 x n2
+  matrix), objective (final cost), n1 (samples in domain i), and n2
+  (samples in domain j).
+}
 \description{
-Fit PARROT on a pair of domains (adapter)
+PARROT-specific method for pairwise alignment using optimal transport with
+random walk regularization. Returns a soft assignment/transport plan.
+}
+\examples{
+\donttest{
+set.seed(456)
+X1 <- matrix(rnorm(80), 40, 2)
+X2 <- matrix(rnorm(80), 40, 2)
+algo <- parrot_aligner()
+fit <- fit_pair(algo, X1, X2, sigma = 0.2, tau = 0.1)
+class(fit)
+}
 }

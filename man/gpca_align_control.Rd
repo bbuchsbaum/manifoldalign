@@ -41,3 +41,6 @@ A list of class `gpca_align_control`
 \description{
 Control settings for `gpca_align.hyperdesign()`
 }
+\examples{
+ctrl <- gpca_align_control(knn = 15, normalize = "fro")
+}

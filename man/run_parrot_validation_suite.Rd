@@ -17,3 +17,8 @@ Data frame with validation results
 \description{
 Comprehensive validation across different network structures and parameters
 }
+\examples{
+\donttest{
+results <- run_parrot_validation_suite(output_dir = tempdir(), n_replications = 2)
+}
+}

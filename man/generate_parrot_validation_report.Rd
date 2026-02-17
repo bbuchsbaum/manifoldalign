@@ -13,6 +13,9 @@ generate_parrot_validation_report(results_df, output_dir, timestamp)
 
 \item{timestamp}{Timestamp for file naming}
 }
+\value{
+A character string containing the formatted validation report, invisibly
+}
 \description{
 Creates a summary report from validation results
 }

@@ -24,3 +24,9 @@ List with reconstruction validation results
 Validates KEMA's out-of-sample reconstruction capability against
 the L2 error reported in the paper appendix.
 }
+\examples{
+\donttest{
+result <- validate_out_of_sample_reconstruction()
+print(result$success)
+}
+}

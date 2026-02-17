@@ -56,25 +56,7 @@ hd_pair <- multidesign::hyperdesign(pair_multidesign)
 ## Running `grasp`
 
 ```{r run-grasp}
-safe_grasp <- function(hd, ncomp, q_descriptors, sigma, lambda, solver,
-                       preproc = multivarious::center()) {
-  pdata <- multivarious::init_transform(hd, preproc)
-  bases <- manifoldalign:::compute_grasp_basis(pdata, ncomp = ncomp, use_laplacian = TRUE)
-  desc  <- manifoldalign:::compute_grasp_descriptors(bases, q_descriptors = q_descriptors, sigma = sigma)
-  align <- manifoldalign:::align_grasp_bases(bases[[1]], bases[[2]], desc[[1]], desc[[2]], lambda = lambda)
-  assign <- manifoldalign:::compute_grasp_assignment(bases[[1]], bases[[2]], desc[[1]], desc[[2]],
-                                                     align$rotation, distance_method = "cosine",
-                                                     solver_method = solver)
-
-  list(
-    embedding1 = as.matrix(bases[[1]]$vectors),
-    embedding2_raw = as.matrix(bases[[2]]$vectors),
-    embedding2_aligned = as.matrix(bases[[2]]$vectors %*% align$rotation %*% assign$mapping_matrix),
-    assignment = assign$assignment
-  )
-}
-
-grasp_internal <- safe_grasp(
+grasp_internal <- grasp(
   hd_pair,
   ncomp = 20,
   q_descriptors = 80,
@@ -108,23 +90,25 @@ tibble(
 ```
 
 ```{r grasp-error}
-initial_err <- sqrt(mean(rowSums((grasp_internal$embedding1 - grasp_internal$embedding2_raw)^2)))
-final_err <- sqrt(mean(rowSums((grasp_internal$embedding1 - grasp_internal$embedding2_aligned[assignment, , drop = FALSE])^2)))
+n_ref <- node_counts[1]
+embed1 <- grasp_internal$s[seq_len(n_ref), , drop = FALSE]
+embed2 <- grasp_internal$s[n_ref + seq_len(n_ref), , drop = FALSE]
+final_err <- sqrt(mean(rowSums((embed1 - embed2)^2)))
 
 tibble(
-  metric = c("Initial RMS error", "Post-alignment RMS error"),
-  value = c(initial_err, final_err)
+  metric = "Post-alignment RMS error",
+  value = final_err
 )
 ```
 
 ### Visualising the Aligned Embeddings
 
-We stack the embeddings for both domains (using the assignment to reorder the
-second domain) and colour points by their latent class.
+We stack the aligned embeddings for both domains (as returned by `grasp()`) and
+colour points by their latent class.
 
 ```{r grasp-plot, fig.width = 6, fig.height = 4}
-embed1 <- grasp_internal$embedding1
-embed2 <- grasp_internal$embedding2_aligned[assignment, , drop = FALSE]
+embed1 <- grasp_internal$s[seq_len(n_ref), , drop = FALSE]
+embed2 <- grasp_internal$s[n_ref + seq_len(n_ref), , drop = FALSE]
 
 score_tbl <- as_tibble(rbind(embed1, embed2), .name_repair = "minimal")
 colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
@@ -132,7 +116,7 @@ colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
 scores <- score_tbl %>%
   mutate(
     sample = seq_len(nrow(.)),
-    domain = rep(pair_names, times = node_counts),
+    domain = rep(pair_names, each = nrow(embed1)),
     condition = c(ref_design$condition, cmp_design$condition[assignment])
   )
 
@@ -147,8 +131,7 @@ scores <- score_tbl %>%
 
 - `grasp()` performs spectral alignment without supervision; class labels are
   only used here for evaluation.
-- The RMS embedding error drops markedly after applying the functional map and
-  permutation, confirming that GRASP finds a consistent correspondence even when
-  class agreement is modest.
+- The post-alignment RMS error can be used as a quick sanity check that the
+  returned embeddings are in a comparable coordinate system.
 - Because all alignment vignettes reuse the same `alignment_benchmark` domains,
   you can compare GRASP, CONE-Align, PARROT, GPCA, and KEMA directly.

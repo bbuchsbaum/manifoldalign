@@ -3,6 +3,9 @@
 \name{parrot-validation}
 \alias{parrot-validation}
 \title{Validation Suite for PARROT Implementation}
+\value{
+NULL (documentation page only).
+}
 \description{
 Comprehensive validation functions to test PARROT accuracy and performance
 against synthetic datasets with known ground truth.

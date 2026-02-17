@@ -19,6 +19,10 @@
   verbose = FALSE
 )
 }
+\value{
+List with components W (optimized weight matrix), trace (objective values),
+  convergence (status code), message (convergence message), and iterations (count)
+}
 \description{
 Enhanced ADAM optimizer with alpha scheduling
 }

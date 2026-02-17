@@ -23,3 +23,14 @@ list of per-domain align_transform objects mapping to consensus
 \description{
 Rotation synchronization for orthogonal group O(k)
 }
+\examples{
+\donttest{
+# Rotation synchronization for orthogonal transformations
+k <- 3
+N <- 3
+G <- list(matrix(rnorm(9), k, k), matrix(rnorm(9), k, k))
+W <- c(1, 1)
+E <- data.frame(i = c(1, 2), j = c(2, 3))
+# result <- rotation_sync(G, W, E, N = N, k = k)
+}
+}

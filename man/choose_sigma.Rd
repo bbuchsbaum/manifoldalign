@@ -19,3 +19,8 @@ Suggested sigma value
 Estimates a reasonable sigma parameter for RBF kernels using the median 
 pairwise distance heuristic, which often works well in practice.
 }
+\examples{
+X <- matrix(rnorm(100), 20, 5)
+sigma <- choose_sigma(X)
+sigma
+}

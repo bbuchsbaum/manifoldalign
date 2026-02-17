@@ -6,6 +6,14 @@
 \usage{
 gpa_aligner()
 }
+\value{
+An object of class `c("gpa_aligner", "aligner")` representing a
+  Generalized Procrustes alignment algorithm descriptor.
+}
 \description{
 Generalized Procrustes aligner (native multi-view)
+}
+\examples{
+algo <- gpa_aligner()
+aligner_capabilities(algo)
 }

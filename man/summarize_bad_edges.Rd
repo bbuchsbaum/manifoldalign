@@ -18,3 +18,14 @@ data.frame with columns i, j, residual, weight
 Returns a data.frame of the top-K edges with largest residuals; includes
 edge weights when available.
 }
+\examples{
+\donttest{
+# Requires align_many result with diagnostics
+# X1 <- matrix(rnorm(100), 50, 2)
+# X2 <- matrix(rnorm(100), 50, 2)
+# X3 <- matrix(rnorm(100), 50, 2)
+# algo <- grasp_aligner()
+# result <- align_many(list(X1, X2, X3), algo)
+# bad_edges <- summarize_bad_edges(result$diagnostics, top = 5)
+}
+}

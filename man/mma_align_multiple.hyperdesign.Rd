@@ -58,6 +58,16 @@
 
 \item{hist_similarity}{One of "cor" or "cosine" (default "cor")}
 
+\item{signature_method}{One of "hist", "w2", or "hybrid" for eigenvector matching}
+
+\item{eig_penalty}{Eigenvalue penalty weight for signature alignment (default 0)}
+
+\item{signature_gate_multiplicity}{Logical; gate matches by eigenvalue clusters}
+
+\item{signature_gate_tau}{Threshold for eigenvalue clustering (NULL for auto)}
+
+\item{signature_retry_if_weak}{Logical; retry with alternative method if weak match}
+
 \item{em_max_iter}{Integer EM iterations (default 50)}
 
 \item{em_tol}{Numeric EM tolerance on relative change (default 1e-5)}
@@ -105,4 +115,15 @@ The implementation reuses shared helpers in this package:
 - neighborweights::graph_weights + adjacency for graph building
 - graph_laplacian (internal) for Laplacian construction
 - safe_compute, compute_block_indices, feature_block_indices, new_alignment_result
+}
+\examples{
+\donttest{
+set.seed(1)
+X1 <- matrix(rnorm(30), 10, 3)
+X2 <- matrix(rnorm(30), 10, 3)
+X3 <- matrix(rnorm(30), 10, 3)
+data_list <- list(X1, X2, X3)
+result <- mma_align_multiple(data_list, ncomp = 2)
+dim(result$scores)
+}
 }

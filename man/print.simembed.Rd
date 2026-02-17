@@ -11,6 +11,18 @@
 
 \item{...}{Additional arguments}
 }
+\value{
+The simembed object x, invisibly.
+}
 \description{
 Print Method for Similarity Embedding
+}
+\examples{
+\donttest{
+set.seed(1)
+X <- matrix(rnorm(100), 20, 5)
+model <- linear_sim_embed(X, ncomp = 2)
+print(model)
+}
+
 }

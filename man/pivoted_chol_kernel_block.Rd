@@ -29,3 +29,11 @@ List with selected indices and factor matrix W (n x r).
 \description{
 Simple pivoted Cholesky kernel rank selection.
 }
+\examples{
+\donttest{
+X <- matrix(rnorm(50), 10, 5)
+kernel <- kernlab::rbfdot(sigma = 0.1)
+result <- pivoted_chol_kernel_block(X, kernel, tol = 1e-4, max_rank = 5)
+str(result)
+}
+}

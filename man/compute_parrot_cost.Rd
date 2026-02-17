@@ -29,6 +29,9 @@ compute_parrot_cost(
 
 \item{use_cpp}{Whether to use C++ implementation}
 }
+\value{
+A numeric cost matrix between networks
+}
 \description{
 Compute Position-Aware Cost Matrix (Dispatcher)
 }

@@ -15,3 +15,9 @@ Data frame comparing different methods
 \description{
 Benchmarks PARROT against simpler alignment methods
 }
+\examples{
+\donttest{
+vdata <- generate_parrot_validation_data(n_nodes = 30, n_anchors = 5)
+comparison <- compare_parrot_baselines(vdata)
+}
+}

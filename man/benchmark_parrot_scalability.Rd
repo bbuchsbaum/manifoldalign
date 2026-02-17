@@ -23,3 +23,8 @@ Data frame with timing results
 \description{
 Tests PARROT performance across different network sizes
 }
+\examples{
+\donttest{
+results <- benchmark_parrot_scalability(sizes = c(20, 50), n_reps = 2)
+}
+}

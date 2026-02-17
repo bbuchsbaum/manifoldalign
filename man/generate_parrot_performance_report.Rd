@@ -11,7 +11,15 @@ generate_parrot_performance_report(
 \arguments{
 \item{output_file}{Path to save the report}
 }
+\value{
+A character string containing the formatted performance report, invisibly
+}
 \description{
 Creates a comprehensive performance analysis report
+}
+\examples{
+\dontrun{
+generate_parrot_performance_report(tempfile(fileext = ".txt"))
+}
 }
 \keyword{internal}

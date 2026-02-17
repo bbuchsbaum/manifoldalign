@@ -20,6 +20,9 @@ fw_fpgw(
   verbose = FALSE
 )
 }
+\value{
+A list with transport plan P, distance, convergence status, iterations, and final gradient.
+}
 \description{
 Frank-Wolfe solver for FPGW
 }

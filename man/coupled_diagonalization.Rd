@@ -182,7 +182,7 @@ result_partial <- coupled_diagonalization(hd,
                                         ncomp = 3)
 }
 
-\dontrun{
+\donttest{
 library(multidesign)
 # Create synthetic multi-modal data
 X1 <- matrix(rnorm(150), 50, 3)

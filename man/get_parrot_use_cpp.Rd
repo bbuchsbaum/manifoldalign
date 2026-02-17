@@ -12,3 +12,6 @@ Logical, whether to use Rcpp
 \description{
 Get whether to use Rcpp implementations in PARROT
 }
+\examples{
+get_parrot_use_cpp()
+}

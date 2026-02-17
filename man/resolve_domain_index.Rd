@@ -6,6 +6,9 @@
 \usage{
 resolve_domain_index(x, domain_names)
 }
+\value{
+An integer domain index.
+}
 \description{
 Resolve domain input (index or name)
 }

@@ -15,3 +15,7 @@ GRASP algorithm. Uses the existing GRASP building blocks to estimate a
 relative orthogonal transform between two domains.
 Construct a GRASP aligner descriptor
 }
+\examples{
+algo <- grasp_aligner()
+aligner_capabilities(algo)
+}

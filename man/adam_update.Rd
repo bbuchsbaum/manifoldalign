@@ -2,7 +2,7 @@
 % Please edit documentation in R/linear_sim_embed.R
 \name{adam_update}
 \alias{adam_update}
-\title{Adam optimizer (minimal implementation)}
+\title{Adam optimizer update step}
 \usage{
 adam_update(
   par,
@@ -16,7 +16,29 @@ adam_update(
   eps = 1e-08
 )
 }
+\arguments{
+\item{par}{Current parameter matrix}
+
+\item{grad}{Gradient matrix}
+
+\item{m_state}{First moment state (NULL on first call)}
+
+\item{v_state}{Second moment state (NULL on first call)}
+
+\item{t}{Iteration number (1-indexed)}
+
+\item{lr}{Learning rate}
+
+\item{b1}{Exponential decay rate for first moment}
+
+\item{b2}{Exponential decay rate for second moment}
+
+\item{eps}{Small constant for numerical stability}
+}
+\value{
+A list with updated parameters and optimizer state
+}
 \description{
-Adam optimizer (minimal implementation)
+Adam optimizer update step
 }
 \keyword{internal}

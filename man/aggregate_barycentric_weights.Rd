@@ -6,6 +6,9 @@
 \usage{
 aggregate_barycentric_weights(plan_rows, neighbor_idx, neighbor_dists)
 }
+\value{
+A numeric matrix of dimension n_query x n_target containing barycentric interpolation weights.
+}
 \description{
 Combine neighbour plans into barycentric weights
 }

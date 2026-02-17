@@ -4,12 +4,22 @@
 \alias{solve_sylvester_rwr_cpp}
 \title{Solve Sylvester equation for RWR cost}
 \usage{
-solve_sylvester_rwr_cpp(W1, W2T, Cnode, beta, gamma, tol, max_iter)
+solve_sylvester_rwr_cpp(
+  W1,
+  W2T,
+  C_node,
+  beta = 0.15,
+  gamma = 0.1,
+  tol = 1e-06,
+  max_iter = 50L
+)
 }
 \arguments{
 \item{W1}{Transition matrix of network 1}
 
 \item{W2T}{Transpose of transition matrix of network 2}
+
+\item{C_node}{Node-level cost matrix}
 
 \item{beta}{RWR restart probability}
 
@@ -18,8 +28,6 @@ solve_sylvester_rwr_cpp(W1, W2T, Cnode, beta, gamma, tol, max_iter)
 \item{tol}{Convergence tolerance}
 
 \item{max_iter}{Maximum iterations}
-
-\item{C_node}{Node-level cost matrix}
 }
 \value{
 Solution matrix C_rwr

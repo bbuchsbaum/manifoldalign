@@ -2,7 +2,7 @@
 % Please edit documentation in R/parrot_proximal.R
 \name{compute_parrot_objective}
 \alias{compute_parrot_objective}
-\title{PARROT Proximal Point Method Implementation}
+\title{Compute PARROT objective}
 \usage{
 compute_parrot_objective(
   S,
@@ -33,21 +33,7 @@ compute_parrot_objective(
 Objective function value
 }
 \description{
-Correct implementation following Algorithm 2 from the paper
-with proper objective function and monotonicity checks
+Computes the full objective:
+\eqn{<C_rwr, S> + lambda_e * L_e(S) + lambda_n * L_n(S) + lambda_p * L_p(S)}.
 }
-\keyword{+}
-\keyword{<C_rwr,}
-\keyword{Compute}
-\keyword{Computes}
-\keyword{Function}
-\keyword{Objective}
-\keyword{PARROT}
-\keyword{S>}
-\keyword{full}
 \keyword{internal}
-\keyword{objective:}
-\keyword{the}
-\keyword{λ_e*L_e(S)}
-\keyword{λ_n*L_n(S)}
-\keyword{λ_p*L_a(S)}

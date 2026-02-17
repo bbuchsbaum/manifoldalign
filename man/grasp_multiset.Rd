@@ -69,6 +69,17 @@ Performs GRASP alignment on three or more graph domains simultaneously. Extends
 the pairwise GRASP algorithm to handle multiple graphs through joint diagonalization
 and shared latent basis alignment.
 }
+\examples{
+\donttest{
+set.seed(1)
+X1 <- matrix(rnorm(30), 10, 3)
+X2 <- matrix(rnorm(30), 10, 3)
+X3 <- matrix(rnorm(30), 10, 3)
+data_list <- list(X1, X2, X3)
+result <- grasp_multiset(data_list, ncomp = 5)
+str(result$embeddings)
+}
+}
 \seealso{
 \code{\link{grasp}} for pairwise alignment, 
   \code{\link{grasp_multiset.hyperdesign}} for detailed documentation

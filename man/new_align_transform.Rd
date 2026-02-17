@@ -25,3 +25,8 @@ An object of class c("align_transform_<group>", "align_transform")
 \description{
 Construct an alignment transform object
 }
+\examples{
+# Create a simple orthogonal transform
+R <- diag(3)
+tr <- new_align_transform("O", R, from = 1, to = 2)
+}

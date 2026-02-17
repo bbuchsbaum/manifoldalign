@@ -6,6 +6,14 @@
 \usage{
 cone_multi_aligner()
 }
+\value{
+An object of class `c("cone_multi_aligner", "aligner")` representing
+  a CONE-Align multiple alignment algorithm descriptor.
+}
 \description{
 CONE-Align multiple aligner (native multi-view)
+}
+\examples{
+algo <- cone_multi_aligner()
+aligner_capabilities(algo)
 }

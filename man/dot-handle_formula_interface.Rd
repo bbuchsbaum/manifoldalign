@@ -22,6 +22,9 @@
   ...
 )
 }
+\value{
+A simembed object with formula and response components added
+}
 \description{
 Handle formula interface for supervised embedding
 }

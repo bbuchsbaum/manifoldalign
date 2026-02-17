@@ -14,3 +14,7 @@ Provides a pairwise interface for PARROT using internal building blocks.
 Returns a soft assignment/transport map suitable for permutation sync.
 Construct a PARROT aligner descriptor
 }
+\examples{
+algo <- parrot_aligner()
+aligner_capabilities(algo)
+}
