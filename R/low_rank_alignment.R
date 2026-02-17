@@ -1,4 +1,24 @@
-#' @noRd
+#' Create a similarity function from a label similarity matrix
+#'
+#' Builds a function that maps a vector of labels to a sparse similarity matrix.
+#' Unknown/NA labels receive all-zero rows/columns, and the result is guaranteed
+#' symmetric with zero diagonal.
+#'
+#' This is useful as `simfun` for [`lowrank_align()`], where labels may include
+#' missing values in semi-supervised settings.
+#'
+#' @param S A square similarity matrix whose row/column names define the label
+#'   vocabulary. Only labels present in `rownames(S)` are assigned similarities.
+#' @param na_value Deprecated; ignored (kept for backward compatibility). NA and
+#'   unknown labels always map to zero similarity to preserve sparsity.
+#' @return A function `f(labels)` that returns an `n x n` sparse similarity matrix.
+#' @examples
+#' S <- diag(3)
+#' dimnames(S) <- list(letters[1:3], letters[1:3])
+#' simfun <- createSimFun(S)
+#' M <- simfun(c("a", NA, "c"))
+#' Matrix::nnzero(M)
+#' @export
 createSimFun <- function(S, na_value = 0) {
   # Extract the labels from the similarity matrix
   label_names <- rownames(S)
@@ -33,7 +53,8 @@ createSimFun <- function(S, na_value = 0) {
 #' @noRd
 .compute_R_factors <- function(X, sv_thresh = 1) {
   svd_X <- svd(t(X))
-  keep <- svd_X$d > sv_thresh
+  a_raw <- 1 - 1 / (svd_X$d^2)
+  keep <- (svd_X$d > sv_thresh) & (a_raw > 0)
 
   if (!any(keep)) {
     return(list(U = matrix(0, nrow(X), 0),
@@ -41,7 +62,7 @@ createSimFun <- function(S, na_value = 0) {
   }
 
   list(U = svd_X$v[, keep, drop = FALSE],
-       a = 1 - 1 / (svd_X$d[keep]^2))
+       a = a_raw[keep])
 }
 
 #' @noRd
@@ -278,7 +299,7 @@ lowrank_align.hyperdesign <- function(data, y,
 
   # Extract labels, preserving NA values for semi-supervised learning
   labels <- unlist(purrr::map(data, function(x) {
-    x$design %>% select(!!y) %>% pull(!!y)
+    x$design |> select(!!y) |> pull(!!y)
   }))
 
   n_labeled <- sum(!is.na(labels))
@@ -306,8 +327,44 @@ lowrank_align.hyperdesign <- function(data, y,
     warning("n_cores is ignored for solver=\"operator\"; control BLAS threads instead.")
   }
 
-  pdata <- multivarious::init_transform(data, preproc)
-  proclist <- attr(pdata, "preproc")
+  pdata <- data
+  nb <- length(data)
+
+  is_stateful_preproc <- inherits(preproc, "prepper") || inherits(preproc, "pre_processor")
+  broadcast_preproc <- is.function(preproc) || is_stateful_preproc
+  if (broadcast_preproc) {
+    if (is_stateful_preproc) {
+      preproc <- replicate(
+        nb,
+        unserialize(serialize(preproc, connection = NULL)),
+        simplify = FALSE
+      )
+    } else {
+      preproc <- rep(list(preproc), nb)
+    }
+  } else if (is.list(preproc) && length(preproc) != nb) {
+    stop("Length of `preproc` list (", length(preproc), ") must match number of domains (", nb, ").",
+         call. = FALSE)
+  }
+
+  proclist <- vector("list", nb)
+  for (i in seq_len(nb)) {
+    Xi <- as.matrix(data[[i]]$x)
+    if (!is.null(preproc) && !is.null(preproc[[i]])) {
+      pre_i <- preproc[[i]]
+      if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
+        pre_i <- unserialize(serialize(pre_i, connection = NULL))
+      }
+      templ <- multivarious::prep(pre_i)
+      Xi_tf <- multivarious::init_transform(templ, Xi)
+      pdata[[i]]$x <- Xi_tf
+      proc_attr <- attr(Xi_tf, "preproc")
+      proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
+    } else {
+      pdata[[i]]$x <- Xi
+      proclist[[i]] <- NULL
+    }
+  }
   names(proclist) <- names(pdata)
 
   sample_sizes <- vapply(pdata, function(x) nrow(x$x), integer(1))

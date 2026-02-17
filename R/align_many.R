@@ -13,9 +13,20 @@
 #' @param consensus "auto" | "sync" | "star" | "tree" (currently: "sync"/"star")
 #' @param k target latent dimension (optional)
 #' @param parallel logical; reserved for future parallel pair fits
+#' @param sync list of synchronization options (graph, refine, gl, perm settings)
 #' @param ... forwarded to adapter methods
 #' @return list with transforms, embeddings (if apply_transform succeeds),
 #'   dataset graph, pairwise fits, and diagnostics
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(50), 10, 5)
+#' X2 <- matrix(rnorm(50), 10, 5)
+#' X3 <- matrix(rnorm(50), 10, 5)
+#' domains <- list(X1, X2, X3)
+#' # align_many requires an aligner object with adapter methods
+#' # See package vignettes for complete examples
+#' }
 #' @export
 align_many <- function(domains, algo,
                        graph = c("auto", "mst", "complete", "star"),
@@ -254,6 +265,16 @@ fit_pairs_on_edges_ <- function(domains, E, algo, parallel = TRUE, ...) {
 #' @param N number of datasets
 #' @param k latent dimension
 #' @return list of per-domain align_transform objects mapping to consensus
+#' @examples
+#' \donttest{
+#' # Rotation synchronization for orthogonal transformations
+#' k <- 3
+#' N <- 3
+#' G <- list(matrix(rnorm(9), k, k), matrix(rnorm(9), k, k))
+#' W <- c(1, 1)
+#' E <- data.frame(i = c(1, 2), j = c(2, 3))
+#' # result <- rotation_sync(G, W, E, N = N, k = k)
+#' }
 #' @export
 rotation_sync <- function(G, W, E, N, k) {
   if (missing(N)) N <- max(c(E$i, E$j))
@@ -282,15 +303,16 @@ rotation_sync <- function(G, W, E, N, k) {
 
     # block indices
     ri <- (i - 1L) * k + 1L; rj <- (j - 1L) * k + 1L
-    ii <- rep(ri:(ri + k - 1L), each = k)
-    jj <- rep(rj:(rj + k - 1L), times = k)
+    # Indices must match R's column-major vectorization (as.vector()).
+    ii <- rep(ri:(ri + k - 1L), times = k)
+    jj <- rep(rj:(rj + k - 1L), each = k)
     # S_ij += w * R
     Ii <- c(Ii, ii)
     Jj <- c(Jj, jj)
     Xx <- c(Xx, as.vector(w * R))
     # S_ji += w * R^T
-    ii2 <- rep(rj:(rj + k - 1L), each = k)
-    jj2 <- rep(ri:(ri + k - 1L), times = k)
+    ii2 <- rep(rj:(rj + k - 1L), times = k)
+    jj2 <- rep(ri:(ri + k - 1L), each = k)
     Xx2 <- as.vector(w * t(R))
     Ii <- c(Ii, ii2)
     Jj <- c(Jj, jj2)
@@ -334,11 +356,6 @@ rotation_sync <- function(G, W, E, N, k) {
       R <- diag(k)
     } else {
       R <- sv$u %*% t(sv$v)
-      # Ensure det +1 (proper rotation) if possible
-      if (det(R) < 0) {
-        sv$u[, k] <- -sv$u[, k]
-        R <- sv$u %*% t(sv$v)
-      }
     }
     T_list[[i]] <- new_align_transform("O", R, from = i, to = "consensus", k = k)
   }

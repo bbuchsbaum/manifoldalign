@@ -149,6 +149,23 @@ cone_align_multiple.default <- function(data, ...) {
        "object or list of matrices with 3+ elements.", call. = FALSE)
 }
 
+# --------------------------------------------------------------------
+# helper: pairwise alignment that returns P/Q ready for multi-graph use
+# Internal helper - not exported, no roxygen documentation needed
+# --------------------------------------------------------------------
+.align_two_embeddings <- function(Eref, Eg, solver, max_iter, tol, lambda) {
+  pair_res <- cone_align_iterate(
+                list(Eref, Eg),      # what cone_align_iterate expects
+                solver   = solver,
+                max_iter = max_iter,
+                tol      = tol,
+                lambda   = lambda)
+
+  list(P = pair_res$P,           # changed from assignment
+       Q = pair_res$Q,           # direct mapping
+       iterations = pair_res$iterations)
+}
+
 #' Core Multi-Graph CONE-Align Fitting
 #'
 #' Internal function that implements the iterative multi-graph
@@ -170,23 +187,6 @@ cone_align_multiple.default <- function(data, ...) {
 #'
 #' @return multiblock_biprojector object with multi-graph alignment results
 #' @keywords internal
-
-# --------------------------------------------------------------------
-# helper: pairwise alignment that returns P/Q ready for multi-graph use
-# --------------------------------------------------------------------
-.align_two_embeddings <- function(Eref, Eg, solver, max_iter, tol, lambda) {
-  pair_res <- cone_align_iterate(
-                list(Eref, Eg),      # what cone_align_iterate expects
-                solver   = solver,
-                max_iter = max_iter,
-                tol      = tol,
-                lambda   = lambda)
-
-  list(P = pair_res$P,           # changed from assignment
-       Q = pair_res$Q,           # direct mapping
-       iterations = pair_res$iterations)
-}
-
 cone_align_multiple_fit <- function(strata, proc, ref_idx,
                                    ncomp, sigma, lambda, use_laplacian,
                                    solver, max_iter, tol, knn,

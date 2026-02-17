@@ -85,9 +85,76 @@ grasp.hyperdesign <- function(data,
          "alignment with 3+ domains, use grasp_multiset()", call. = FALSE)
   }
   
-  # Apply preprocessing once per domain via init_transform
-  pdata <- multivarious::init_transform(data, preproc)
-  proclist <- attr(pdata, "preproc")
+  # Apply preprocessing per domain.
+  # Avoid deprecated `prep()` / `init_transform()` paths in multivarious >= 0.3.0.
+  pdata <- unclass(data)
+  nb <- length(pdata)
+
+  if (is.null(preproc)) {
+    proclist <- vector("list", nb)
+    for (i in seq_len(nb)) {
+      pdata[[i]]$x <- as.matrix(pdata[[i]]$x)
+      proclist[[i]] <- NULL
+    }
+  } else {
+    is_preproc_obj <- inherits(preproc, "prepper") || inherits(preproc, "pre_processor")
+
+    if (!is.list(preproc) || is_preproc_obj) {
+      preproc <- rep(list(preproc), nb)
+    } else if (length(preproc) == 1L) {
+      preproc <- rep(preproc, nb)
+    } else if (length(preproc) != nb) {
+      stop(
+        "Length of `preproc` list (",
+        length(preproc),
+        ") must match number of domains (",
+        nb,
+        ").",
+        call. = FALSE
+      )
+    }
+
+    proclist <- vector("list", nb)
+    for (i in seq_len(nb)) {
+      Xi <- as.matrix(pdata[[i]]$x)
+      pre_i <- preproc[[i]]
+
+      if (is.null(pre_i)) {
+        pdata[[i]]$x <- Xi
+        proclist[[i]] <- NULL
+        next
+      }
+
+      # Functions are applied directly (avoid recipes-based preprocessing).
+      if (is.function(pre_i)) {
+        Xi_tf <- pre_i(Xi)
+        pdata[[i]]$x <- Xi_tf
+        proclist[[i]] <- pre_i
+        next
+      }
+
+      # Clone stateful preprocessors before fitting.
+      if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
+        pre_i <- unserialize(serialize(pre_i, connection = NULL))
+      }
+
+      if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
+        ft <- multivarious::fit_transform(pre_i, Xi)
+        pdata[[i]]$x <- ft$transformed
+        proclist[[i]] <- ft$preproc
+      } else {
+        # Back-compat for older multivarious versions
+        templ <- multivarious::prep(pre_i)
+        Xi_tf <- multivarious::init_transform(templ, Xi)
+        pdata[[i]]$x <- Xi_tf
+        proc_attr <- attr(Xi_tf, "preproc")
+        proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
+      }
+    }
+  }
+
+  names(pdata) <- names(data)
+  class(pdata) <- class(data)
   names(proclist) <- names(pdata)
 
   sample_block_idx <- block_indices(pdata)
@@ -306,34 +373,22 @@ compute_grasp_descriptors <- function(bases, q_descriptors, sigma = 0.73) {
   chk::chk_true(q_descriptors > 0)
   chk::chk_number(sigma)
   chk::chk_true(sigma > 0)
-  
-  # Generate time steps
-  time_steps <- seq(0.1, 50, length.out = q_descriptors) * sigma
-  
+
   descriptors <- lapply(bases, function(basis) {
-    phi <- Matrix::Matrix(basis$vectors, sparse = TRUE)
-    lambda_vals <- basis$values
-
-    valid_idx <- which(lambda_vals > 1e-12)
-    if (length(valid_idx) == 0L) {
-      stop("All retained eigenvalues are numerically zero; reduce ncomp or verify graph connectivity", call. = FALSE)
-    }
-    phi <- phi[, valid_idx, drop = FALSE]
-    lambda_vals <- lambda_vals[valid_idx]
-
-    phi_sq <- phi
-    phi_sq@x <- phi_sq@x^2
-
-    logH <- -outer(lambda_vals, time_steps)
-    H <- exp(pmax(logH, -745))
-    desc_matrix <- phi_sq %*% H
-
-    col_norms <- sqrt(Matrix::colSums(desc_matrix * desc_matrix))
-    desc_matrix <- desc_matrix %*% Matrix::Diagonal(x = 1 / pmax(col_norms, 1e-12))
-
+    desc_matrix <- compute_hks_descriptors(
+      basis = basis,
+      q = as.integer(q_descriptors),
+      time_mode = "fixed",
+      time_range = c(0.1, 50),
+      spacing = "linear",
+      time_scale = sigma,
+      eigen_tol = 1e-12,
+      normalize = "column",
+      clamp_exponent = -745
+    )
     Matrix::Matrix(desc_matrix, sparse = TRUE)
   })
-  
+
   descriptors
 }
 

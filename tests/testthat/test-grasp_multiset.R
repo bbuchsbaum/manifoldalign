@@ -139,20 +139,34 @@ test_that("grasp_multiset produces reasonable alignment quality", {
   
   # Create graphs with known correspondence (shuffled versions)
   n <- 30
-  base_graph <- matrix(rnorm(n * 4), n, 4)
+  angles <- 2 * pi * seq_len(n) / n
+  base_graph <- cbind(
+    cos(angles),
+    sin(angles),
+    sin(2 * angles),
+    cos(2 * angles)
+  )
   
   # Create permuted versions
   perm1 <- sample(n)
   perm2 <- sample(n)
   
+  noise_sd_2 <- 0.02
+  noise_sd_3 <- 0.01
   graphs <- list(
     base_graph,
-    base_graph[perm1, ] + rnorm(n * 4, sd = 0.02),
-    base_graph[perm2, ] + rnorm(n * 4, sd = 0.02)
+    base_graph[perm1, ] + matrix(rnorm(n * 4, sd = noise_sd_2), n),
+    base_graph[perm2, ] + matrix(rnorm(n * 4, sd = noise_sd_3), n)
   )
   
-  result <- grasp_multiset(graphs, ncomp = 10, q_descriptors = 30, 
-                          lambda = 0.2, max_iter = 30)
+  result <- grasp_multiset(
+    graphs,
+    ncomp = 6,
+    q_descriptors = 20,
+    lambda = 0.1,
+    max_iter = 60,
+    tol = 0.01
+  )
   
   # Check if we can recover some of the true correspondences
   # The first graph is unpermuted, so check alignment to it

@@ -518,6 +518,10 @@ compute_embedding <- function(domain, ncomp, sigma, use_laplacian, knn) {
   
   evals <- decomp$values
   vecs <- decomp$vectors
+
+  ord <- order(evals)
+  evals <- evals[ord]
+  vecs <- vecs[, ord, drop = FALSE]
   
   # Select eigenvectors corresponding to smallest non-zero eigenvalues.
   # The first eigenvector for the Laplacian is often trivial (constant vector).
@@ -657,12 +661,6 @@ solve_procrustes_cone <- function(Z1, Z2, P, lambda = 0) {
 
   sv <- svd(M)
   Q <- sv$u %*% t(sv$v)
-
-  if (det(Q) < 0) {
-    D <- diag(ncol(Q))
-    D[ncol(Q), ncol(Q)] <- -1
-    Q <- sv$u %*% D %*% t(sv$v)
-  }
 
   Q
 }

@@ -34,6 +34,12 @@ rescale <- function(z) {
 #' 
 #' @param data_list List of data blocks
 #' @return Matrix with start and end indices for each block
+#' @examples
+#' data1 <- list(x = matrix(rnorm(20), 10, 2))
+#' data2 <- list(x = matrix(rnorm(30), 15, 2))
+#' data_list <- list(data1, data2)
+#' indices <- block_indices(data_list)
+#' indices
 #' @export
 block_indices <- function(data_list) {
   # Generate block indices for a list of data blocks
@@ -71,8 +77,13 @@ get_block_indices <- function(data_list, byrow=FALSE) {
 }
 
 #' Cosine kernel function
-#' 
+#'
 #' @return A kernel object for cosine similarity
+#' @examples
+#' kern <- coskern()
+#' x <- c(1, 2, 3)
+#' y <- c(4, 5, 6)
+#' # kern(x, y)  # Compute cosine similarity
 #' @export
 coskern <- function() {
   rval <- function(x, y = NULL) {
@@ -686,15 +697,15 @@ kema.multidesign <- function(data, y,
                              simfun=neighborweights::binary_label_matrix,
                              disfun=NULL,
                              lambda=.0001,
-                             centre_kernel=FALSE, 
+                             centre_kernel=FALSE,
                              ...) {
   
   subject <- rlang::enquo(subject)
   y <- rlang::enquo(y)
   
   strata <- multidesign::hyperdesign(split(data, subject))
-  kema.hyperdesign(strata, !!y, preproc, ncomp, knn, sigma, u, kernel, 
-                   sample_frac, use_laplacian, solver, dweight, rweight, 
+  kema.hyperdesign(strata, !!y, preproc, ncomp, knn, sigma, u, kernel,
+                   sample_frac, use_laplacian, solver, dweight, rweight,
                    simfun, disfun, lambda, centre_kernel)
 }
 
@@ -736,8 +747,6 @@ kema.multidesign <- function(data, y,
 #' @examples
 #' \donttest{
 #' # Example with hyperdesign data
-#' library(multidesign)
-#' 
 #' # Create synthetic multi-domain data
 #' set.seed(123)
 #' domain1 <- list(
@@ -748,14 +757,15 @@ kema.multidesign <- function(data, y,
 #'   x = matrix(rnorm(100), 50, 2),
 #'   design = data.frame(labels = sample(c("A", "B"), 50, TRUE))
 #' )
-#' hd <- list(domain1 = domain1, domain2 = domain2)
+#' hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign")
 #' 
 #' # Run KEMA with default settings
 #' result <- kema(hd, y = labels, ncomp = 2)
 #' 
 #' # Semi-supervised learning with missing labels
-#' domain1$design$labels[1:10] <- NA  # Mark some samples as unlabeled
-#' result_semi <- kema(hd, y = labels, ncomp = 2)
+#' hd_semi <- hd
+#' hd_semi$domain1$design$labels[1:10] <- NA  # Mark some samples as unlabeled
+#' result_semi <- kema(hd_semi, y = labels, ncomp = 2)
 #' 
 #' # Use exact solver for highest accuracy
 #' result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)
@@ -815,7 +825,7 @@ kema.hyperdesign <- function(data, y,
                              simfun=neighborweights::binary_label_matrix,
                              disfun=NULL,
                              lambda=.0001,
-                             centre_kernel=FALSE, 
+                             centre_kernel=FALSE,
                              ...) {
   
   # Input validation
@@ -978,8 +988,9 @@ kema.hyperdesign <- function(data, y,
     sigma <- 0.73
   }
   
-  kema_fit(pdata, proc, ncomp, knn, sigma, u, !!y, labels, kernel, sample_frac, 
-           solver, dweight, rweight, block_indices, simfun, disfun, lambda, use_laplacian, centre_kernel)
+  kema_fit(pdata, proc, ncomp, knn, sigma, u, !!y, labels, kernel, sample_frac,
+           solver, dweight, rweight, block_indices, simfun, disfun, lambda,
+           use_laplacian, centre_kernel)
   
 }
 
@@ -988,7 +999,8 @@ kema.hyperdesign <- function(data, y,
 #' @keywords internal
 #' @noRd
 kema_fit <- function(strata, proc, ncomp, knn, sigma, u, y, labels, kernel, sample_frac, 
-                     solver, dweight, rweight, block_indices, simfun, disfun, lambda, use_laplacian, centre_kernel) {
+                     solver, dweight, rweight, block_indices, simfun, disfun, lambda,
+                     use_laplacian, centre_kernel) {
   chk::chk_number(ncomp)
   chk::chk_range(sample_frac, c(0,1))
   # Validate solver parameter
@@ -1060,10 +1072,10 @@ kema_fit <- function(strata, proc, ncomp, knn, sigma, u, y, labels, kernel, samp
   
   # Use appropriate solver based on sample_frac
   if (sample_frac == 1) {
-    kemfit <- kema_full_solver(strata, Z, Ks, Lap, kernel_indices, solver, ncomp, u, 
+    kemfit <- kema_full_solver(strata, Z, Ks, Lap, kernel_indices, solver, ncomp, u,
                                dweight, rweight, lambda)
   } else {
-    kemfit <- kema_landmark_solver(strata, Z, Ks, Lap, kernel_indices, solver, ncomp, u, 
+    kemfit <- kema_landmark_solver(strata, Z, Ks, Lap, kernel_indices, solver, ncomp, u,
                                    dweight, rweight, sample_frac, lambda)
   }
   
@@ -1071,7 +1083,7 @@ kema_fit <- function(strata, proc, ncomp, knn, sigma, u, y, labels, kernel, samp
   if (solver == "regression" && !is.null(kemfit$regression_quality) && kemfit$regression_quality$is_poor) {
     original_solver <- solver
     warning("Regression solver produced poor results (subspace angle: ", 
-            round(kemfit$regression_quality$angle_deg, 1), "°, best match: ", 
+            round(kemfit$regression_quality$angle_deg, 1), " deg, best match: ",
             round(kemfit$regression_quality$best_match, 3), "). ",
             "Automatically retrying with solver='exact' for higher fidelity.", 
             call. = FALSE)
@@ -1096,7 +1108,7 @@ kema_fit <- function(strata, proc, ncomp, knn, sigma, u, y, labels, kernel, samp
       retried_with = "exact"
     )
     
-    message("✓ Retry with exact solver completed successfully.")
+    message("Retry with exact solver completed successfully.")
   }
 
   # Compute feature block indices for multiblock_biprojector
@@ -1869,6 +1881,10 @@ kema_landmark_solver <- function(strata, Z, Ks, Lap, kernel_indices, solver, nco
 #' @param sample_size Maximum number of pairs to sample for distance computation
 #'   (default: 1000 for efficiency)
 #' @return Suggested sigma value
+#' @examples
+#' X <- matrix(rnorm(100), 20, 5)
+#' sigma <- choose_sigma(X)
+#' sigma
 #' @export
 choose_sigma <- function(X, sample_size = 1000) {
   if (!is.matrix(X) && !methods::is(X, "Matrix")) {

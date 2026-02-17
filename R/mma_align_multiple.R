@@ -26,6 +26,11 @@
 #' @param hist_bins Integer number of bins for eigensignature histograms; NULL for auto
 #' @param hist_max_bins Clamp for auto-bins (default 128)
 #' @param hist_similarity One of "cor" or "cosine" (default "cor")
+#' @param signature_method One of "hist", "w2", or "hybrid" for eigenvector matching
+#' @param eig_penalty Eigenvalue penalty weight for signature alignment (default 0)
+#' @param signature_gate_multiplicity Logical; gate matches by eigenvalue clusters
+#' @param signature_gate_tau Threshold for eigenvalue clustering (NULL for auto)
+#' @param signature_retry_if_weak Logical; retry with alternative method if weak match
 #' @param em_max_iter Integer EM iterations (default 50)
 #' @param em_tol Numeric EM tolerance on relative change (default 1e-5)
 #' @param em_sigma0 Optional initial stddev in embedding units; NULL for auto
@@ -45,6 +50,16 @@
 #'   and extras (rotations, posteriors, histogram alignment info, and optionally
 #'   consensus and final assignment).
 #'
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' X3 <- matrix(rnorm(30), 10, 3)
+#' data_list <- list(X1, X2, X3)
+#' result <- mma_align_multiple(data_list, ncomp = 2)
+#' dim(result$scores)
+#' }
 #' @export
 #' @importFrom chk chk_number chk_true chk_logical
 #' @importFrom multivarious center concat_pre_processors
@@ -160,10 +175,7 @@ mma_align_multiple.hyperdesign <- function(
   )
 }
 
-#' Multiset Manifold Alignment for a List of Matrices
-#'
-#' @param data A list with 3+ matrices (nodes x features)
-#' @param ... Passed to hyperdesign method
+#' @rdname mma_align_multiple
 #' @export
 mma_align_multiple.list <- function(data, ...) {
   if (!is.list(data) || length(data) < 3) {
@@ -388,7 +400,7 @@ compute_mma_embeddings <- function(strata, ncomp, sigma, knn, embedding, normali
     }
 
     # Second pass: compute embeddings with K_final for every domain
-    lapply(strata, function(s) {
+    embeds <- lapply(strata, function(s) {
       X <- s$x
       n <- nrow(X)
       knn_val <- if (is.null(knn)) min(max(ceiling(log(n)), 3), max(n - 1, 1)) else min(knn, max(n - 1, 1))
@@ -449,6 +461,31 @@ compute_mma_embeddings <- function(strata, ncomp, sigma, knn, embedding, normali
       attr(Xemb, "deg") <- deg
       Xemb
     })
+
+    # Ensure a common embedding dimension across domains.
+    # Disconnected graphs can yield multiple zero eigenvalues, reducing the count of informative eigenvectors.
+    K_dom <- vapply(embeds, ncol, integer(1))
+    K_common <- min(K_dom)
+    if (K_common < max(K_dom)) {
+      warning("MMA: using K = ", K_common, " components across all domains (some graphs had fewer informative eigenvectors).",
+              call. = FALSE)
+    }
+    if (K_common <= 0) {
+      stop("MMA: no informative eigenvectors were found in at least one domain.", call. = FALSE)
+    }
+
+    trim_embed <- function(E, K) {
+      if (ncol(E) <= K) return(E)
+      U_raw <- attr(E, "U_raw")
+      lam_keep <- attr(E, "lam_keep")
+      deg <- attr(E, "deg")
+      E2 <- E[, seq_len(K), drop = FALSE]
+      if (!is.null(U_raw)) attr(E2, "U_raw") <- U_raw[, seq_len(K), drop = FALSE]
+      if (!is.null(lam_keep)) attr(E2, "lam_keep") <- lam_keep[seq_len(K)]
+      attr(E2, "deg") <- deg
+      E2
+    }
+    lapply(embeds, trim_embed, K = K_common)
   }
 }
 

@@ -41,8 +41,20 @@ predict.simembed <- function(object, newdata, ...) {
 }
 
 #' Print Method for Similarity Embedding
+#'
 #' @param x A simembed object
 #' @param ... Additional arguments
+#'
+#' @return The simembed object x, invisibly.
+#'
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X <- matrix(rnorm(100), 20, 5)
+#' model <- linear_sim_embed(X, ncomp = 2)
+#' print(model)
+#' }
+#'
 #' @method print simembed
 #' @export
 print.simembed <- function(x, ...) {
@@ -54,19 +66,19 @@ print.simembed <- function(x, ...) {
   cat(sprintf("Optimizer: %s\n", x$optimizer))
   cat(sprintf("Final sigma_P: %.6f\n", x$sigma_P))
   cat(sprintf("Alpha_p: %.3f\n", x$alpha_p))
-  
+
   if (!is.null(x$convergence)) {
     if (x$convergence$convergence == 0) {
       cat("Convergence: SUCCESS\n")
     } else {
       cat(sprintf("Convergence: FAILED (%s)\n", x$convergence$message))
     }
-    
+
     if (!is.na(x$convergence$iterations)) {
       cat(sprintf("Iterations: %d\n", x$convergence$iterations))
     }
   }
-  
+
   invisible(x)
 }
 
@@ -76,11 +88,11 @@ print.simembed <- function(x, ...) {
 
 #' Auto-select sigma_P using histogram-spread heuristic
 #' @param X Preprocessed data matrix
-#' @param W0 Initial weight matrix  
+#' @param W0 Initial weight matrix
 #' @param T Target similarity matrix
 #' @param M Mask matrix
 #' @param verbose Logical for progress reporting
-#' @return Optimal sigma_P value
+#' @return Numeric scalar giving the optimal sigma_P value
 #' @keywords internal
 .auto_select_sigma_P <- function(X, W0, T, M, verbose = FALSE) {
   # Log-space grid search as recommended in feedback (10^-5 to 10^5, factor 0.5 steps)
@@ -125,6 +137,8 @@ print.simembed <- function(x, ...) {
 }
 
 #' Enhanced ADAM optimizer with alpha scheduling
+#' @return List with components W (optimized weight matrix), trace (objective values),
+#'   convergence (status code), message (convergence message), and iterations (count)
 #' @keywords internal
 .optimize_W_enhanced <- function(X, T, M, W0,
                                 sigma = 1, alpha_p = 0.2, alpha_schedule = FALSE,
@@ -250,9 +264,10 @@ print.simembed <- function(x, ...) {
       if (obj_change < tol * 100) {  # Less strict threshold for stall detection
         stall_counter <- stall_counter + 1
         if (stall_counter >= stall_threshold) {
-          warning(sprintf("Optimization stalled at iteration %d (objective unchanged for %d iterations). ", 
-                         t, stall_threshold,
-                         "This often indicates poorly scaled input. Check similarity matrix scaling."))
+          warning(sprintf(
+            "Optimization stalled at iteration %d (objective unchanged for %d iterations). This often indicates poorly scaled input. Check similarity matrix scaling.",
+            t, stall_threshold
+          ))
           obj_trace <- obj_trace[1:t]
           grad_norm_trace <- grad_norm_trace[1:t]
           convergence_info <- list(convergence = 2, message = "STALLED", iterations = t)
@@ -313,29 +328,49 @@ print.simembed <- function(x, ...) {
 }
 
 #' Handle formula interface for supervised embedding
+#' @return A simembed object with formula and response components added
 #' @keywords internal
 .handle_formula_interface <- function(formula, data, T, M, sigma_P, ncomp, 
                                      alpha_p, alpha_schedule, maxit, tol, 
                                      batch_size, use_cpp, verbose, lr, ...) {
   
-  # Parse formula
-  mf <- model.frame(formula, data)
-  response <- model.response(mf)
-  
-  if (is.null(response)) {
-    stop("Formula must specify a response variable (e.g., ~ label)")
+  if (!inherits(formula, "formula")) {
+    stop("formula must be a formula object", call. = FALSE)
   }
-  
-  # Extract numeric predictors
-  X <- model.matrix(formula, data)[, -1, drop = FALSE]  # Remove intercept
-  if (ncol(X) == 0) {
-    # If no predictors specified, use all numeric columns except response
-    numeric_cols <- sapply(data, is.numeric)
-    response_name <- all.vars(formula[[2]])[1]
-    if (response_name %in% names(numeric_cols)) {
-      numeric_cols[response_name] <- FALSE
+  if (!is.data.frame(data)) {
+    stop("data must be a data.frame", call. = FALSE)
+  }
+
+  # Support simple response-only form: ~ label
+  response <- NULL
+  if (length(formula) == 2L) {
+    response_name <- all.vars(formula[[2]])
+    if (length(response_name) != 1L) {
+      stop("Formula must be of the form ~ label or label ~ predictors", call. = FALSE)
     }
+    response_name <- response_name[[1]]
+    if (!response_name %in% names(data)) {
+      stop("Response variable '", response_name, "' not found in data", call. = FALSE)
+    }
+    response <- data[[response_name]]
+    numeric_cols <- vapply(data, is.numeric, logical(1))
+    numeric_cols[response_name] <- FALSE
     X <- as.matrix(data[, numeric_cols, drop = FALSE])
+  } else {
+    # Standard response ~ predictors
+    mf <- model.frame(formula, data)
+    response <- model.response(mf)
+    if (is.null(response)) {
+      stop("Formula must specify a response variable", call. = FALSE)
+    }
+    X <- model.matrix(formula, data)
+    if (ncol(X) > 0 && identical(colnames(X)[1], "(Intercept)")) {
+      X <- X[, -1, drop = FALSE]
+    }
+  }
+
+  if (!is.matrix(X) || ncol(X) == 0) {
+    stop("No numeric predictors found for embedding", call. = FALSE)
   }
   
   # Create target similarity matrix based on labels (Eq. 11 for LDA-style runs)
@@ -450,7 +485,18 @@ grad_Jp <- function(W) {
   return(gradient)
 }
 
-#' Adam optimizer (minimal implementation)
+#' Adam optimizer update step
+#'
+#' @param par Current parameter matrix
+#' @param grad Gradient matrix
+#' @param m_state First moment state (NULL on first call)
+#' @param v_state Second moment state (NULL on first call)
+#' @param t Iteration number (1-indexed)
+#' @param lr Learning rate
+#' @param b1 Exponential decay rate for first moment
+#' @param b2 Exponential decay rate for second moment
+#' @param eps Small constant for numerical stability
+#' @return A list with updated parameters and optimizer state
 #' @keywords internal
 adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
                         b1=.9, b2=.999, eps=1e-8) {
@@ -473,6 +519,9 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 # -------------------------------------------------------------------
 
 #' Null-default operator
+#' @param x First value
+#' @param y Default value if x is NULL
+#' @return The value of x if not NULL, otherwise y
 #' @name grapes-or-or-grapes
 #' @keywords internal
 #' @noRd
@@ -576,6 +625,12 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
                              verbose = FALSE, lr = 5e-3,
                              formula = NULL, data = NULL, ...) {
 
+  # Allow formula as the first argument (typical R formula interface)
+  if (inherits(X, "formula") && is.null(formula)) {
+    formula <- X
+    X <- NULL
+  }
+
   # Handle formula interface
   if (!is.null(formula)) {
     if (is.null(data)) {
@@ -588,8 +643,8 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
   }
   
   # --- Input Validation ---
-  n <- nrow(X)
   if (!is.matrix(X)) X <- as.matrix(X)
+  n <- nrow(X)
   
   # Handle automatic target similarity matrix creation
   if (is.null(T)) {
@@ -739,7 +794,5 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
   
   return(result)
 }
-
-
 
 

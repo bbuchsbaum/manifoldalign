@@ -124,6 +124,16 @@ kema <- function(data, y, ...) {
 #'
 #' @param data Input object; hyperdesign or list of matrices (see methods)
 #' @param ... Passed to method
+#' @return A list containing aligned embeddings, rotation matrices, and
+#'   convergence information for all domains.
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(60), 30, 2)
+#' X2 <- matrix(rnorm(60), 30, 2)
+#' X3 <- matrix(rnorm(60), 30, 2)
+#' result <- mma_align_multiple(list(X1, X2, X3), ncomp = 2, max_iter = 10)
+#' }
 #' @export
 mma_align_multiple <- function(data, ...) {
   UseMethod("mma_align_multiple")
@@ -277,7 +287,6 @@ generalized_procrustes <- function(data, ...) {
 #' @examples
 #' \donttest{
 #' # Example with hyperdesign graph data
-#' library(multidesign)
 #' 
 #' # Create synthetic graph domains
 #' set.seed(123)
@@ -291,7 +300,7 @@ generalized_procrustes <- function(data, ...) {
 #' )
 #' 
 #' # Create hyperdesign
-#' hd <- hyperdesign(list(domain1 = domain1, domain2 = domain2))
+#' hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign")
 #' 
 #' # Run GRASP alignment with default parameters
 #' result <- grasp(hd, ncomp = 20, q_descriptors = 50)
@@ -373,7 +382,6 @@ grasp <- function(data, ...) {
 #' @examples
 #' \donttest{
 #' # Example with hyperdesign graph data
-#' library(multidesign)
 #' 
 #' # Create synthetic graph domains
 #' set.seed(123)
@@ -387,7 +395,7 @@ grasp <- function(data, ...) {
 #' )
 #' 
 #' # Create hyperdesign
-#' hd <- hyperdesign(list(domain1 = domain1, domain2 = domain2))
+#' hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign")
 #' 
 #' # Run CONE-Align with default parameters
 #' result <- cone_align(hd, ncomp = 10)
@@ -464,7 +472,6 @@ cone_align <- function(data, ...) {
 #' @examples
 #' \donttest{
 #' # Example with hyperdesign network data
-#' library(multidesign)
 #' 
 #' # Create synthetic network domains
 #' set.seed(123)
@@ -484,7 +491,7 @@ cone_align <- function(data, ...) {
 #' )
 #' 
 #' # Create hyperdesign
-#' hd <- hyperdesign(list(domain1 = domain1, domain2 = domain2))
+#' hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign")
 #' 
 #' # Run PARROT alignment with default parameters
 #' result <- parrot(hd, anchors = anchors)
@@ -537,7 +544,15 @@ parrot <- function(data, anchors, ...) {
 #' @return A \code{multiblock_biprojector} object containing alignment results
 #'   for all graphs
 #'
-#' @seealso \code{\link{cone_align}} for pairwise alignment, 
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(60), 30, 2)
+#' X2 <- matrix(rnorm(60), 30, 2)
+#' X3 <- matrix(rnorm(60), 30, 2)
+#' result <- cone_align_multiple(list(X1, X2, X3), ncomp = 2)
+#' }
+#' @seealso \code{\link{cone_align}} for pairwise alignment,
 #'   \code{\link{cone_align_multiple.hyperdesign}} for detailed documentation
 #' @export
 cone_align_multiple <- function(data, ...) {
@@ -682,9 +697,9 @@ coupled_diagonalization <- function(data, ...) {
 }
 
 #' Gromov-Wasserstein Distance
-#' 
+#'
 #' Generic function for computing Gromov-Wasserstein distance between domains
-#' 
+#'
 #' @param data The input data (typically a hyperdesign object)
 #' @param ... Additional arguments passed to methods:
 #'   \itemize{
@@ -700,6 +715,18 @@ coupled_diagonalization <- function(data, ...) {
 #'     \item \code{inner_tol}: Convergence tolerance for inner Sinkhorn iterations (default: 1e-9)
 #'     \item \code{dist_chunk_size}: Chunk size for memory-efficient distance computation (default: 1000)
 #'   }
+#' @return A `gromov_wasserstein` object containing transport plans, pairwise distances, convergence status, and domain metadata. See `gromov_wasserstein.hyperdesign` for full details.
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' result <- gromov_wasserstein(hd, epsilon = 0.5, max_iter = 10)
+#' }
 #' @export
 gromov_wasserstein <- function(data, ...) {
   UseMethod("gromov_wasserstein")

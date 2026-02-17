@@ -3,10 +3,21 @@
 
 #' @rdname gromov_wasserstein
 #' @method gromov_wasserstein hyperdesign
+#' @param epsilon Entropic regularization parameter. Default: 0.1
+#' @param metric Distance metric for within-domain distances. Default: "euclidean"
+#' @param init Initialization method: "uniform" or "random". Default: "uniform"
+#' @param max_iter Maximum iterations for outer loop. Default: 100
+#' @param tol Convergence tolerance for outer loop. Default: 1e-9
+#' @param verbose Print convergence information. Default: FALSE
+#' @param marginals Optional list of marginal distributions per domain
+#' @param scale Scaling strategy: "per_domain", "global", or "none". Default: "per_domain"
+#' @param inner_max_iter Maximum Sinkhorn iterations. Default: 30
+#' @param inner_tol Sinkhorn convergence tolerance. Default: 1e-9
+#' @param dist_chunk_size Chunk size for distance computation. Default: 1000
 #' @export
 gromov_wasserstein.hyperdesign <- function(data,
                                          epsilon = 0.1,
-                                         metric = c("euclidean", "maximum", "manhattan", 
+                                         metric = c("euclidean", "maximum", "manhattan",
                                                    "canberra", "binary", "minkowski"),
                                          init = "uniform",
                                          max_iter = 100,
@@ -359,6 +370,19 @@ print.gromov_wasserstein <- function(x, ...) {
 #' 
 #' @return Matrix of barycentric weights (`type = "weights"`) or transported
 #'   samples (`type = "transport"`).
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' fit <- gromov_wasserstein(hd, epsilon = 0.5, max_iter = 10)
+#' newX <- matrix(rnorm(6), 2, 3)
+#' pred <- predict(fit, newX, from = 1, to = 2)
+#' }
 #' @export
 predict.gromov_wasserstein <- function(object, newdata, from, to,
                                        type = c("weights", "transport"),

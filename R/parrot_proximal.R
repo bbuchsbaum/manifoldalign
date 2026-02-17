@@ -1,14 +1,8 @@
-#' PARROT Proximal Point Method Implementation
+#' Compute PARROT objective
 #'
-#' Correct implementation following Algorithm 2 from the paper
-#' with proper objective function and monotonicity checks
+#' Computes the full objective:
+#' \eqn{<C_rwr, S> + lambda_e * L_e(S) + lambda_n * L_n(S) + lambda_p * L_p(S)}.
 #'
-#' @keywords internal
-
-#' Compute PARROT Objective Function
-#' 
-#' Computes the full objective: <C_rwr, S> + λ_e*L_e(S) + λ_n*L_n(S) + λ_p*L_a(S)
-#' 
 #' @param S Transport plan matrix
 #' @param C_rwr Position-aware cost matrix
 #' @param networks List of network structures  
@@ -174,7 +168,7 @@ compute_edge_gradient_r <- function(S, networks) {
 #' @keywords internal
 compute_edge_gradient <- function(S, networks, use_cpp = FALSE) {
   
-  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (isTRUE(use_cpp)) {
     # Extract components for C++ function
     A1 <- networks[[1]]$adjacency
     A2 <- networks[[2]]$adjacency
@@ -453,7 +447,7 @@ solve_sinkhorn_stabilized <- function(C, tau, max_iter, tol, use_cpp = FALSE) {
     C <- as.matrix(C)
   }
 
-  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (isTRUE(use_cpp)) {
     solve_sinkhorn_stabilized_cpp_fallback(C, tau, max_iter, tol)
   } else {
     solve_sinkhorn_stabilized_r(C, tau, max_iter, tol)

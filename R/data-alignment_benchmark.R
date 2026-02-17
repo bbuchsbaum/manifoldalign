@@ -6,8 +6,6 @@
 #' matrices/design frames and the class labels so alignment methods can generate
 #' comparable hyperdesigns on demand.
 #'
-#' @name alignment_benchmark
-#' @docType data
 #' @format A list with the following components:
 #' \describe{
 #'   \item{domains}{List of three elements named `domain1`, `domain2`, and
@@ -16,16 +14,12 @@
 #'   `domain` columns.}
 #'   \item{labels}{Factor of length 80 giving the latent class for each sample.}
 #' }
-#'
-#' @usage data(alignment_benchmark)
 #' @keywords datasets
 #'
 #' @examples
-#' data <- manifoldalign::alignment_benchmark
-#' hd <- multidesign::hyperdesign(lapply(data$domains, function(dom) {
-#'   multidesign::multidesign(dom$x, dom$design)
-#' }))
-#' str(hd, max.level = 1)
+#' data <- alignment_benchmark
+#' lapply(data$domains, function(dom) dim(dom$x))
+#' table(data$labels)
 #'
 #' @export
 alignment_benchmark <- local({

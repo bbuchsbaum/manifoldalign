@@ -206,7 +206,7 @@ parrot.hyperdesign <- function(data,
   # Extract anchor information (following package pattern)
   anchor_data <- safe_compute({
     unlist(purrr::map(data, function(x) {
-      x$design %>% dplyr::select(!!anchors) %>% dplyr::pull(!!anchors)
+      x$design |> dplyr::select(!!anchors) |> dplyr::pull(!!anchors)
     }))
   }, "Failed to extract anchor data. Check that anchor variable exists in design.")
   
@@ -339,19 +339,24 @@ parrot_fit <- function(strata, proc, anchor_data, ncomp, sigma, lambda_e, lambda
   # Ensure consistent dimensions with scores
   actual_ncomp <- ncol(scores)
   
+  # Loadings are defined by regressing each domain's (preprocessed) features onto
+  # its corresponding embedding coordinates. Since `scores` is computed as
+  # rbind(U, V) from the SVD of the transport plan, reuse it directly to avoid:
+  # - using the wrong SVD side for domain 2 (V vs U)
+  # - recomputing the SVD per-domain
+  if (nrow(scores) != n1 + n2) {
+    stop("PARROT internal error: embedding rows do not match domain sizes.", call. = FALSE)
+  }
+  alpha_list <- list(
+    scores[seq_len(n1), , drop = FALSE],
+    scores[n1 + seq_len(n2), , drop = FALSE]
+  )
+
   loadings <- do.call(rbind, lapply(seq_along(strata), function(i) {
-    # For v computation, use the same preprocessing that was used for the main computation
-    # This ensures consistency between training and projection
-    xi <- strata[[i]]$x  # Use the already preprocessed data
-    
-    # Use SVD components corresponding to the scores
-    if (actual_ncomp <= ncol(transport_result$transport_plan) && actual_ncomp <= nrow(transport_result$transport_plan)) {
-      # Use SVD to get proper loadings
-      svd_result <- svd(transport_result$transport_plan, nu = actual_ncomp, nv = actual_ncomp)
-      alpha_i <- svd_result$u[1:nrow(xi), 1:actual_ncomp, drop = FALSE]
-    } else {
-      # Fallback: use first few columns
-      alpha_i <- transport_result$transport_plan[1:nrow(xi), 1:actual_ncomp, drop = FALSE]
+    xi <- strata[[i]]$x
+    alpha_i <- alpha_list[[i]]
+    if (nrow(xi) != nrow(alpha_i)) {
+      stop("PARROT internal error: embedding rows do not match feature rows for domain ", i, ".", call. = FALSE)
     }
     Matrix::crossprod(xi, alpha_i)
   }))
@@ -490,13 +495,14 @@ compute_parrot_rwr_r <- function(networks, anchor_info, sigma, max_iter, tol) {
 }
 
 #' Compute RWR Features for PARROT (Dispatcher)
-#' 
+#'
 #' @inheritParams compute_parrot_rwr_r
 #' @param use_cpp Whether to use C++ implementation
+#' @return A list of RWR feature matrices, one per network
 #' @keywords internal
 compute_parrot_rwr <- function(networks, anchor_info, sigma, max_iter, tol, use_cpp = FALSE) {
   
-  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (isTRUE(use_cpp)) {
     # Extract anchor information
     anchor_idx1 <- anchor_info$idx1
     anchor_idx2 <- anchor_info$idx2
@@ -588,7 +594,7 @@ solve_parrot_transport <- function(networks, rwr_features, anchor_info,
 #' Solve Sylvester Equation for Cross-Graph RWR Cost (R implementation)
 #'
 #' Implements the Sylvester iteration from Eq. 4 in the paper:
-#' C_rwr = (1+β)C_node + (1-β)γ * W1 * C_rwr * W2^T
+#' C_rwr = (1+beta) * C_node + (1-beta) * gamma * W1 * C_rwr * W2^T
 #'
 #' @param W1 First network's transition matrix (row-stochastic)
 #' @param W2T Transpose of second network's transition matrix  
@@ -602,15 +608,48 @@ solve_parrot_transport <- function(networks, rwr_features, anchor_info,
 solve_sylvester_rwr_r <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1, tol = 1e-6, max_iter = 50) {
   # AUDIT-02: Correct Sylvester formulation from paper's Eq. 4
   X <- Cnode
+
+  kappa <- (1 - beta) * gamma
+  if (kappa >= 1) {
+    warning(
+      "Sylvester RWR iteration may diverge because (1 - beta) * gamma = ",
+      signif(kappa, 4),
+      " >= 1. Consider reducing gamma below ",
+      signif(1 / (1 - beta), 4),
+      call. = FALSE
+    )
+  }
   
-  for (iter in 1:max_iter) {
+  converged <- FALSE
+  delta <- NA_real_
+  for (iter in seq_len(max_iter)) {
     X_new <- (1 + beta) * Cnode + (1 - beta) * gamma * (W1 %*% X %*% W2T)
     
     # Check convergence
-    if (max(abs(X_new - X)) < tol) {
+    delta <- max(abs(X_new - X))
+    if (!is.finite(delta)) {
+      warning("Sylvester RWR iteration produced non-finite values at iteration ", iter, call. = FALSE)
       break
     }
+
+    if (delta < tol) {
+      converged <- TRUE
+      X <- X_new
+      break
+    }
+
     X <- X_new
+  }
+
+  if (!converged && is.finite(delta) && delta >= tol) {
+    warning(
+      "Sylvester RWR iteration did not converge after ",
+      max_iter,
+      " iterations (last max|delta| = ",
+      signif(delta, 4),
+      ").",
+      call. = FALSE
+    )
   }
   
   X
@@ -620,11 +659,12 @@ solve_sylvester_rwr_r <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1, tol 
 #'
 #' @inheritParams solve_sylvester_rwr_r
 #' @param use_cpp Whether to use C++ implementation
+#' @return A numeric matrix solving the Sylvester equation for RWR computation
 #' @keywords internal
-solve_sylvester_rwr <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1, 
+solve_sylvester_rwr <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1,
                                 tol = 1e-6, max_iter = 50, use_cpp = FALSE) {
   
-  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (isTRUE(use_cpp)) {
     if (inherits(W1, "Matrix")) W1 <- as.matrix(W1)
     if (inherits(W2T, "Matrix")) W2T <- as.matrix(W2T)
     if (inherits(Cnode, "Matrix")) Cnode <- as.matrix(Cnode)
@@ -638,7 +678,7 @@ solve_sylvester_rwr <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1,
 #' Compute Position-Aware Cost Matrix (R implementation)
 #' 
 #' Follows the two-stage process from the paper:
-#' 1. Compute C_node = α * cost_RWR + (1-α) * cost_attr (Eq. 3)
+#' 1. Compute C_node = alpha * cost_RWR + (1-alpha) * cost_attr (Eq. 3)
 #' 2. Solve Sylvester equation for C_rwr (Eq. 4)
 #' 
 #' @param networks List of network structures
@@ -695,13 +735,14 @@ compute_parrot_cost_r <- function(networks, rwr_features, anchor_info, alpha = 0
 
 
 #' Compute Position-Aware Cost Matrix (Dispatcher)
-#' 
+#'
 #' @inheritParams compute_parrot_cost_r
 #' @param use_cpp Whether to use C++ implementation
+#' @return A numeric cost matrix between networks
 #' @keywords internal
 compute_parrot_cost <- function(networks, rwr_features, anchor_info, alpha = 0.5,                                 sigma = 0.15, gamma = 0.1, use_cpp = FALSE) {
 
-  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (isTRUE(use_cpp)) {
     X1 <- networks[[1]]$features
     X2 <- networks[[2]]$features
     R1 <- rwr_features[[1]]
@@ -838,7 +879,7 @@ compute_squared_distances_r <- function(X1, X2) {
 #' @return Distance matrix (n1 x n2)
 #' @keywords internal
 compute_squared_distances <- function(X1, X2, use_cpp = FALSE) {
-  if (use_cpp && requireNamespace("Rcpp", quietly = TRUE)) {
+  if (isTRUE(use_cpp)) {
     # Ensure matrices are regular for C++
     if (inherits(X1, "Matrix")) X1 <- as.matrix(X1)
     if (inherits(X2, "Matrix")) X2 <- as.matrix(X2)
@@ -887,9 +928,11 @@ compute_parrot_embeddings <- function(networks, transport_plan, ncomp) {
 
 
 #' Get whether to use Rcpp implementations in PARROT
-#' 
+#'
 #' @return Logical, whether to use Rcpp
+#' @examples
+#' get_parrot_use_cpp()
 #' @export
 get_parrot_use_cpp <- function() {
-  .parrot_globals$use_cpp
+  isTRUE(getOption("manifoldalign.parrot.use_cpp", FALSE))
 }

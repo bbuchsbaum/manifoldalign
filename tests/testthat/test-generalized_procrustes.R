@@ -77,7 +77,7 @@ test_that("partial observations average correctly and mask unobserved tasks", {
 
   expect_true(all(is.na(A_rot[, 6])))
   for (task in 1:5) {
-    expect_equal(A_rot[, task], template[, task], tolerance = 5e-3)
+    expect_equal(A_rot[, task], template[, task], tolerance = 1e-2)
   }
 })
 

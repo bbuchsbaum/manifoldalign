@@ -111,7 +111,7 @@
 #' @importFrom rlang enquo !! as_name quo_is_symbol eval_tidy
 #' @importFrom purrr map
 #' @importFrom dplyr select pull
-#' @importFrom multivarious init_transform center
+#' @importFrom multivarious center
 #' @importFrom irlba irlba
 #' @keywords internal
 .generalized_procrustes_impl <- function(
@@ -602,7 +602,75 @@ generalized_procrustes.hyperdesign <- function(data, y,
   
   # Apply preprocessing to get data matrices
   if (verbose) message("Applying preprocessing...")
-  pdata <- multivarious::init_transform(data, preproc)
+  pdata <- unclass(data)
+  nb <- length(pdata)
+
+  if (is.null(preproc)) {
+    proclist <- vector("list", nb)
+    for (i in seq_len(nb)) {
+      pdata[[i]]$x <- as.matrix(pdata[[i]]$x)
+      proclist[[i]] <- NULL
+    }
+  } else {
+    is_preproc_obj <- inherits(preproc, "prepper") || inherits(preproc, "pre_processor")
+
+    if (!is.list(preproc) || is_preproc_obj) {
+      preproc <- rep(list(preproc), nb)
+    } else if (length(preproc) == 1L) {
+      preproc <- rep(preproc, nb)
+    } else if (length(preproc) != nb) {
+      stop(
+        "Length of `preproc` list (",
+        length(preproc),
+        ") must match number of domains (",
+        nb,
+        ").",
+        call. = FALSE
+      )
+    }
+
+    proclist <- vector("list", nb)
+    for (i in seq_len(nb)) {
+      Xi <- as.matrix(pdata[[i]]$x)
+      pre_i <- preproc[[i]]
+
+      if (is.null(pre_i)) {
+        pdata[[i]]$x <- Xi
+        proclist[[i]] <- NULL
+        next
+      }
+
+      # Functions are applied directly (avoid recipes-based preprocessing).
+      if (is.function(pre_i)) {
+        Xi_tf <- pre_i(Xi)
+        pdata[[i]]$x <- Xi_tf
+        proclist[[i]] <- pre_i
+        next
+      }
+
+      # Clone stateful preprocessors before fitting.
+      if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
+        pre_i <- unserialize(serialize(pre_i, connection = NULL))
+      }
+
+      if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
+        ft <- multivarious::fit_transform(pre_i, Xi)
+        pdata[[i]]$x <- ft$transformed
+        proclist[[i]] <- ft$preproc
+      } else {
+        templ <- multivarious::prep(pre_i)
+        Xi_tf <- multivarious::init_transform(templ, Xi)
+        pdata[[i]]$x <- Xi_tf
+        proc_attr <- attr(Xi_tf, "preproc")
+        proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
+      }
+    }
+  }
+
+  names(pdata) <- names(data)
+  class(pdata) <- class(data)
+  names(proclist) <- names(pdata)
+  attr(pdata, "preproc") <- proclist
   
   # Validate preprocessed data
   if (any(sapply(pdata, function(x) any(!is.finite(x$x))))) {

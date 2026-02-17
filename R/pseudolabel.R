@@ -1,8 +1,10 @@
 #' Pseudolabeling for Unsupervised Domain Adaptation
 #'
 #' @description
-#' Provides pseudolabeling system for unsupervised domain adaptation with 
+#' Provides pseudolabeling system for unsupervised domain adaptation with
 #' KEMA. Identifies high-confidence anchor samples to guide domain alignment.
+#'
+#' @return NULL (documentation page only).
 #'
 #' @details
 #' The pseudolabeling system addresses unsupervised domain adaptation by 
@@ -49,7 +51,20 @@
 #'   \item \strong{min_cluster_size}: Ensures clusters are large enough to be 
 #'     reliable
 #' }
-#' 
+#'
+#' @examples
+#' \donttest{
+#' library(Matrix)
+#' # Create synthetic similarity matrix
+#' n <- 100
+#' sim_matrix <- Matrix::rsparsematrix(n, n, density = 0.1, rand.x = runif)
+#' sim_matrix <- (sim_matrix + Matrix::t(sim_matrix)) / 2
+#' Matrix::diag(sim_matrix) <- 1
+#'
+#' # Assign pseudolabels
+#' result <- assign_pseudolabels(sim_matrix, min_clusters = 5)
+#' table(result$labels, useNA = "always")
+#' }
 #' @name pseudolabeling
 NULL
 
@@ -506,6 +521,19 @@ assign_pseudolabels <- function(sim_matrix,
 #'
 #' @param x A pseudolabels object
 #' @param ... Additional arguments (ignored)
+#'
+#' @return The pseudolabels object x, invisibly.
+#'
+#' @examples
+#' \donttest{
+#' sim_mat <- Matrix::sparseMatrix(
+#'   i = c(1,2,1,3,2,3), j = c(2,1,3,1,3,2),
+#'   x = c(0.9,0.9,0.8,0.8,0.7,0.7), dims = c(5,5)
+#' )
+#' pl <- assign_pseudolabels(sim_mat, min_clusters = 1, min_cluster_size = 1)
+#' print(pl)
+#' }
+#'
 #' @method print pseudolabels
 #' @export
 print.pseudolabels <- function(x, ...) {
@@ -550,6 +578,19 @@ print.pseudolabels <- function(x, ...) {
 #'
 #' @param object A pseudolabels object
 #' @param ... Additional arguments (ignored)
+#'
+#' @return The pseudolabels object, invisibly.
+#'
+#' @examples
+#' \donttest{
+#' sim_mat <- Matrix::sparseMatrix(
+#'   i = c(1,2,1,3,2,3), j = c(2,1,3,1,3,2),
+#'   x = c(0.9,0.9,0.8,0.8,0.7,0.7), dims = c(5,5)
+#' )
+#' pl <- assign_pseudolabels(sim_mat, min_clusters = 1, min_cluster_size = 1)
+#' summary(pl)
+#' }
+#'
 #' @method summary pseudolabels
 #' @export
 summary.pseudolabels <- function(object, ...) {
@@ -569,6 +610,21 @@ summary.pseudolabels <- function(object, ...) {
 #'
 #' @param x A pseudolabels object
 #' @param ... Additional arguments (ignored)
+#'
+#' @return A data.frame with columns for sample index, label, and
+#'   representative status.
+#'
+#' @examples
+#' \donttest{
+#' sim_mat <- Matrix::sparseMatrix(
+#'   i = c(1,2,1,3,2,3), j = c(2,1,3,1,3,2),
+#'   x = c(0.9,0.9,0.8,0.8,0.7,0.7), dims = c(5,5)
+#' )
+#' pl <- assign_pseudolabels(sim_mat, min_clusters = 1, min_cluster_size = 1)
+#' df <- as.data.frame(pl)
+#' head(df)
+#' }
+#'
 #' @method as.data.frame pseudolabels
 #' @export
 as.data.frame.pseudolabels <- function(x, ...) {
@@ -928,10 +984,16 @@ as.data.frame.pseudolabels <- function(x, ...) {
 #'
 #' @examples
 #' \donttest{
-#' # Assuming you have multi-domain data
-#' strata <- multidesign::hyperdesign(raw_blocks)
-#' plabs <- high_sim_pseudolabels(strata, k = 5, cos_thresh = 0.98)
-#' table(plabs, useNA = "always")
+#' if (requireNamespace("RcppAnnoy", quietly = TRUE) &&
+#'     requireNamespace("igraph", quietly = TRUE)) {
+#'   set.seed(1)
+#'   strata <- list(
+#'     list(x = matrix(rnorm(30), 10, 3), design = data.frame(row = 1:10)),
+#'     list(x = matrix(rnorm(30), 10, 3), design = data.frame(row = 1:10))
+#'   )
+#'   plabs <- high_sim_pseudolabels(strata, k = 3, cos_thresh = 0.95, ann_trees = 10)
+#'   table(plabs, useNA = "always")
+#' }
 #' }
 #'
 #' @export

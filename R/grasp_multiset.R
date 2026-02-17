@@ -17,6 +17,16 @@
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return A grasp_multiset object
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' X3 <- matrix(rnorm(30), 10, 3)
+#' data_list <- list(X1, X2, X3)
+#' result <- grasp_multiset(data_list, ncomp = 5)
+#' str(result$embeddings)
+#' }
 #' @rdname grasp_multiset
 #' @export
 grasp_multiset <- function(data, ...) {

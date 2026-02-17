@@ -3,20 +3,26 @@
 #' Comprehensive validation functions to test PARROT accuracy and performance
 #' against synthetic datasets with known ground truth.
 #'
+#' @return NULL (documentation page only).
 #' @name parrot-validation
 #' @keywords internal
 NULL
 
 #' Generate Synthetic Network Alignment Data
-#' 
+#'
 #' Creates two networks with known correspondence for validating PARROT
-#' 
+#'
 #' @param n_nodes Number of nodes per network
 #' @param n_anchors Number of anchor correspondences
 #' @param noise_level Noise level for second network (0-1)
 #' @param structure Type of network structure: "ring", "grid", "random", "community"
 #' @param permute_fraction Fraction of nodes to permute in second network
 #' @return List with two networks and ground truth alignment
+#' @examples
+#' \donttest{
+#' vdata <- generate_parrot_validation_data(n_nodes = 20, n_anchors = 5)
+#' str(vdata$ground_truth)
+#' }
 #' @export
 generate_parrot_validation_data <- function(n_nodes = 100, 
                                           n_anchors = 10,
@@ -102,11 +108,11 @@ generate_parrot_validation_data <- function(n_nodes = 100,
   )
   
   # Create multidesign objects
-  md1 <- multidesign(X1, design1)
-  md2 <- multidesign(X2, design2)
+  md1 <- multidesign::multidesign(X1, design1)
+  md2 <- multidesign::multidesign(X2, design2)
   
   # Create hyperdesign
-  hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
+  hd <- multidesign::hyperdesign(list(domain1 = md1, domain2 = md2))
   
   list(
     data = hd,
@@ -126,13 +132,18 @@ generate_parrot_validation_data <- function(n_nodes = 100,
 }
 
 #' Evaluate PARROT Alignment Accuracy
-#' 
+#'
 #' Computes various accuracy metrics for PARROT alignment results
-#' 
+#'
 #' @param parrot_result Result from parrot() function
 #' @param ground_truth Ground truth from generate_parrot_validation_data
 #' @param k Top-k accuracy levels to compute (default: c(1, 5, 10))
-#' @return List of accuracy metrics
+#' @return A list with alignment accuracy metrics including hit rate at various k values
+#' @examples
+#' \donttest{
+#' vdata <- generate_parrot_validation_data(n_nodes = 20, n_anchors = 5)
+#' # evaluate_parrot_accuracy(result, vdata$ground_truth)
+#' }
 #' @export
 evaluate_parrot_accuracy <- function(parrot_result, ground_truth, k = c(1, 5, 10)) {
   
@@ -200,12 +211,16 @@ evaluate_parrot_accuracy <- function(parrot_result, ground_truth, k = c(1, 5, 10
 }
 
 #' Run PARROT Validation Suite
-#' 
+#'
 #' Comprehensive validation across different network structures and parameters
-#' 
+#'
 #' @param output_dir Directory to save validation results
 #' @param n_replications Number of replications per configuration
 #' @return Data frame with validation results
+#' @examples
+#' \donttest{
+#' results <- run_parrot_validation_suite(output_dir = tempdir(), n_replications = 2)
+#' }
 #' @export
 run_parrot_validation_suite <- function(output_dir = NULL, n_replications = 5) {
   
@@ -338,12 +353,13 @@ run_parrot_validation_suite <- function(output_dir = NULL, n_replications = 5) {
 }
 
 #' Generate PARROT Validation Report
-#' 
+#'
 #' Creates a summary report from validation results
-#' 
+#'
 #' @param results_df Data frame from run_parrot_validation_suite
 #' @param output_dir Directory to save report
 #' @param timestamp Timestamp for file naming
+#' @return A character string containing the formatted validation report, invisibly
 #' @keywords internal
 generate_parrot_validation_report <- function(results_df, output_dir, timestamp) {
   

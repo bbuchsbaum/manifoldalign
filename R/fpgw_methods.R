@@ -4,34 +4,77 @@
 #' These methods integrate FPGW results with the multiblock_biprojector
 #' framework from the multivarious package.
 #'
+#' @return NULL (documentation page only).
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' res <- fpgw(hd)
+#' # Use methods: summary(res), plot(res), coef(res)
+#' }
 #' @name fpgw-methods
 NULL
 
 #' Transform new data using FPGW alignment
-#' 
-#' @param x An fpgw object
+#'
+#' @param _data An fpgw object
 #' @param newdata New data to transform
 #' @param source_index Index of source domain
 #' @param target_index Index of target domain
 #' @param ... Additional arguments
-#' 
+#'
 #' @return Transformed samples in the target domain feature space.
+#'
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' res <- fpgw(hd)
+#' X_new <- matrix(rnorm(15), 5, 3)
+#' transformed <- transform(res, X_new, source_index = 1, target_index = 2)
+#' }
+#'
 #' @export
-transform.fpgw <- function(x, newdata, source_index = 1, target_index = 2, ...) {
-  predict(x, newdata, from = source_index, to = target_index, type = "transport", ...)
+transform.fpgw <- function(`_data`, newdata, source_index = 1, target_index = 2, ...) {
+  predict(`_data`, newdata, from = source_index, to = target_index, type = "transport", ...)
 }
 
 #' Extract coefficients from FPGW
-#' 
+#'
 #' @param object An fpgw object
 #' @param type Type of coefficients to extract
 #' @param ... Additional arguments
-#' 
+#'
 #' @return Coefficients (transport plans or parameters)
+#'
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' res <- fpgw(hd)
+#' transport_plans <- coef(res, type = "transport")
+#' params <- coef(res, type = "parameters")
+#' }
+#'
 #' @export
 coef.fpgw <- function(object, type = c("transport", "parameters"), ...) {
   type <- match.arg(type)
-  
+
   if (type == "transport") {
     return(object$transport_plans)
   } else {
@@ -47,11 +90,25 @@ coef.fpgw <- function(object, type = c("transport", "parameters"), ...) {
 }
 
 #' Summary method for FPGW
-#' 
+#'
 #' @param object An fpgw object
 #' @param ... Additional arguments
-#' 
-#' @return Summary information
+#'
+#' @return The fpgw object, invisibly.
+#'
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' res <- fpgw(hd)
+#' summary(res)
+#' }
+#'
 #' @method summary fpgw
 #' @export
 summary.fpgw <- function(object, ...) {
@@ -96,12 +153,28 @@ summary.fpgw <- function(object, ...) {
 }
 
 #' Plot method for FPGW
-#' 
+#'
 #' @param x An fpgw object
 #' @param which Which plot to create (1: distance matrix, 2: transport plan)
 #' @param pair For transport plan, which pair to plot (default: 1)
 #' @param ... Additional arguments passed to plotting functions
-#' 
+#'
+#' @return NULL, invisibly. Called for its side effect of producing a plot.
+#'
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' res <- fpgw(hd)
+#' plot(res, which = 1)
+#' plot(res, which = 2, pair = 1)
+#' }
+#'
 #' @export
 plot.fpgw <- function(x, which = 1, pair = 1, ...) {
   if (which == 1) {
@@ -127,25 +200,54 @@ plot.fpgw <- function(x, which = 1, pair = 1, ...) {
           xlab = "Source", ylab = "Target",
           col = heat.colors(100), ...)
   }
+  invisible(NULL)
 }
 
 #' Extract fitted values
-#' 
+#'
 #' @param object An fpgw object
 #' @param ... Additional arguments
-#' 
+#'
 #' @return List of transport plans
+#'
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' res <- fpgw(hd)
+#' plans <- fitted(res)
+#' }
+#'
 #' @export
 fitted.fpgw <- function(object, ...) {
   object$transport_plans
 }
 
 #' Extract residuals (not applicable for FPGW)
-#' 
+#'
 #' @param object An fpgw object
 #' @param ... Additional arguments
-#' 
+#'
 #' @return NULL with a warning
+#'
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' res <- fpgw(hd)
+#' residuals(res)
+#' }
+#'
 #' @export
 residuals.fpgw <- function(object, ...) {
   warning("Residuals are not defined for FPGW objects", call. = FALSE)

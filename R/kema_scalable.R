@@ -1,4 +1,3 @@
-#' @keywords internal
 #' Low-rank class graph helpers and matrix-free kernel operators for scalable KEMA
 #'
 #' These helpers avoid materializing dense class similarity matrices and block
@@ -6,10 +5,11 @@
 #' expose compact representations that can be combined to build reduced Grams in
 #' O(n + rC) memory, where r is the aggregate kernel rank and C the number of
 #' classes.
-
+#'
 #' @param labels Character/factor vector with NA for unlabeled samples
 #' @return List with sparse label factor matrix `C`, indicator vector `ell`, and
 #'   diagonal entries for the same/different-class Laplacians.
+#' @keywords internal
 label_factors <- function(labels) {
   n <- length(labels)
   lab_mask <- !is.na(labels)
@@ -46,6 +46,15 @@ label_factors <- function(labels) {
 #' @param Ks List of `Matrix` objects (each n_i x r_i) representing kernel
 #'   evaluations for a block.
 #' @return List with dimensions and forward/transpose operators.
+#' @examples
+#' \donttest{
+#' library(Matrix)
+#' K1 <- Matrix(rnorm(20), 10, 2)
+#' K2 <- Matrix(rnorm(20), 10, 2)
+#' Zop <- make_Zop_from_Ks(list(K1, K2))
+#' str(Zop)
+#' }
+#' @export
 make_Zop_from_Ks <- function(Ks) {
   if (!length(Ks)) {
     stop("make_Zop_from_Ks: empty kernel list", call. = FALSE)
@@ -90,6 +99,15 @@ make_Zop_from_Ks <- function(Ks) {
 #' @param Zop Operator as returned by `make_Zop_from_Ks` or similar.
 #' @param block_size Number of identity columns processed per batch.
 #' @return Symmetric dense matrix of size r x r.
+#' @examples
+#' \donttest{
+#' library(Matrix)
+#' K1 <- Matrix(rnorm(20), 10, 2)
+#' K2 <- Matrix(rnorm(20), 10, 2)
+#' Zop <- make_Zop_from_Ks(list(K1, K2))
+#' G <- gram_ZZ(Zop)
+#' }
+#' @export
 gram_ZZ <- function(Zop, block_size = 128L) {
   r <- Zop$r
   G <- matrix(0, r, r)
@@ -111,6 +129,15 @@ gram_ZZ <- function(Zop, block_size = 128L) {
 #' @param A Sparse or diagonal matrix compatible with Z columns.
 #' @param block_size Number of columns processed per batch.
 #' @return Symmetric dense matrix.
+#' @examples
+#' \donttest{
+#' library(Matrix)
+#' K1 <- Matrix(rnorm(20), 10, 2)
+#' Zop <- make_Zop_from_Ks(list(K1))
+#' A <- Diagonal(10, 1)
+#' G <- gram_Z_A_Z(Zop, A)
+#' }
+#' @export
 gram_Z_A_Z <- function(Zop, A, block_size = 64L) {
   if (inherits(A, "diagonalMatrix")) {
     d <- Matrix::diag(A)
@@ -140,6 +167,15 @@ gram_Z_A_Z <- function(Zop, A, block_size = 64L) {
 #' @param diag_entries Numeric vector of length n (diagonal of A).
 #' @param block_size Batch size for columns.
 #' @return Symmetric dense matrix.
+#' @examples
+#' \donttest{
+#' library(Matrix)
+#' K1 <- Matrix(rnorm(20), 10, 2)
+#' Zop <- make_Zop_from_Ks(list(K1))
+#' diag_vals <- rep(1, 10)
+#' G <- gram_Z_diag_Z(Zop, diag_vals)
+#' }
+#' @export
 gram_Z_diag_Z <- function(Zop, diag_entries, block_size = 128L) {
   r <- Zop$r
   n <- length(diag_entries)
@@ -165,6 +201,15 @@ gram_Z_diag_Z <- function(Zop, diag_entries, block_size = 128L) {
 #' @param Zop Operator for Z.
 #' @param S Dense or sparse matrix with n rows.
 #' @return Dense matrix with r rows.
+#' @examples
+#' \donttest{
+#' library(Matrix)
+#' K1 <- Matrix(rnorm(20), 10, 2)
+#' Zop <- make_Zop_from_Ks(list(K1))
+#' S <- matrix(rnorm(30), 10, 3)
+#' result <- Zt_times(Zop, S)
+#' }
+#' @export
 Zt_times <- function(Zop, S) {
   if (!is.matrix(S) && !methods::is(S, "Matrix")) {
     S <- matrix(S, nrow = Zop$n)
@@ -179,6 +224,14 @@ Zt_times <- function(Zop, S) {
 #' @param Zop Operator for kernel blocks.
 #' @param F Label factor list from `label_factors()`.
 #' @return Symmetric dense matrix of size r x r.
+#' @examples
+#' \donttest{
+#' library(Matrix)
+#' K1 <- Matrix(rnorm(20), 10, 2)
+#' Zop <- make_Zop_from_Ks(list(K1))
+#' # F <- label_factors(...)  # Requires label factors
+#' # G <- gram_Ls(Zop, F)
+#' }
 gram_Ls <- function(Zop, F) {
   Ds <- Matrix::Diagonal(x = F$d_s)
   XtDX <- gram_Z_A_Z(Zop, Ds)
@@ -193,6 +246,14 @@ gram_Ls <- function(Zop, F) {
 #' @param Zop Operator for kernel blocks.
 #' @param F Label factor list.
 #' @return Symmetric dense matrix.
+#' @examples
+#' \donttest{
+#' library(Matrix)
+#' K1 <- Matrix(rnorm(20), 10, 2)
+#' Zop <- make_Zop_from_Ks(list(K1))
+#' # F <- label_factors(...)  # Requires label factors
+#' # G <- gram_Ld(Zop, F)
+#' }
 gram_Ld <- function(Zop, F) {
   Dd <- Matrix::Diagonal(x = F$d_d)
   XtDX <- gram_Z_A_Z(Zop, Dd)
@@ -209,6 +270,14 @@ gram_Ld <- function(Zop, F) {
 #' @param max_rank Optional rank cap.
 #' @param diag_fun Optional shortcut for diagonal entries of kernel matrix.
 #' @return List with selected indices and factor matrix W (n x r).
+#' @examples
+#' \donttest{
+#' X <- matrix(rnorm(50), 10, 5)
+#' kernel <- kernlab::rbfdot(sigma = 0.1)
+#' result <- pivoted_chol_kernel_block(X, kernel, tol = 1e-4, max_rank = 5)
+#' str(result)
+#' }
+#' @export
 pivoted_chol_kernel_block <- function(X, kernel, tol = 1e-6, max_rank = Inf,
                                       diag_fun = function(X) rep(1, nrow(X))) {
   n <- nrow(X)

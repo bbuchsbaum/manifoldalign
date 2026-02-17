@@ -126,7 +126,9 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
     size_t arc_id = 0;
     for (int i = 0; i < n_pad; i++) {
       for (int j = 0; j < m_pad; j++) {
-        assert(arc_id < costs.size());
+        if (arc_id >= costs.size()) {
+          Rcpp::stop("Internal error: arc_id out of bounds while filling cost vector.");
+        }
         costs[arc_id] = static_cast<CostType>(std::round(cost_padded(i, j) * scale));
         arc_id++;
       }
@@ -146,10 +148,6 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
     
     // Debug: check mass balance
     if (total_supply != total_demand) {
-      Rcpp::Rcout << "Mass imbalance detected: supply = " << total_supply 
-                  << ", demand = " << total_demand 
-                  << ", difference = " << (total_supply - total_demand) << std::endl;
-      
       // Fix imbalance by adjusting last supply
       if (n_pad > 0) {
         supplies_src[n_pad - 1] -= (total_supply - total_demand);
@@ -166,22 +164,22 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
         // where source is in [0, n1) and target is in [n1, n1+n2)
         int lemon_arc_id = i * m_pad + j;
         int cost_idx = i * m_pad + j;  // Our sequential index for costs array
-        assert(cost_idx < costs.size());
-        assert(lemon_arc_id <= std::numeric_limits<int>::max());
+        if (cost_idx < 0 || static_cast<size_t>(cost_idx) >= costs.size()) {
+          Rcpp::stop("Internal error: cost index out of bounds while setting costs.");
+        }
         
         // Debug: verify arc is valid before using it
         if (lemon_arc_id >= n_pad * m_pad) {
-          Rcpp::Rcout << "ERROR: Arc ID " << lemon_arc_id << " out of bounds (max " 
-                      << (n_pad * m_pad - 1) << ")" << std::endl;
-          Rcpp::stop("Arc ID out of bounds");
+          Rcpp::stop("Arc ID out of bounds while setting costs (arc=%d, max=%d).",
+                     lemon_arc_id, (n_pad * m_pad - 1));
         }
         
         try {
           ns.setCost(graph.arcFromId(lemon_arc_id), costs[cost_idx]);
+        } catch (const std::exception& e) {
+          Rcpp::stop("Failed to set cost for arc %d (i=%d, j=%d): %s", lemon_arc_id, i, j, e.what());
         } catch (...) {
-          Rcpp::Rcout << "ERROR setting cost for arc " << lemon_arc_id 
-                      << " (i=" << i << ", j=" << j << ")" << std::endl;
-          throw;
+          Rcpp::stop("Failed to set cost for arc %d (i=%d, j=%d).", lemon_arc_id, i, j);
         }
       }
     }
@@ -192,14 +190,12 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
     // Run solver
     int result = ns.run();
     if (result != NetworkSimplex::OPTIMAL) {
-      Rcpp::Rcout << "Network simplex error code: " << result << std::endl;
-      Rcpp::Rcout << "Problem size: " << n_pad << " x " << m_pad << std::endl;
       if (result == NetworkSimplex::INFEASIBLE) {
-        Rcpp::stop("Network simplex: Problem is infeasible");
+        Rcpp::stop("Network simplex: Problem is infeasible (%d x %d).", n_pad, m_pad);
       } else if (result == NetworkSimplex::UNBOUNDED) {
-        Rcpp::stop("Network simplex: Problem is unbounded");
+        Rcpp::stop("Network simplex: Problem is unbounded (%d x %d).", n_pad, m_pad);
       } else {
-        Rcpp::stop("Network simplex: Unknown error");
+        Rcpp::stop("Network simplex: Error code %d for problem %d x %d.", result, n_pad, m_pad);
       }
     }
     
@@ -208,7 +204,6 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
     for (int i = 0; i < n_pad; i++) {
       for (int j = 0; j < m_pad; j++) {
         int lemon_arc_id = i * m_pad + j;
-        assert(lemon_arc_id <= std::numeric_limits<int>::max());
         FlowType flow = ns.flow(graph.arcFromId(lemon_arc_id));
         P_padded(i, j) = static_cast<double>(flow) / scale;
       }
@@ -246,6 +241,9 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
     int arc_id = 0;
     for (int i = 0; i < n; i++) {
       for (int j = 0; j < m; j++) {
+        if (arc_id < 0 || static_cast<size_t>(arc_id) >= costs.size()) {
+          Rcpp::stop("Internal error: arc_id out of bounds while filling cost vector.");
+        }
         costs[arc_id] = static_cast<CostType>(std::round(cost(i, j) * scale));
         arc_id++;
       }
@@ -265,10 +263,6 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
     
     // Debug: check mass balance
     if (total_supply != total_demand) {
-      Rcpp::Rcout << "Mass imbalance detected: supply = " << total_supply 
-                  << ", demand = " << total_demand 
-                  << ", difference = " << (total_supply - total_demand) << std::endl;
-      
       // Fix imbalance by adjusting last supply
       if (n > 0) {
         supplies_src[n - 1] -= (total_supply - total_demand);
@@ -293,14 +287,12 @@ arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
     // Run solver
     int result = ns.run();
     if (result != NetworkSimplex::OPTIMAL) {
-      Rcpp::Rcout << "Network simplex error code: " << result << std::endl;
-      Rcpp::Rcout << "Problem size: " << n << " x " << m << std::endl;
       if (result == NetworkSimplex::INFEASIBLE) {
-        Rcpp::stop("Network simplex: Problem is infeasible");
+        Rcpp::stop("Network simplex: Problem is infeasible (%d x %d).", n, m);
       } else if (result == NetworkSimplex::UNBOUNDED) {
-        Rcpp::stop("Network simplex: Problem is unbounded");
+        Rcpp::stop("Network simplex: Problem is unbounded (%d x %d).", n, m);
       } else {
-        Rcpp::stop("Network simplex: Unknown error");
+        Rcpp::stop("Network simplex: Error code %d for problem %d x %d.", result, n, m);
       }
     }
     

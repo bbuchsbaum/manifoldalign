@@ -10,6 +10,16 @@
 #'   "mean", or "max"
 #' @param na_color Fill color for missing cells (no triangles)
 #' @return A ggplot object
+#' @examples
+#' \donttest{
+#' # Requires align_many result with diagnostics
+#' # X1 <- matrix(rnorm(100), 50, 2)
+#' # X2 <- matrix(rnorm(100), 50, 2)
+#' # X3 <- matrix(rnorm(100), 50, 2)
+#' # algo <- grasp_aligner()
+#' # result <- align_many(list(X1, X2, X3), algo)
+#' # plot_cycle_consistency(result$diagnostics)
+#' }
 #' @export
 plot_cycle_consistency <- function(diagnostics,
                                    N = NULL,
@@ -64,6 +74,16 @@ plot_cycle_consistency <- function(diagnostics,
 #' @param N Optional number of domains; inferred when NULL
 #' @param na_color Fill color for missing cells
 #' @return ggplot object
+#' @examples
+#' \donttest{
+#' # Requires align_many result with diagnostics
+#' # X1 <- matrix(rnorm(100), 50, 2)
+#' # X2 <- matrix(rnorm(100), 50, 2)
+#' # X3 <- matrix(rnorm(100), 50, 2)
+#' # algo <- grasp_aligner()
+#' # result <- align_many(list(X1, X2, X3), algo)
+#' # plot_edge_residuals_heatmap(result$diagnostics)
+#' }
 #' @export
 plot_edge_residuals_heatmap <- function(diagnostics, N = NULL, na_color = "#f0f0f0") {
   if (is.null(diagnostics$edge_residuals)) stop("diagnostics$edge_residuals missing")
@@ -90,6 +110,16 @@ plot_edge_residuals_heatmap <- function(diagnostics, N = NULL, na_color = "#f0f0
 #' @param diagnostics List returned by align_many(...)[["diagnostics"]]
 #' @param top Number of worst edges to return
 #' @return data.frame with columns i, j, residual, weight
+#' @examples
+#' \donttest{
+#' # Requires align_many result with diagnostics
+#' # X1 <- matrix(rnorm(100), 50, 2)
+#' # X2 <- matrix(rnorm(100), 50, 2)
+#' # X3 <- matrix(rnorm(100), 50, 2)
+#' # algo <- grasp_aligner()
+#' # result <- align_many(list(X1, X2, X3), algo)
+#' # bad_edges <- summarize_bad_edges(result$diagnostics, top = 5)
+#' }
 #' @export
 summarize_bad_edges <- function(diagnostics, top = 10) {
   if (is.null(diagnostics$edge_residuals)) stop("diagnostics$edge_residuals missing")

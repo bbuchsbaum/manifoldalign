@@ -67,62 +67,62 @@
 #' Adaptation. arXiv preprint.
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' library(multidesign)
-#' 
+#'
 #' # Example 1: Basic FPGW between two domains with different dimensions
 #' set.seed(123)
 #' n <- 30
-#' 
+#'
 #' # Domain 1: 3D data with two clusters
 #' X1 <- matrix(rnorm(n * 3), n, 3)
 #' X1[1:15, ] <- X1[1:15, ] + 2
-#' 
+#'
 #' # Domain 2: 5D data with similar structure
 #' X2 <- matrix(rnorm(n * 5), n, 5)
 #' X2[1:15, ] <- X2[1:15, ] + 2
-#' 
+#'
 #' # Create hyperdesign
 #' design <- data.frame(id = 1:n, cluster = rep(1:2, each = 15))
 #' hd <- hyperdesign(list(
 #'   visual = multidesign(X1, design),
 #'   semantic = multidesign(X2, design)
 #' ))
-#' 
+#'
 #' # Classical FGW with balanced feature/structure weight
 #' result <- fpgw(hd, omega1 = 0.5)
 #' print(result)
-#' 
+#'
 #' # Example 2: Mass-constrained for noisy data
 #' # Add outliers to domain 2
 #' X2_noisy <- rbind(X2, matrix(rnorm(10 * 5, sd = 5), 10, 5))
 #' design_noisy <- data.frame(id = 1:(n + 10))
-#' 
+#'
 #' hd_noisy <- hyperdesign(list(
 #'   clean = multidesign(X1, design[1:n,]),
 #'   noisy = multidesign(X2_noisy, design_noisy)
 #' ))
-#' 
+#'
 #' # Transport only 75% of mass to avoid outliers
 #' result_partial <- fpgw(hd_noisy, omega1 = 0.3, rho = 0.75)
-#' 
+#'
 #' # Check transported mass
 #' P <- result_partial$transport_plans[[1]]
 #' cat("Transported mass:", sum(P), "\n")
-#' 
+#'
 #' # Example 3: Multi-domain alignment
 #' X3 <- matrix(rnorm(n * 4), n, 4)
 #' X3[16:30, ] <- X3[16:30, ] + 1.5
-#' 
+#'
 #' hd_multi <- hyperdesign(list(
 #'   modality1 = multidesign(X1, design),
 #'   modality2 = multidesign(X2, design),
 #'   modality3 = multidesign(X3, design)
 #' ))
-#' 
+#'
 #' # Compute all pairwise alignments
 #' result_multi <- fpgw(hd_multi, omega1 = 0.2, max_iter = 50)
-#' 
+#'
 #' # Examine distance matrix
 #' print(result_multi$distances)
 #' }
@@ -134,6 +134,15 @@ fpgw <- function(data, ...) {
 
 #' @rdname fpgw
 #' @method fpgw hyperdesign
+#' @param omega1 Weight of the feature term (0 ≤ omega1 ≤ 1). Default: 0.001
+#' @param lambda Non-negative total variation penalty. Default: 0
+#' @param rho Mass budget in (0, min(|μ|,|ν|)] for mass-constrained variant
+#' @param epsilon Initial entropic regularization for warm-start. Default: 0.01
+#' @param metric Distance metric for within-domain distances. Default: "euclidean"
+#' @param max_iter Maximum iterations for Frank-Wolfe. Default: 200
+#' @param tol Convergence tolerance for Frank-Wolfe gap. Default: 1e-6
+#' @param inner_max_iter Maximum iterations for inner optimization. Default: 50
+#' @param verbose Print convergence information. Default: FALSE
 #' @export
 fpgw.hyperdesign <- function(data,
                             omega1 = 0.001,
@@ -248,14 +257,16 @@ fpgw.hyperdesign <- function(data,
 }
 
 #' Frank-Wolfe solver for FPGW
-#' 
+#'
+#' @return A list with transport plan P, distance, convergence status, iterations, and final gradient.
+#'
 #' @details
 #' For TV penalty (lambda > 0), the objective includes the smooth quadratic term:
 #' lambda * (|mu|^2 + |nu|^2 - 2|gamma|^2)
 #' where |gamma| = sum(gamma) is the total transported mass.
 #' This is NOT an L1 penalty but a smooth penalty that encourages partial transport.
 #' The Frank-Wolfe oracle remains standard OT, with the penalty handled in step size.
-#' 
+#'
 #' @keywords internal
 fw_fpgw <- function(C, Cx, Cy, p, q,
                     omega1, lambda, rho,
@@ -470,6 +481,7 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
 }
 
 #' Mass-constrained partial OT oracle
+#' @return A numeric matrix representing the optimal transport plan.
 #' @keywords internal
 partial_ot_mass <- function(cost, p, q, rho, method = c("lpSolve", "Rsymphony")) {
   # Try to use C++ implementation if available
@@ -531,6 +543,7 @@ partial_ot_mass <- function(cost, p, q, rho, method = c("lpSolve", "Rsymphony"))
 }
 
 #' Classical OT linear program
+#' @return A numeric matrix representing the optimal transport plan.
 #' @keywords internal
 classical_ot_lp <- function(cost, p, q) {
   # Try to use C++ implementation if available
@@ -547,6 +560,7 @@ classical_ot_lp <- function(cost, p, q) {
 }
 
 #' Classical OT linear program (R implementation)
+#' @return A numeric matrix representing the optimal transport plan.
 #' @keywords internal
 classical_ot_lp_r <- function(cost, p, q) {
   if (!requireNamespace("lpSolve", quietly = TRUE)) {
@@ -590,6 +604,7 @@ classical_ot_lp_r <- function(cost, p, q) {
 }
 
 #' TV-penalized oracle
+#' @return A numeric matrix representing the optimal transport plan.
 #' @keywords internal
 partial_ot_tv <- function(cost, p, q, lambda) {
   # For TV-penalized transport, we solve partial OT using augmentation method
@@ -631,13 +646,15 @@ partial_ot_tv <- function(cost, p, q, lambda) {
   # Constraints for full OT
   row_constraints <- matrix(0, n_aug, n_aug * m_aug)
   for (i in 1:n_aug) {
-    idx <- ((i-1)*m_aug + 1):(i*m_aug)
+    # NOTE: R vectorizes matrices in column-major order, so the variable
+    # corresponding to (i, j) in gamma_aug is at index i + (j-1) * n_aug.
+    idx <- i + (0:(m_aug - 1)) * n_aug
     row_constraints[i, idx] <- 1
   }
   
   col_constraints <- matrix(0, m_aug, n_aug * m_aug)
   for (j in 1:m_aug) {
-    idx <- seq(j, n_aug*m_aug, by = m_aug)
+    idx <- ((j - 1) * n_aug + 1):(j * n_aug)
     col_constraints[j, idx] <- 1
   }
   
@@ -660,6 +677,7 @@ partial_ot_tv <- function(cost, p, q, lambda) {
 }
 
 #' Warm-start with entropic FGW
+#' @return A numeric matrix representing the warm-start transport plan.
 #' @keywords internal
 sinkhorn_fgw_warmstart <- function(Cfeat, Cx, Cy, p, q, omega1, eps, iters) {
   ## ---- PERF ---- Simplified warm-start
@@ -691,9 +709,22 @@ sinkhorn_fgw_warmstart <- function(Cfeat, Cx, Cy, p, q, omega1, eps, iters) {
 }
 
 #' Print Method for FPGW Objects
-#' 
+#'
 #' @param x An fpgw object
 #' @param ... Additional arguments (currently unused)
+#' @return The fpgw object x, invisibly.
+#' @examples
+#' \donttest{
+#' set.seed(1)
+#' X1 <- matrix(rnorm(30), 10, 3)
+#' X2 <- matrix(rnorm(30), 10, 3)
+#' library(multidesign)
+#' md1 <- multidesign(X1, data.frame(id = 1:10))
+#' md2 <- multidesign(X2, data.frame(id = 1:10))
+#' hd <- hyperdesign(list(d1 = md1, d2 = md2))
+#' res <- fpgw(hd)
+#' print(res)
+#' }
 #' @method print fpgw
 #' @export
 print.fpgw <- function(x, ...) {

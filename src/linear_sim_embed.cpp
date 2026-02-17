@@ -84,12 +84,6 @@ public:
     // CORRECTED: Use convex combination as per paper Eq. 5
     double objective = (1.0 - alpha_p_) * Js + alpha_p_ * Jp;
     
-    // Progress reporting
-    if (iter_count_ % 100 == 0) {
-      Rcpp::Rcout << "Iter " << iter_count_ << ": Obj=" << objective 
-                  << " Js=" << Js << " Jp=" << Jp << std::endl;
-    }
-    
     return objective;
   }
   

@@ -5,6 +5,9 @@
 
 #' Construct a PARROT aligner descriptor
 #' @return an object of class c("parrot_aligner", "aligner")
+#' @examples
+#' algo <- parrot_aligner()
+#' aligner_capabilities(algo)
 #' @export
 parrot_aligner <- function() {
   new_aligner("parrot", group = "perm", supports_multi = FALSE)
@@ -17,7 +20,49 @@ parrot_aligner <- function() {
   M / rs
 }
 
-#' Fit PARROT on a pair of domains (adapter)
+#' Fit PARROT on a pair of domains
+#'
+#' PARROT-specific method for pairwise alignment using optimal transport with
+#' random walk regularization. Returns a soft assignment/transport plan.
+#'
+#' @param algo A parrot_aligner object
+#' @param X_i First domain data matrix (samples x features)
+#' @param X_j Second domain data matrix (samples x features)
+#' @param links Optional correspondence links; list(vec1, vec2) with label
+#'   vectors or NA for unmatched samples
+#' @param ncomp Number of spectral components (currently unused)
+#' @param sigma RWR restart probability
+#' @param lambda Overall regularization weight
+#' @param lambda_e Edge/attribute cost weight (defaults to lambda * 0.5)
+#' @param lambda_n Network/Laplacian regularization (defaults to lambda * 0.5)
+#' @param lambda_p Anchor prior weight (defaults to lambda)
+#' @param tau Entropic regularization parameter for Sinkhorn
+#' @param alpha Mixing parameter for cost matrix
+#' @param gamma Network structure penalty weight
+#' @param solver Transport solver method ("sinkhorn")
+#' @param max_iter Maximum iterations for RWR and Sinkhorn
+#' @param tol Convergence tolerance
+#' @param use_cpp Logical; use C++ implementation if available
+#' @param anchors_policy Policy when no anchors provided: "warn", "off", "error"
+#' @param unsup_strategy Unsupervised seeding strategy: "mnn_bootstrap",
+#'   "attribute_only", or "self_training"
+#' @param conf_threshold Confidence threshold for self-training
+#' @param max_rounds Maximum rounds for iterative strategies
+#' @param seed_strength Anchor prior strength when using MNN seeds
+#' @param laplacian_reg Alternative to lambda_n for Laplacian regularization
+#' @param ... Additional arguments (unused)
+#' @return An object of class parrot_pair_fit containing transport (n1 x n2
+#'   matrix), objective (final cost), n1 (samples in domain i), and n2
+#'   (samples in domain j).
+#' @examples
+#' \donttest{
+#' set.seed(456)
+#' X1 <- matrix(rnorm(80), 40, 2)
+#' X2 <- matrix(rnorm(80), 40, 2)
+#' algo <- parrot_aligner()
+#' fit <- fit_pair(algo, X1, X2, sigma = 0.2, tau = 0.1)
+#' class(fit)
+#' }
 #' @export
 fit_pair.parrot_aligner <- function(algo, X_i, X_j, links = NULL,
                                     ncomp = NULL,
@@ -153,7 +198,7 @@ fit_pair.parrot_aligner <- function(algo, X_i, X_j, links = NULL,
   list(vec1 = vec1, vec2 = vec2)
 }
 
-#' Extract relative transform from a PARROT pairwise fit
+#' @rdname relative_transform
 #' @export
 relative_transform.parrot_pair_fit <- function(fit, from = c("i", "j"), to = c("j", "i"), ...) {
   from <- match.arg(from)
@@ -169,7 +214,7 @@ relative_transform.parrot_pair_fit <- function(fit, from = c("i", "j"), to = c("
   new_align_transform("perm", op, from = from, to = to, dim = c(fit$n1, fit$n2))
 }
 
-#' Pairwise loss for PARROT fit
+#' @rdname pair_loss
 #' @export
 pair_loss.parrot_pair_fit <- function(fit, X_i = NULL, X_j = NULL, ...) {
   fit$objective %||% NA_real_

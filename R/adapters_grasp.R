@@ -6,12 +6,42 @@
 
 #' Construct a GRASP aligner descriptor
 #' @return an object of class c("grasp_aligner", "aligner")
+#' @examples
+#' algo <- grasp_aligner()
+#' aligner_capabilities(algo)
 #' @export
 grasp_aligner <- function() {
   new_aligner("grasp", group = "O", supports_multi = FALSE)
 }
 
-#' Fit GRASP on a pair of domains (adapter)
+#' Fit GRASP on a pair of domains
+#'
+#' GRASP-specific method for pairwise alignment using spectral bases and
+#' descriptor alignment with an orthogonal rotation matrix.
+#'
+#' @param algo A grasp_aligner object
+#' @param X_i First domain data matrix (samples x features)
+#' @param X_j Second domain data matrix (samples x features)
+#' @param links Optional correspondence links (unused by GRASP)
+#' @param ncomp Number of spectral components to compute
+#' @param q_descriptors Number of descriptor vectors for alignment
+#' @param sigma Bandwidth parameter for descriptor weighting
+#' @param lambda Regularization parameter for rotation alignment
+#' @param use_laplacian Logical; if TRUE use graph Laplacian, else adjacency
+#' @param solver Assignment solver: "linear", "hungarian", or "auction"
+#' @param ... Additional arguments (unused)
+#' @return An object of class grasp_pair_fit containing rotation (kxk matrix),
+#'   mapping_matrix (assignment matrix), assignment vector, loss (numeric),
+#'   and k (latent dimension).
+#' @examples
+#' \donttest{
+#' set.seed(123)
+#' X1 <- matrix(rnorm(100), 50, 2)
+#' X2 <- matrix(rnorm(100), 50, 2)
+#' algo <- grasp_aligner()
+#' fit <- fit_pair(algo, X1, X2, ncomp = 5, q_descriptors = 10)
+#' class(fit)
+#' }
 #' @export
 fit_pair.grasp_aligner <- function(algo, X_i, X_j, links = NULL,
                                    ncomp = 30,
@@ -51,7 +81,7 @@ fit_pair.grasp_aligner <- function(algo, X_i, X_j, links = NULL,
   ), class = "grasp_pair_fit")
 }
 
-#' Extract relative transform from a GRASP pairwise fit
+#' @rdname relative_transform
 #' @export
 relative_transform.grasp_pair_fit <- function(fit, from = c("i", "j"), to = c("j", "i"), ...) {
   from <- match.arg(from)
@@ -65,13 +95,13 @@ relative_transform.grasp_pair_fit <- function(fit, from = c("i", "j"), to = c("j
   new_align_transform("O", op, from = from, to = to, k = fit$k)
 }
 
-#' Pairwise loss for GRASP fit
+#' @rdname pair_loss
 #' @export
 pair_loss.grasp_pair_fit <- function(fit, X_i = NULL, X_j = NULL, ...) {
   fit$loss
 }
 
-#' Latent dimension for GRASP fit
+#' @rdname latent_dim
 #' @export
 latent_dim.grasp_pair_fit <- function(fit, ...) fit$k
 

@@ -15,6 +15,21 @@
 #'                 matched, coverage, mean_confidence, converged, iterations)
 #'   - global: aggregate metrics (mse_weighted, mse_soft_weighted, K, ref_idx,
 #'             mean_confidence, all_converged)
+#' @examples
+#' \donttest{
+#' # Simulate three domains with shared structure
+#' set.seed(42)
+#' X1 <- matrix(rnorm(100), 50, 2)
+#' X2 <- matrix(rnorm(100), 50, 2)
+#' X3 <- matrix(rnorm(100), 50, 2)
+#'
+#' # Create hyperdesign object
+#' hd <- as_hyperdesign(list(X1, X2, X3))
+#'
+#' # Perform alignment (requires mma_align_multiple)
+#' # result <- mma_align_multiple(hd, ncomp = 2)
+#' # quality <- alignment_quality(result)
+#' }
 #' @export
 alignment_quality <- function(object) {
   UseMethod("alignment_quality")

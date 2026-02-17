@@ -117,14 +117,17 @@ extract_kema_eigenvalues <- function(strata, labels, kernel = kernlab::rbfdot(si
 }
 
 #' Generate Synthetic Two-Domain Spiral Data
-#' 
+#'
 #' Creates the synthetic spiral dataset used in KEMA paper Figure 2
 #' for numerical validation.
-#' 
+#'
 #' @param n_per_domain Number of samples per domain
 #' @param noise_level Gaussian noise standard deviation
 #' @param seed Random seed for reproducibility
 #' @return List with domain data and labels
+#' @examples
+#' data <- generate_spiral_validation_data(n_per_domain = 50, seed = 123)
+#' str(data)
 #' @export
 generate_spiral_validation_data <- function(n_per_domain = 100, noise_level = 0.1, seed = 42) {
   set.seed(seed)
@@ -149,8 +152,8 @@ generate_spiral_validation_data <- function(n_per_domain = 100, noise_level = 0.
   
   # Create strata format
   strata <- list(
-    list(x = x1, labels = labels1),
-    list(x = x2, labels = labels2)
+    list(x = x1, design = data.frame(labels = labels1)),
+    list(x = x2, design = data.frame(labels = labels2))
   )
   
   all_labels <- c(labels1, labels2)
@@ -158,8 +161,8 @@ generate_spiral_validation_data <- function(n_per_domain = 100, noise_level = 0.
   return(list(
     strata = strata,
     labels = all_labels,
-    domain1 = list(x = x1, labels = labels1),
-    domain2 = list(x = x2, labels = labels2)
+    domain1 = list(x = x1, design = data.frame(labels = labels1)),
+    domain2 = list(x = x2, design = data.frame(labels = labels2))
   ))
 }
 
@@ -172,6 +175,11 @@ generate_spiral_validation_data <- function(n_per_domain = 100, noise_level = 0.
 #' @param tolerance Numerical tolerance for comparison
 #' @param n_per_domain Number of samples per domain for test
 #' @return List with validation results
+#' @examples
+#' \donttest{
+#' result <- validate_kema_eigenvalues()
+#' print(result$success)
+#' }
 #' @export
 validate_kema_eigenvalues <- function(expected_eigenvals = c(0.82, 0.41), 
                                       tolerance = 0.1, n_per_domain = 100) {
@@ -225,6 +233,11 @@ validate_kema_eigenvalues <- function(expected_eigenvals = c(0.82, 0.41),
 #' @param tolerance Numerical tolerance for comparison
 #' @param test_fraction Fraction of data to use for testing
 #' @return List with reconstruction validation results
+#' @examples
+#' \donttest{
+#' result <- validate_out_of_sample_reconstruction()
+#' print(result$success)
+#' }
 #' @export
 validate_out_of_sample_reconstruction <- function(expected_error = 0.14, 
                                                   tolerance = 0.05, 
@@ -303,6 +316,11 @@ validate_out_of_sample_reconstruction <- function(expected_error = 0.14,
 #' 
 #' @param verbose Whether to print detailed results
 #' @return List with all validation results
+#' @examples
+#' \donttest{
+#' results <- run_kema_validation_suite(verbose = FALSE)
+#' print(results$overall_success)
+#' }
 #' @export
 run_kema_validation_suite <- function(verbose = TRUE) {
   
@@ -354,11 +372,11 @@ run_kema_validation_suite <- function(verbose = TRUE) {
     
     # Test both solvers
     # Create multidesign objects
-    md1 <- multidesign(data$domain1$x, data.frame(labels = data$domain1$labels))
-    md2 <- multidesign(data$domain2$x, data.frame(labels = data$domain2$labels))
+    md1 <- multidesign::multidesign(data$domain1$x, data.frame(labels = data$domain1$labels))
+    md2 <- multidesign::multidesign(data$domain2$x, data.frame(labels = data$domain2$labels))
     
     # Create hyperdesign
-    hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
+    hd <- multidesign::hyperdesign(list(domain1 = md1, domain2 = md2))
     
     kema_exact <- kema.hyperdesign(
       data = hd, y = labels, ncomp = 2, solver = "exact",

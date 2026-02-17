@@ -2,18 +2,23 @@
 #'
 #' Functions for benchmarking PARROT performance on large-scale networks
 #'
+#' @return NULL (documentation page only).
 #' @name parrot-benchmark
 #' @keywords internal
 NULL
 
 #' Benchmark PARROT Scalability
-#' 
+#'
 #' Tests PARROT performance across different network sizes
-#' 
+#'
 #' @param sizes Vector of network sizes to test
 #' @param n_reps Number of repetitions per size
 #' @param sparse_graph Whether to use sparse graph structure
 #' @return Data frame with timing results
+#' @examples
+#' \donttest{
+#' results <- benchmark_parrot_scalability(sizes = c(20, 50), n_reps = 2)
+#' }
 #' @export
 benchmark_parrot_scalability <- function(sizes = c(50, 100, 200, 500, 1000),
                                        n_reps = 3,
@@ -48,11 +53,11 @@ benchmark_parrot_scalability <- function(sizes = c(50, 100, 200, 500, 1000),
       design2 <- data.frame(node_id = 1:n, anchors = anchors2)
       
       # Create multidesign objects
-      md1 <- multidesign(X1, design1)
-      md2 <- multidesign(X2, design2)
+      md1 <- multidesign::multidesign(X1, design1)
+      md2 <- multidesign::multidesign(X2, design2)
       
       # Create hyperdesign
-      hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
+      hd <- multidesign::hyperdesign(list(domain1 = md1, domain2 = md2))
       
       # Time different components
       timings <- list()
@@ -139,11 +144,15 @@ benchmark_parrot_scalability <- function(sizes = c(50, 100, 200, 500, 1000),
 }
 
 #' Profile PARROT Memory Usage
-#' 
+#'
 #' Estimates memory usage for different network sizes
-#' 
+#'
 #' @param n_nodes Network size to profile
 #' @return List with memory usage statistics
+#' @examples
+#' \donttest{
+#' mem_profile <- profile_parrot_memory(n_nodes = 50)
+#' }
 #' @export
 profile_parrot_memory <- function(n_nodes = 100) {
   
@@ -173,11 +182,11 @@ profile_parrot_memory <- function(n_nodes = 100) {
   design2 <- data.frame(node_id = 1:n_nodes, anchors = anchors2)
   
   # Create multidesign objects
-  md1 <- multidesign(X1, design1)
-  md2 <- multidesign(X2, design2)
+  md1 <- multidesign::multidesign(X1, design1)
+  md2 <- multidesign::multidesign(X2, design2)
   
   # Create hyperdesign
-  hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
+  hd <- multidesign::hyperdesign(list(domain1 = md1, domain2 = md2))
   
   # Memory after data creation
   mem_data <- pryr::mem_used()
@@ -205,11 +214,16 @@ profile_parrot_memory <- function(n_nodes = 100) {
 }
 
 #' Compare PARROT with Baseline Methods
-#' 
+#'
 #' Benchmarks PARROT against simpler alignment methods
-#' 
+#'
 #' @param val_data Validation data from generate_parrot_validation_data
 #' @return Data frame comparing different methods
+#' @examples
+#' \donttest{
+#' vdata <- generate_parrot_validation_data(n_nodes = 30, n_anchors = 5)
+#' comparison <- compare_parrot_baselines(vdata)
+#' }
 #' @export
 compare_parrot_baselines <- function(val_data) {
   
@@ -338,10 +352,15 @@ compare_parrot_baselines <- function(val_data) {
 }
 
 #' Generate Performance Report
-#' 
+#'
 #' Creates a comprehensive performance analysis report
-#' 
+#'
 #' @param output_file Path to save the report
+#' @return A character string containing the formatted performance report, invisibly
+#' @examples
+#' \dontrun{
+#' generate_parrot_performance_report(tempfile(fileext = ".txt"))
+#' }
 #' @export
 #' @keywords internal
 generate_parrot_performance_report <- function(output_file = "parrot_performance_report.txt") {

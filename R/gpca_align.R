@@ -11,6 +11,8 @@
 #' @param memory_safety_bytes Absolute byte cushion to subtract when auto-tuning densification
 #'
 #' @return A list of class `gpca_align_control`
+#' @examples
+#' ctrl <- gpca_align_control(knn = 15, normalize = "fro")
 #' @export
 gpca_align_control <- function(
   knn = NA_integer_,
@@ -96,7 +98,19 @@ resolve_gpca_align_control <- function(control) {
   do.call(gpca_align_control, merged)
 }
 
+#' Generalized PCA Alignment
+#'
+#' @param data A `hyperdesign` object or other supported input.
+#' @param ... Additional arguments passed to methods.
+#' @export
+gpca_align <- function(data, ...) {
+  UseMethod("gpca_align")
+}
+
 #' Generalized PCA Alignment for Hyperdesign Data
+#'
+#' Performs GPCA alignment on multi-domain data by constructing label-based similarity
+#' metrics and extracting aligned components via generalized eigenanalysis.
 #'
 #' @param data A hyperdesign object containing multiple data domains
 #' @param y Name of the label variable to use for alignment
@@ -108,6 +122,22 @@ resolve_gpca_align_control <- function(control) {
 #' @param row_metric_scale Scaling applied to the assembled row metric before GPCA
 #' @param control A list created by [gpca_align_control()] that tunes sparsification,
 #'   balancing, normalisation, and memory safeguards
+#' @param ... Additional arguments passed to the method (unused).
+#'
+#' @return A multiblock_biprojector object with aligned scores, loadings, and preprocessing info
+#'
+#' @examples
+#' \donttest{
+#' library(multidesign)
+#' set.seed(1)
+#' X1 <- matrix(rnorm(40), 20, 2)
+#' X2 <- matrix(rnorm(40), 20, 2)
+#' labs <- factor(rep(c("A", "B"), each = 10))
+#' d1 <- list(x = X1, design = data.frame(label = labs))
+#' d2 <- list(x = X2, design = data.frame(label = labs))
+#' hd <- structure(list(d1, d2), class = "hyperdesign")
+#' result <- gpca_align(hd, y = label, ncomp = 2)
+#' }
 #'
 #' @importFrom genpca genpca
 #' @importFrom multivarious prep init_transform pass multiblock_biprojector
@@ -120,7 +150,8 @@ gpca_align.hyperdesign <- function(
   u = 0.5,
   lambda = 0.1,
   row_metric_scale = 1,
-  control = gpca_align_control()
+  control = gpca_align_control(),
+  ...
 ) {
   ## -------------------------- control --------------------------
   control <- resolve_gpca_align_control(control)
@@ -213,8 +244,8 @@ gpca_align.hyperdesign <- function(
   }
 
   if (!all(dim(W_full) == c(n, n))) {
-    stop("`simfun` returned a matrix of size ", paste(dim(W_full), collapse = "×"),
-         "; expected ", n, "×", n, ".")
+    stop("`simfun` returned a matrix of size ", paste(dim(W_full), collapse = "x"),
+         "; expected ", n, "x", n, ".")
   }
 
   if (!inherits(W_full, "sparseMatrix")) {

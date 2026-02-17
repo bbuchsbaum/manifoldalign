@@ -19,7 +19,7 @@
 #'   when `y` is used to generate correspondences.
 #' @param ridge_eps Ridge regularization base value for linear map estimation.
 #' @param ridge_relative Whether to scale ridge by per-dataset feature energy.
-#' @param ginv_method Method for solving `(X^T X + eps I)^{-1} C`.
+#' @param ginv_method Method for solving the regularized least squares problem.
 #' @param eig_tol Minimum eigenvalue threshold retained in spectral steps.
 #' @param embed_block_size Column block size used for landmark out-of-sample
 #'   embedding.
@@ -27,6 +27,9 @@
 #' @param verbose Logical toggle for progress messages.
 #'
 #' @return A list of class `global_geo_align_control`.
+#' @examples
+#' ctrl <- global_geo_align_control(knn = 10, verbose = FALSE)
+#' ctrl$knn
 #' @export
 global_geo_align_control <- function(
   knn = 15L,
@@ -168,6 +171,20 @@ resolve_global_geo_align_control <- function(control) {
 #' @param ... Additional arguments passed to methods.
 #'
 #' @return A `multiblock_biprojector` object with subclass `global_geo_align`.
+#' @examples
+#' \donttest{
+#' set.seed(123)
+#' X1 <- matrix(rnorm(50 * 10), 50, 10)
+#' X2 <- matrix(rnorm(60 * 12), 60, 12)
+#' y1 <- rep(1:5, each = 10)
+#' y2 <- rep(1:5, each = 12)
+#' domains <- list(
+#'   domain1 = list(x = X1, design = data.frame(label = y1)),
+#'   domain2 = list(x = X2, design = data.frame(label = y2))
+#' )
+#' class(domains) <- "hyperdesign"
+#' result <- global_geo_align(domains, y = label, ncomp = 3)
+#' }
 #' @export
 global_geo_align <- function(data, ...) {
   UseMethod("global_geo_align")
@@ -175,6 +192,12 @@ global_geo_align <- function(data, ...) {
 
 #' @rdname global_geo_align
 #' @method global_geo_align hyperdesign
+#' @param y Optional unquoted column name in design tables for label-based correspondences
+#' @param correspondences Optional data.frame with columns domain_i/index_i/domain_j/index_j
+#' @param feature_correspondence Optional list specifying spatial anchor basis settings
+#' @param preproc Preprocessing function or list. Default: multivarious::center()
+#' @param ncomp Number of components to extract. Default: 20
+#' @param control Control settings from global_geo_align_control()
 #' @export
 global_geo_align.hyperdesign <- function(
   data,
