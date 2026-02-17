@@ -1,0 +1,325 @@
+{
+  "prd_id": "PRD-MS-MANIFOLD-QRFREE-001",
+  "title": "Scalable Multiscale Manifold Alignment (QR-Free)",
+  "version": "1.0",
+  "status": "proposed",
+  "created_date": "2026-02-15",
+  "last_updated": "2026-02-15",
+  "authors": [
+    "codex"
+  ],
+  "context": {
+    "summary": "Current multiscale manifold alignment based on diffusion wavelets is blocked by repeated modified QR on dyadic operator powers. We need a production implementation that scales from small graphs to very large sparse graphs while preserving existing package interfaces.",
+    "paper_alignment": [
+      "Use Wang and Mahadevan joint Laplacian construction over multiple domains.",
+      "Retain the operator construction intent from T = F^+ Z L Z^T (F^T)^+.",
+      "Replace QR-heavy diffusion wavelet compression with practical scalable alternatives grounded in symmetric PSD assumptions."
+    ],
+    "codebase_constraints": [
+      "Keep public entry points S3-style and compatible with existing method families (hyperdesign/list/default).",
+      "Follow control-object pattern: foo_control() plus resolve_foo_control().",
+      "Return class must remain multiblock_biprojector with method-specific subclass and extras.",
+      "Reuse matrix-free and operator-first style already present in kema_scalable and lowrank_align operator backend."
+    ]
+  },
+  "problem_statement": {
+    "current_state": "QR-based diffusion wavelet hierarchy is computationally prohibitive for large dimensions and large node counts.",
+    "target_state": "A QR-free or QR-light multiscale hierarchy that is numerically stable, matrix-free, and compatible with current manifoldalign interfaces.",
+    "why_now": [
+      "Need one implementation path that works from ~400 nodes to ~1M nodes.",
+      "Need to preserve scientific intent of multiscale manifold alignment while removing the main bottleneck."
+    ]
+  },
+  "goals": [
+    "Implement scalable multiscale basis construction for symmetric PSD joint operators.",
+    "Support two interchangeable backends: spectral hierarchy (Theorem-3-equivalent) and randomized DWT-style hierarchy.",
+    "Integrate into the existing KEMA pipeline without breaking current API behavior.",
+    "Provide deterministic, testable outputs and diagnostics across scales."
+  ],
+  "non_goals": [
+    "No rewrite of unrelated alignment methods.",
+    "No mandatory GPU dependency in first release.",
+    "No requirement to fully materialize dense N x N operators.",
+    "No guarantee that million-node benchmarks run in CI by default."
+  ],
+  "users_and_use_cases": [
+    {
+      "user": "Research engineer",
+      "need": "Run multiscale alignment on medium datasets with strict reproducibility.",
+      "success_metric": "Stable embeddings and mappings across runs with fixed seed."
+    },
+    {
+      "user": "Applied ML engineer",
+      "need": "Run sparse graph alignment on very large node counts without QR blowups.",
+      "success_metric": "Pipeline completes with matrix-free operations and bounded memory."
+    }
+  ],
+  "scope": {
+    "in_scope": [
+      "Multiset joint graph/Laplacian assembly for S domains.",
+      "Low-rank per-domain compression of X^(s) D_s^(1/2).",
+      "Matrix-free operator T apply via compressed factors.",
+      "Backend A: spectral hierarchy from iterative eigensolvers.",
+      "Backend B: randomized/sketched DWT-like hierarchy.",
+      "Level-wise mapping extraction and result packaging."
+    ],
+    "out_of_scope": [
+      "Alternative non-symmetric graph formulations.",
+      "Distributed multi-node execution framework.",
+      "New visualization subsystem."
+    ]
+  },
+  "proposed_api": {
+    "entry_point": "multiscale_manifold_align(...)",
+    "integration_mode": "Implement as a dedicated method family; do not overload kema semantics.",
+    "new_controls": {
+      "constructor": "multiscale_manifold_align_control(...)",
+      "resolver": "resolve_multiscale_manifold_align_control(control)",
+      "fields": {
+        "enabled": true,
+        "backend": "spectral",
+        "operator_mode": "compressed_graph_core",
+        "rank_per_domain": 128,
+        "svd_tol": 1e-06,
+        "max_levels": 8,
+        "eps_rank": 0.001,
+        "eigen_solver": "lobpcg",
+        "eigen_k_max": 512,
+        "randomized_sketch_size": 256,
+        "randomized_oversample": 16,
+        "randomized_power_iters": 1,
+        "shift_invert_delta": 0.001,
+        "cg_tol": 1e-06,
+        "cg_max_iter": 500,
+        "seed": 1,
+        "verbose": false
+      }
+    },
+    "result_extras": [
+      "multiscale_backend",
+      "levels",
+      "level_dims",
+      "level_eigenvalues_or_scores",
+      "operator_diagnostics",
+      "mapping_metadata"
+    ],
+    "compatibility_requirements": [
+      "Existing kema() behavior remains unchanged.",
+      "New method follows package S3 conventions and result contracts."
+    ]
+  },
+  "technical_design": {
+    "pipeline": [
+      "Build within-domain sparse symmetric kNN graphs and Laplacians.",
+      "Build multiset joint Laplacian L from within-domain and correspondence edges.",
+      "Compute per-domain truncated SVD of X^(s) D_s^(1/2).",
+      "Assemble implicit compressed operator T via V^T D^(-1/2) L D^(-1/2) V.",
+      "Run selected multiscale backend to produce nested bases Phi_j.",
+      "Derive level-wise mappings and embeddings; package result."
+    ],
+    "backend_a_spectral": {
+      "description": "Use iterative eigensolver on T and create levels by thresholding spectral decay over dyadic times.",
+      "pros": [
+        "No QR bottleneck.",
+        "Most direct with symmetric PSD assumptions.",
+        "Simple matrix-free implementation."
+      ],
+      "cons": [
+        "Requires stable eigensolver tuning for large condition numbers."
+      ]
+    },
+    "backend_b_randomized_dwt": {
+      "description": "Approximate diffusion-wavelet compression with randomized sketches and thin QR on sketches only.",
+      "pros": [
+        "Retains DWT-style compress-square-compress behavior.",
+        "Avoids large dense QR factorizations."
+      ],
+      "cons": [
+        "More hyperparameters and approximation variance."
+      ]
+    },
+    "numerical_stability": [
+      "Use symmetric operator checks and explicit regularization floors.",
+      "Avoid explicit pseudo-inverse materialization; use shift-invert or equivalent regularized operators.",
+      "Expose tolerances and fallback behavior in control."
+    ],
+    "performance_strategy": [
+      "Sparse CSR/CSC for graph operations.",
+      "Block matvec interfaces; avoid explicit Z materialization.",
+      "Float32 optional path for large-scale performance.",
+      "Operator-based computations preferred over dense matrix assembly."
+    ]
+  },
+  "implementation_plan": [
+    {
+      "phase": "P1",
+      "name": "Control and scaffolding",
+      "deliverables": [
+        "multiscale_manifold_align_control and resolver",
+        "new multiscale_manifold_align() method family scaffold",
+        "result metadata schema"
+      ]
+    },
+    {
+      "phase": "P2",
+      "name": "Compressed operator core",
+      "deliverables": [
+        "per-domain truncated SVD helper",
+        "matrix-free multiset operator apply_T",
+        "unit tests for operator correctness vs explicit small cases"
+      ]
+    },
+    {
+      "phase": "P3",
+      "name": "Backend A spectral hierarchy",
+      "deliverables": [
+        "iterative eigensolver wrapper",
+        "level construction and nesting",
+        "mapping extraction and diagnostics"
+      ]
+    },
+    {
+      "phase": "P4",
+      "name": "Backend B randomized DWT",
+      "deliverables": [
+        "randomized range and sketched compression module",
+        "thin-QR-only hierarchy loop",
+        "approximation diagnostics and reproducibility controls"
+      ]
+    },
+    {
+      "phase": "P5",
+      "name": "Validation and docs",
+      "deliverables": [
+        "testthat coverage for API, correctness, and backend parity on toy data",
+        "benchmark-gated large-scale smoke tests",
+        "user-facing documentation and examples"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "R1",
+      "risk": "Eigensolver instability on poorly conditioned operators.",
+      "mitigation": "Regularization, solver fallback sequence, diagnostics in result object."
+    },
+    {
+      "id": "R2",
+      "risk": "Approximation drift in randomized backend.",
+      "mitigation": "Oversampling defaults, residual checks, deterministic seeds, optional power iterations."
+    },
+    {
+      "id": "R3",
+      "risk": "Memory pressure from dense feature operations.",
+      "mitigation": "Truncated ranks, block matvecs, optional feature compression pre-step."
+    },
+    {
+      "id": "R4",
+      "risk": "Interface regressions in existing methods while adding a new multiscale entry point.",
+      "mitigation": "Dedicated method namespace and compatibility tests for existing methods."
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-001",
+      "category": "API compatibility",
+      "requirement": "Existing methods remain behaviorally unchanged after adding multiscale_manifold_align().",
+      "verification": "Regression smoke tests for existing methods and class contracts."
+    },
+    {
+      "id": "AC-002",
+      "category": "Control interface",
+      "requirement": "multiscale_manifold_align_control() validates inputs and resolve_multiscale_manifold_align_control() rejects unknown fields.",
+      "verification": "Unit tests for valid construction, invalid values, and unknown-key failures."
+    },
+    {
+      "id": "AC-003",
+      "category": "Operator correctness",
+      "requirement": "For small synthetic multiset cases, matrix-free apply_T matches explicit operator multiplication within relative error <= 1e-6.",
+      "verification": "Numerical equivalence unit tests on randomly generated small problems."
+    },
+    {
+      "id": "AC-004",
+      "category": "Spectral backend correctness",
+      "requirement": "Backend A returns nested level bases with strictly non-increasing dimensions p_j.",
+      "verification": "Unit test checking p_(j+1) <= p_j across all levels."
+    },
+    {
+      "id": "AC-005",
+      "category": "Randomized backend correctness",
+      "requirement": "Backend B returns nested level bases and uses only thin QR on sketch matrices (no full QR on operator dimension).",
+      "verification": "Code-path test and dimensional assertions in randomized hierarchy module tests."
+    },
+    {
+      "id": "AC-006",
+      "category": "Backend parity",
+      "requirement": "On toy datasets, Backend A and Backend B produce aligned subspaces with principal-angle similarity >= 0.9 on the top-k shared components.",
+      "verification": "Subspace overlap test using SVD of cross-basis products."
+    },
+    {
+      "id": "AC-007",
+      "category": "Result object contract",
+      "requirement": "Output remains multiblock_biprojector-compatible and includes multiscale metadata fields when enabled.",
+      "verification": "Class tests and field presence checks."
+    },
+    {
+      "id": "AC-008",
+      "category": "Determinism",
+      "requirement": "With fixed seed and same control settings, repeated runs produce equivalent level dimensions and numerically close bases (up to sign/rotation).",
+      "verification": "Repeatability tests with subspace-invariant comparisons."
+    },
+    {
+      "id": "AC-009",
+      "category": "Numerical stability",
+      "requirement": "No non-finite values in level bases, mappings, or returned scores under standard test configurations.",
+      "verification": "Finite-value assertions in unit tests."
+    },
+    {
+      "id": "AC-010",
+      "category": "Performance small/medium",
+      "requirement": "On benchmark-gated medium synthetic data (>= 10k nodes total), spectral backend completes without dense N x N materialization.",
+      "verification": "Benchmark-gated smoke test with memory-safe instrumentation."
+    },
+    {
+      "id": "AC-011",
+      "category": "Performance large-scale readiness",
+      "requirement": "Operator modules expose block-matvec interfaces and sparse graph storage compatible with >= 1e6-node workflows.",
+      "verification": "Static checks of data structures and benchmark-gated construction test."
+    },
+    {
+      "id": "AC-012",
+      "category": "Documentation",
+      "requirement": "User-facing docs include backend selection guidance, key controls, and examples for hyperdesign/list inputs.",
+      "verification": "Doc tests and manual review checklist pass."
+    },
+    {
+      "id": "AC-013",
+      "category": "Fallback behavior",
+      "requirement": "If a selected backend fails due to solver issues, error messages are actionable and include recommended control adjustments.",
+      "verification": "Negative tests that trigger controlled failures and inspect error text."
+    },
+    {
+      "id": "AC-014",
+      "category": "Integration with adapters",
+      "requirement": "kema_aligner -> fit_many.kema_aligner path can invoke multiscale mode via forwarded arguments.",
+      "verification": "Adapter integration test using fit_many(kema_aligner(), ...)."
+    },
+    {
+      "id": "AC-015",
+      "category": "Mapping utility",
+      "requirement": "Level-wise mappings are available for downstream embedding or transform application and have expected dimensions per domain.",
+      "verification": "Dimension and application tests on synthetic multiset examples."
+    }
+  ],
+  "definition_of_done": [
+    "All mandatory acceptance criteria AC-001 through AC-009 pass in standard test runs.",
+    "Benchmark-gated checks AC-010 and AC-011 pass when benchmark mode is enabled.",
+    "Documentation and examples are published with the new controls.",
+    "No regression in existing kema and adapter tests."
+  ],
+  "open_questions": [
+    "Default backend for first release: spectral only or spectral plus randomized as experimental?",
+    "How aggressive should default per-domain rank truncation be for heterogeneous feature dimensions?",
+    "Do we expose feature-level mapping reconstruction in v1 or node-space embeddings only?"
+  ]
+}
