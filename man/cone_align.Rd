@@ -13,6 +13,7 @@ cone_align(data, ...)
 
 \method{cone_align}{hyperdesign}(
   data,
+  anchors = NULL,
   preproc = center(),
   ncomp = 10,
   sigma = 0.73,
@@ -46,6 +47,10 @@ cone_align(data, ...)
 for each graph domain. Each matrix should have format: nodes x features.}
 
 \item{...}{Additional arguments (currently unused)}
+
+\item{anchors}{Optional anchor information for semi-supervised alignment.
+For hyperdesign inputs, use an unquoted column name in each domain's design
+table. For list inputs, anchors are currently ignored.}
 
 \item{preproc}{Preprocessing function to apply to the data (default: center())}
 

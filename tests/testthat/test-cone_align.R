@@ -143,3 +143,40 @@ test_that("cone_align solver choices produce valid permutations", {
   expect_equal(sort(res_linear[["P"]]), seq_len(n))
   expect_equal(sort(res_auction[["P"]]), seq_len(n))
 })
+
+test_that("cone_align uses anchors to break symmetries", {
+  fixture <- generate_permuted_alignment(n = 30, d = 3, shift = 7L, noise_sd = 0.005, seed = 4242)
+  truth <- fixture$map
+
+  anchor_idx <- seq.int(1L, length(truth), by = 3L)[seq_len(10)]
+  anchors1 <- rep(NA_integer_, length(truth))
+  anchors2 <- rep(NA_integer_, length(truth))
+  anchors1[anchor_idx] <- seq_along(anchor_idx)
+  anchors2[truth[anchor_idx]] <- seq_along(anchor_idx)
+
+  hd <- structure(
+    list(
+      domain1 = list(x = fixture$X1, design = data.frame(anchors = anchors1)),
+      domain2 = list(x = fixture$X2, design = data.frame(anchors = anchors2))
+    ),
+    class = "hyperdesign"
+  )
+
+  result <- suppressMessages(
+    manifoldalign::cone_align(
+      hd,
+      anchors = anchors,
+      preproc = NULL,
+      ncomp = 10,
+      sigma = 0.73,
+      lambda = 0.1,
+      max_iter = 25,
+      tol = 1e-3
+    )
+  )
+
+  pred <- as.integer(result$assignment)
+  expect_equal(sort(pred), seq_along(pred))
+  expect_equal(pred[anchor_idx], truth[anchor_idx])
+  expect_gt(mean(pred == truth), 0.95)
+})

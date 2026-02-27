@@ -4,7 +4,7 @@
 \alias{cone_align_iterate}
 \title{Iterative CONE-Align Algorithm}
 \usage{
-cone_align_iterate(embeddings, solver, max_iter, tol, lambda)
+cone_align_iterate(embeddings, solver, max_iter, tol, lambda, anchors = NULL)
 }
 \arguments{
 \item{embeddings}{List of embedding matrices}

@@ -243,7 +243,8 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
     stop("strata must be a non-empty list", call. = FALSE)
   }
   
-  bases <- lapply(strata, function(stratum) {
+  bases <- lapply(seq_along(strata), function(stratum_idx) {
+    stratum <- strata[[stratum_idx]]
     # Ensure stratum$x is a matrix for neighborweights
     if (!is.matrix(stratum$x)) {
       stratum$x <- as.matrix(stratum$x)
@@ -276,79 +277,53 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
 
     adj_matrix <- neighborweights::adjacency(graph_weights)
     adj_matrix <- (adj_matrix + Matrix::t(adj_matrix)) / 2
+    adj_matrix <- Matrix::drop0(adj_matrix)
 
-    if (use_laplacian) {
-      degrees <- Matrix::rowSums(adj_matrix)
-      isolated <- as.vector(degrees == 0)
-      if (any(isolated)) {
-        warning("Found ", sum(isolated), " isolated nodes; Laplacian rows will be zeroed.")
-      }
-      deg_safe <- pmax(degrees, 1)
-      D_inv_sqrt <- Matrix::Diagonal(x = 1 / sqrt(deg_safe))
-      if (any(isolated)) {
-        idx <- which(isolated)
-        D_inv_sqrt[idx, idx] <- 0
-      }
-      L <- Matrix::Diagonal(nrow(adj_matrix)) - D_inv_sqrt %*% adj_matrix %*% D_inv_sqrt
-      L <- Matrix::forceSymmetric(L)
-    } else {
-      L <- Matrix::forceSymmetric(adj_matrix)
-    }
-
-    total_dim <- nrow(L)
+    total_dim <- nrow(adj_matrix)
     if (total_dim <= 1) {
       stop("Graph must contain at least two nodes", call. = FALSE)
     }
 
-    k_to_request <- if (use_laplacian) {
-      min(ncomp + 1L, total_dim - 1L)
-    } else {
-      min(ncomp, total_dim)
-    }
-
-    if (k_to_request < 1L) {
+    k_use <- if (use_laplacian) min(as.integer(ncomp), total_dim - 1L) else min(as.integer(ncomp), total_dim)
+    if (k_use < 1L) {
       stop("Not enough non-trivial eigenvectors available for requested components", call. = FALSE)
     }
 
-    decomp <- tryCatch({
-      if (requireNamespace("RSpectra", quietly = TRUE) && k_to_request <= ceiling(0.8 * total_dim)) {
-        RSpectra::eigs_sym(L, k = k_to_request, which = "SA")
-      } else if (requireNamespace("PRIMME", quietly = TRUE) && k_to_request < total_dim) {
-        PRIMME::eigs_sym(L, NEig = k_to_request, which = "SA")
-      } else {
-        eig_full <- eigen(as.matrix(L), symmetric = TRUE)
-        list(
-          values = eig_full$values[seq_len(k_to_request)],
-          vectors = eig_full$vectors[, seq_len(k_to_request), drop = FALSE]
-        )
-      }
-    }, error = function(e) {
-      eig_full <- eigen(as.matrix(L), symmetric = TRUE)
-      list(
-        values = eig_full$values[seq_len(k_to_request)],
-        vectors = eig_full$vectors[, seq_len(k_to_request), drop = FALSE]
-      )
-    })
-
     if (use_laplacian) {
-      if (length(decomp$values) < 2L) {
-        stop("Unable to extract non-trivial Laplacian eigenvectors", call. = FALSE)
-      }
-      idx <- 2:min(ncomp + 1L, length(decomp$values))
-      if (length(idx) == 0L) {
-        stop("No non-trivial Laplacian eigenvectors remained after skipping the constant mode", call. = FALSE)
-      }
-      vectors <- Matrix::Matrix(decomp$vectors[, idx, drop = FALSE], sparse = TRUE)
-      values <- decomp$values[idx]
+      basis <- compute_laplacian_basis(
+        adj_matrix,
+        k = k_use,
+        normalized = TRUE,
+        seed = as.integer(1L + stratum_idx * 1009L)
+      )
+      vectors <- Matrix::Matrix(basis$vectors, sparse = TRUE)
+      values <- basis$values
     } else {
-      non_trivial_idx <- which(abs(decomp$values) > 1e-10)
-      if (length(non_trivial_idx) == 0L) {
-        stop("No non-trivial adjacency eigenvalues available", call. = FALSE)
-      }
-      ncomp_actual <- min(ncomp, length(non_trivial_idx))
-      idx <- non_trivial_idx[seq_len(ncomp_actual)]
-      vectors <- Matrix::Matrix(decomp$vectors[, idx, drop = FALSE], sparse = TRUE)
-      values <- decomp$values[idx]
+      A <- methods::as(Matrix::Matrix(adj_matrix, sparse = TRUE), "dgCMatrix")
+      decomp <- tryCatch({
+        if (requireNamespace("RSpectra", quietly = TRUE) && k_use <= ceiling(0.8 * total_dim)) {
+          RSpectra::eigs_sym(A, k = k_use, which = "LA")
+        } else if (requireNamespace("PRIMME", quietly = TRUE) && k_use < total_dim) {
+          PRIMME::eigs_sym(A, NEig = k_use, which = "LA")
+        } else {
+          eig_full <- eigen(as.matrix(A), symmetric = TRUE)
+          list(values = eig_full$values[seq_len(k_use)],
+               vectors = eig_full$vectors[, seq_len(k_use), drop = FALSE])
+        }
+      }, error = function(e) {
+        eig_full <- eigen(as.matrix(A), symmetric = TRUE)
+        list(values = eig_full$values[seq_len(k_use)],
+             vectors = eig_full$vectors[, seq_len(k_use), drop = FALSE])
+      })
+
+      ord <- order(decomp$values, decreasing = TRUE)
+      values <- as.numeric(decomp$values)[ord]
+      vecs <- as.matrix(decomp$vectors)[, ord, drop = FALSE]
+      keep <- which(is.finite(values) & abs(values) > 1e-10)
+      if (!length(keep)) stop("No non-trivial adjacency eigenvalues available", call. = FALSE)
+      keep <- keep[seq_len(min(k_use, length(keep)))]
+      vectors <- Matrix::Matrix(vecs[, keep, drop = FALSE], sparse = TRUE)
+      values <- values[keep]
     }
 
     col_norms <- sqrt(Matrix::colSums(vectors * vectors))
@@ -414,80 +389,47 @@ align_grasp_bases <- function(basis1, basis2, desc1, desc2, lambda = 0.1,
   # Extract matrices
   phi1 <- basis1$vectors
   phi2 <- basis2$vectors
-  lambda2_vals <- basis2$values
-  
-  k <- ncol(phi1)
-  M <- Matrix::Diagonal(k)  # Initialize as identity
-  
-  # Pre-compute constant parts
+
+  k <- min(ncol(phi1), ncol(phi2))
+  if (!is.finite(k) || k < 1L) stop("Invalid basis dimension in align_grasp_bases.", call. = FALSE)
+  k <- as.integer(k)
+
+  if (ncol(phi1) != k) phi1 <- phi1[, seq_len(k), drop = FALSE]
+  if (ncol(phi2) != k) phi2 <- phi2[, seq_len(k), drop = FALSE]
+
+  # Descriptor projections (q x k) used for basis alignment.
   F_T_Phi1 <- Matrix::crossprod(desc1, phi1)
   G_T_Phi2 <- Matrix::crossprod(desc2, phi2)
-  Lambda2 <- Matrix::Diagonal(n = length(lambda2_vals), x = lambda2_vals)
-  
-  # Corrected objective function (your suggestion - remove λ₁ subtraction)
-  objective_fn <- function(M) {
-    aligned_lambda2_matrix <- Matrix::crossprod(M, Lambda2 %*% M)
-    # off() is sum of squares of off-diagonal elements (independent of λ₁)
-    diag_vals <- Matrix::diag(aligned_lambda2_matrix)
-    off_mat <- aligned_lambda2_matrix - Matrix::Diagonal(n = length(diag_vals), x = diag_vals)
-    off_penalty <- Matrix::norm(off_mat, "F")^2
-    
-    desc_penalty <- Matrix::norm(F_T_Phi1 - G_T_Phi2 %*% M, "F")^2
-    return(off_penalty + lambda * desc_penalty)
-  }
 
-  # Corrected gradient function
-  gradient_fn <- function(M) {
-    A <- Lambda2 %*% M
-    S <- Matrix::crossprod(M, A)
-    diag_S <- Matrix::diag(S)
-    grad_off <- 4 * (A %*% S - A %*% Matrix::Diagonal(x = diag_S))
+  # Align spectral bases via a **signed permutation** induced by descriptor
+  # correlations. This is stable under eigenvector sign flips and avoids
+  # brittle mixing of near-degenerate eigenmodes.
+  Fm <- as.matrix(F_T_Phi1)
+  Gm <- as.matrix(G_T_Phi2)
 
-    residual <- F_T_Phi1 - G_T_Phi2 %*% M
-    grad_desc <- -2 * Matrix::crossprod(G_T_Phi2, residual)
+  Fn <- sqrt(colSums(Fm * Fm) + 1e-12)
+  Gn <- sqrt(colSums(Gm * Gm) + 1e-12)
+  Fnorm <- sweep(Fm, 2, Fn, "/")
+  Gnorm <- sweep(Gm, 2, Gn, "/")
 
-    euc_grad <- grad_off + lambda * grad_desc
+  sim <- abs(crossprod(Fnorm, Gnorm)) # k x k (F columns x G columns)
+  cost <- 1 - sim
 
-    MtE <- Matrix::crossprod(M, euc_grad)
-    riemannian_grad <- euc_grad - M %*% (0.5 * (MtE + Matrix::t(MtE)))
-    riemannian_grad
-  }
+  perm <- solve_lsap_with_padding(cost, method = NULL)
+  perm <- as.integer(perm)
 
-  # Improved optimization with relative tolerance (your suggestion)
-  prev_obj <- objective_fn(M)
-  
-  for (iter in seq_len(max_iter)) {
-    grad <- gradient_fn(M)
-    
-    # Backtracking line search with smaller initial step
-    step_size <- 0.5
-    for (ls_iter in 1:8) {
-      M_new_euc <- M - step_size * grad
-      
-      # SVD retraction (your suggestion - more stable than QR for small k)
-      M_new_mat <- as.matrix(M_new_euc)
-      if (any(!is.finite(M_new_mat))) {
-        stop("Non-finite values in matrix during SVD retraction", call. = FALSE)
-      }
-      svd_res <- svd(M_new_mat)
-      M_new <- as(svd_res$u %*% t(svd_res$v), "CsparseMatrix")
-      
-      new_obj <- objective_fn(M_new)
-      if (new_obj < prev_obj) break
-      step_size <- step_size * 0.5
-    }
-    
-    M <- M_new
-    
-    # Improved convergence check - require minimum iterations
-    rel_change <- abs(prev_obj - new_obj) / max(1, prev_obj)
-    if (iter > 5 && rel_change < tol) {  # Minimum 5 iterations
-      break
-    }
-    prev_obj <- new_obj
-  }
-  
-  list(rotation = M, iterations = iter, converged = iter < max_iter)
+  dots <- crossprod(Fm, Gm)
+  sgn <- sign(dots[cbind(seq_len(k), perm)])
+  sgn[sgn == 0] <- 1
+
+  M <- Matrix::sparseMatrix(
+    i = perm,
+    j = seq_len(k),
+    x = as.numeric(sgn),
+    dims = c(k, k)
+  )
+
+  list(rotation = M, iterations = 1L, converged = TRUE)
 }
 
 #' Blocks D & E: Functional Map and Assignment - Corrected

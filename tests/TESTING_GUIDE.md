@@ -14,6 +14,7 @@ This document records the shared testing conventions for manifold alignment meth
 | `cone_align` / `cone_align_multiple` | conic optimisation | multiset | ✗ | ✗ | optional | robust to label imbalance |
 | `lowrank_align` | linear manifold | multiset | ✗ | ✗ | optional | scalable low-rank approximation |
 | `parrot` | optimal transport | 2 domains | ✗ | ✓ | required | network alignment with entropic OT |
+| `token_ot_graph_align` | optimal transport | 2 graphs | ✗ | ✓ | optional | multiview + token-level OT bags + sparse Sinkhorn |
 | `pseudolabel` | alignment + labelling | multiset | ✗ | ✗ | optional | leverages alignment for labels |
 | `generalized_procrustes` | orthogonal | multiset | ✗ | ✗ | optional | task-based alignment with partial observations |
 | `gromov_wasserstein` | optimal transport | multiset | ✗ | ✓ | optional | structural OT without features |
@@ -179,4 +180,3 @@ For each method provide required/optional flags. CI meta-tests should read this 
 ---
 
 Keeping this guide current avoids drift between alignment methods and their test coverage, making it easier to add new methods or datasets with confidence.
-

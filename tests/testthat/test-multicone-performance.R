@@ -1,6 +1,7 @@
 test_that("cone_align_multiple runs in reasonable time and memory", {
 
   skip_on_cran()
+  skip_if_benchmarks_disabled("Benchmark tests disabled; enable with options(manifoldalign.run_benchmarks = TRUE)")
   skip_if_not(Sys.info()[["sysname"]] != "Windows")  # peak RAM check uses 'ps'
 
   # The ps library is not strictly required, so skip if not available

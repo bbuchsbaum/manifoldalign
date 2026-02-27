@@ -21,6 +21,7 @@ Thumbs.db
 *~
 *.tmp
 *.bak
+.omc/
 
 # Documentation build artifacts  
 docs/

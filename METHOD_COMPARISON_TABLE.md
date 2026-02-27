@@ -9,6 +9,7 @@
 | **GRASP** | Graph/Spectral | Functional maps with multi-scale descriptors | Near-isomorphic graph matching | O(n³) + O(n³) assignment |
 | **CONE-Align** | Graph/Iterative | Alternating optimization on embeddings | General graph alignment | O(n² × iterations) |
 | **PARROT** | Graph/Transport | Position-aware features with optimal transport | Semi-supervised network alignment | O(n² × iterations) |
+| **Token-OT Graph Align** | Graph/Transport | Multiview embeddings + token-bag OT + sparse Sinkhorn | Un/semisupervised graph node alignment | O(nnz × iterations) |
 | **Gromov-Wasserstein** | Optimal Transport | Structural optimal transport | Domain adaptation without correspondence | O(n² × iterations) |
 | **FPGW** | Optimal Transport | Combines features and structure | Partial transport with mixed costs | O(n² × iterations) |
 | **UOT (TI-Sinkhorn)** | Optimal Transport (Unbalanced) | Translation-invariant dual + sparse neighborhoods | Template-based functional alignment with mass drop | O(nnz × iterations) |
@@ -41,6 +42,7 @@
 | **GRASP** | hyperdesign | multiblock_biprojector | assignment, rotation, mapping |
 | **CONE-Align** | hyperdesign | multiblock_biprojector | assignment, rotation |
 | **PARROT** | hyperdesign | multiblock_biprojector | transport_plan, alignment_matrix |
+| **Token-OT Graph Align** | hyperdesign/list | multiblock_biprojector | transport_plan (sparse), assignment, multilevel |
 | **Gromov-Wasserstein** | hyperdesign | gromov_wasserstein | transport_plans, distances |
 | **FPGW** | hyperdesign | fpgw | transport_plans, distances |
 | **UOT (TI-Sinkhorn)** | coords/features + masses | uot_pair_fit / multiset_uot_fit | sparse operators, template weights |
@@ -53,7 +55,7 @@
 
 ### By Data Type
 - **Labeled data**: KEMA (semi-supervised), Generalized Procrustes (task-based)
-- **Graph data**: GRASP, CONE-Align, PARROT
+- **Graph data**: GRASP, CONE-Align, PARROT, Token-OT Graph Align
 - **General domains**: Gromov-Wasserstein, FPGW
 - **Multi-modal**: Coupled Diagonalization
 - **Linear assumptions**: GPCA Align, Linear Similarity Embedding

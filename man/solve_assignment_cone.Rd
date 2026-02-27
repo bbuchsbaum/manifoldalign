@@ -4,7 +4,7 @@
 \alias{solve_assignment_cone}
 \title{Solve Assignment Problem for CONE-Align}
 \usage{
-solve_assignment_cone(Z1, Z2, Q, solver)
+solve_assignment_cone(Z1, Z2, Q, solver, anchors = NULL)
 }
 \arguments{
 \item{Z1}{First embedding matrix}

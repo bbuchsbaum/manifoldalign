@@ -44,6 +44,7 @@ fixtures:
     applies_to:
     - parrot
     - grasp
+    - token_ot_graph_align
     invariants:
     - structure
     - ot_marginals
@@ -175,6 +176,13 @@ methods:
     - anchor_partial_overlap
     - graph_cycle_mismatch
     - large_ot_cost
+  token_ot_graph_align:
+    capabilities:
+    - optimal_transport
+    - graph_alignment
+    - multiview
+    required_fixtures:
+    - graph_cycle_mismatch
   pseudolabel:
     capabilities:
     - label_transfer

@@ -19,6 +19,7 @@ coupled_diagonalization(data, ...)
   lambda_target = NULL,
   knn = 10,
   sigma = NULL,
+  spectral_cache = NULL,
   max_iter = 200,
   step_size = 0.3,
   tol = 1e-06,
@@ -59,6 +60,11 @@ vectors for each modality (only the first \code{ncomp} entries are used).}
 
 \item{sigma}{Gaussian kernel bandwidth for graph weights. If NULL (default), 
 uses median of nearest neighbor distances.}
+
+\item{spectral_cache}{Optional precomputed spectral cache to reuse
+Laplacian subspaces across repeated runs (for example
+\code{previous_fit$diagnostics$spectral_cache}). When supplied,
+graph/Laplacian/eigendecomposition steps are skipped.}
 
 \item{max_iter}{Maximum iterations for Stiefel manifold optimization
 (default: 200)}
@@ -141,8 +147,9 @@ F = sum_i ||A_i^T Lambda_i A_i - diag(A_i^T Lambda_i A_i)||_F^2 +
 
 It uses projected gradient descent on the Stiefel manifold to maintain
 orthogonality of the coupling matrices A_i.
-When \code{alpha_match > 0}, the diagonal term also nudges the joint modes
-toward user-specified target eigenvalues as described in Eynard et al. (2015, Eq. 9).
+When \code{alpha_match > 0}, the optional match term nudges the diagonal
+entries of \code{A_i^T Lambda_i A_i} toward user-specified target eigenvalues
+(without adding extra off-diagonal penalty).
 }
 \examples{
 \donttest{

@@ -223,12 +223,27 @@ grasp_multiset.hyperdesign <- function(data,
           distance = "cosine",
           alpha = assignment_alpha
         )
-        scores <- vapply(
+        scores_common <- vapply(
           candidates,
           permutation_alignment_score,
           numeric(1),
           cost_matrix = common_cost
         )
+
+        # Prefer candidates that are also consistent with raw-feature geometry.
+        feat_cost_scaled <- feature_cost
+        max_fc <- suppressWarnings(max(feat_cost_scaled[is.finite(feat_cost_scaled)], na.rm = TRUE))
+        if (is.finite(max_fc) && max_fc > 0) {
+          feat_cost_scaled <- feat_cost_scaled / max_fc
+        }
+        scores_feat <- vapply(
+          candidates,
+          permutation_alignment_score,
+          numeric(1),
+          cost_matrix = feat_cost_scaled
+        )
+
+        scores <- scores_common + scores_feat
         candidates[[which.min(scores)]]
       }
     })

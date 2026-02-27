@@ -104,6 +104,10 @@ cone_align <- function(data, ...) {
 #' Performs CONE-Align on hyperdesign data structures containing graph domains.
 #'
 #' @param data A hyperdesign object containing multiple graph domains
+#' @param anchors Optional unquoted column name in each domain's design table
+#'   containing anchor/correspondence labels. Shared non-NA values indicate
+#'   fixed correspondences used to estimate the rotation and constrain the
+#'   assignment update.
 #' @param preproc Preprocessing function to apply to the data (default: center())
 #' @param ncomp Number of embedding dimensions (default: 10)
 #' @param sigma Diffusion parameter for embedding computation (default: 0.73)
@@ -125,6 +129,7 @@ cone_align <- function(data, ...) {
 #' @importFrom chk chk_number chk_true chk_logical
 #' @importFrom multivarious center concat_pre_processors
 cone_align.hyperdesign <- function(data, 
+                                  anchors = NULL,
                                   preproc = center(), 
                                   ncomp = 10,
                                   sigma = 0.73,
@@ -185,7 +190,23 @@ cone_align.hyperdesign <- function(data,
     
     list(x = x_preprocessed, design = domain$design)
   })
-  
+
+  # Extract anchors (optional)
+  anchor_info <- NULL
+  anchors_quo <- rlang::enquo(anchors)
+  if (!rlang::quo_is_null(anchors_quo)) {
+    anchor_name <- rlang::as_name(rlang::ensym(anchors))
+    v1 <- pdata[[1]]$design[[anchor_name]]
+    v2 <- pdata[[2]]$design[[anchor_name]]
+    if (is.null(v1) || is.null(v2)) {
+      stop("Anchor column `", anchor_name, "` not found in both domain designs.", call. = FALSE)
+    }
+    if (length(v1) != nrow(pdata[[1]]$x) || length(v2) != nrow(pdata[[2]]$x)) {
+      stop("Anchor column length must match nrow(x) for each domain.", call. = FALSE)
+    }
+    anchor_info <- resolve_cone_anchor_map(v1, v2)
+  }
+
   # Block indices computation (following package pattern)
   block_indices <- compute_block_indices(pdata)
   
@@ -209,7 +230,8 @@ cone_align.hyperdesign <- function(data,
   
   # Call CONE-Align fitting function
   cone_align_fit(pdata, proc, ncomp, sigma, lambda, use_laplacian, 
-                solver, max_iter, tol, feature_block_indices(pdata), knn)
+                solver, max_iter, tol, feature_block_indices(pdata), knn,
+                anchors = anchor_info)
 }
 
 #' CONE-Align for List of Feature Matrices
@@ -220,6 +242,9 @@ cone_align.hyperdesign <- function(data,
 #'
 #' @param data A list containing exactly two matrices representing node features
 #'   for each graph domain. Each matrix should have format: nodes x features.
+#' @param anchors Optional anchor information for semi-supervised alignment.
+#'   For hyperdesign inputs, use an unquoted column name in each domain's design
+#'   table. For list inputs, anchors are currently ignored.
 #' @param preproc Preprocessing function to apply to the data (default: center())
 #' @param ncomp Number of embedding dimensions (default: 10)
 #' @param sigma Diffusion parameter for graph construction (default: 0.73)
@@ -381,7 +406,8 @@ compute_block_indices <- function(pdata) {
 
 #' @keywords internal
 cone_align_fit <- function(strata, proc, ncomp, sigma, lambda, use_laplacian, 
-                          solver, max_iter, tol, feature_blocks, knn) {
+                          solver, max_iter, tol, feature_blocks, knn,
+                          anchors = NULL) {
   
   # Compute spectral embeddings (following GRASP pattern)
   embeddings <- compute_cone_embeddings(strata, ncomp, sigma, use_laplacian, knn)
@@ -391,7 +417,7 @@ cone_align_fit <- function(strata, proc, ncomp, sigma, lambda, use_laplacian,
   }
 
   # Iterative alignment (core CONE-Align algorithm)
-  alignment_result <- cone_align_iterate(embeddings, solver, max_iter, tol, lambda)
+  alignment_result <- cone_align_iterate(embeddings, solver, max_iter, tol, lambda, anchors = anchors)
   
   # Compute scores with consistent alignment direction (map graph 1 -> graph 2 space)
   embed1_aligned <- embeddings[[1]] %*% alignment_result$Q
@@ -585,7 +611,7 @@ graph_laplacian <- function(A, normalized = TRUE) {
 #' @param lambda Regularization parameter
 #' @return List with final rotation, permutation, and iteration count
 #' @keywords internal
-cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda) {
+cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda, anchors = NULL) {
 
   if (nrow(embeddings[[1]]) == 0 || nrow(embeddings[[2]]) == 0) {
     stop("Input embeddings to cone_align_iterate must have non-zero rows.")
@@ -598,7 +624,31 @@ cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda) {
 
   # Initialize with identity permutation on the reference set
   n1 <- nrow(embeddings[[1]])
-  P <- 1:n1
+  P <- seq_len(n1)
+
+  if (!is.null(anchors)) {
+    anchor_map <- anchors$map
+    anchor_idx1 <- which(!is.na(anchor_map))
+    anchor_idx2 <- as.integer(anchor_map[anchor_idx1])
+
+    if (length(anchor_idx1) > 0) {
+      if (any(anchor_idx2 < 1L | anchor_idx2 > nrow(embeddings[[2]]))) {
+        stop("Anchor mapping contains indices outside the target graph.", call. = FALSE)
+      }
+      if (anyDuplicated(anchor_idx2)) {
+        stop("Anchor mapping must be one-to-one (duplicate target indices found).", call. = FALSE)
+      }
+
+      P[anchor_idx1] <- anchor_idx2
+
+      remaining_src <- setdiff(seq_len(n1), anchor_idx1)
+      remaining_tgt <- setdiff(seq_len(n1), anchor_idx2)
+      if (length(remaining_tgt) != length(remaining_src)) {
+        stop("Anchor mapping size is incompatible with graph sizes.", call. = FALSE)
+      }
+      P[remaining_src] <- remaining_tgt
+    }
+  }
   
   # Pre-allocate for efficiency
   P_old <- integer(n1)
@@ -609,10 +659,10 @@ cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda) {
     P_old <- P
     
     # Given P, find Q (orthogonal transformation)
-    Q <- solve_procrustes_cone(embeddings[[1]], embeddings[[2]], P, lambda)
+    Q <- solve_procrustes_cone(embeddings[[1]], embeddings[[2]], P, lambda, anchors = anchors)
     
     # Given Q, find P (assignment)
-    P <- solve_assignment_cone(embeddings[[1]], embeddings[[2]], Q, solver)
+    P <- solve_assignment_cone(embeddings[[1]], embeddings[[2]], Q, solver, anchors = anchors)
     
     # Check for convergence (permutation matrix is stable)
     if (identical(P, P_old)) {
@@ -646,16 +696,37 @@ cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda) {
 #' @param lambda Regularization parameter for Procrustes problem
 #' @return Orthogonal transformation matrix Q
 #' @keywords internal
-solve_procrustes_cone <- function(Z1, Z2, P, lambda = 0) {
-  Z2_permuted <- Z2[P, , drop = FALSE]
-
-  if (ncol(Z1) != ncol(Z2_permuted) || nrow(Z1) != nrow(Z2_permuted)) {
-    stop("Z1 and Z2[P, ] must have identical dimensions.", call. = FALSE)
+solve_procrustes_cone <- function(Z1, Z2, P, lambda = 0, anchors = NULL) {
+  # If anchors are available, estimate the orthogonal map using only the
+  # anchored correspondences. This prevents a poor initial assignment from
+  # dominating the rotation estimate in symmetric/noisy settings.
+  use_anchors <- FALSE
+  if (!is.null(anchors) && !is.null(anchors$map)) {
+    anchor_map <- anchors$map
+    anchor_idx1 <- which(!is.na(anchor_map))
+    if (length(anchor_idx1) >= 2L) {
+      anchor_idx2 <- as.integer(anchor_map[anchor_idx1])
+      use_anchors <- TRUE
+    }
   }
 
-  M <- crossprod(Z1, Z2_permuted)
+  if (use_anchors) {
+    Z2_permuted <- Z2[anchor_idx2, , drop = FALSE]
+    Z1_use <- Z1[anchor_idx1, , drop = FALSE]
+  } else {
+    Z2_permuted <- Z2[P, , drop = FALSE]
+    Z1_use <- Z1
+  }
 
-  if (lambda > 0) {
+  if (ncol(Z1_use) != ncol(Z2_permuted) || nrow(Z1_use) != nrow(Z2_permuted)) {
+    stop("Procrustes inputs must have identical dimensions.", call. = FALSE)
+  }
+
+  M <- crossprod(Z1_use, Z2_permuted)
+
+  # Regularization can bias the estimate toward the identity. When anchors are
+  # present, rely on the anchored correspondences directly.
+  if (lambda > 0 && !use_anchors) {
     diag(M) <- diag(M) + lambda
   }
 
@@ -673,7 +744,7 @@ solve_procrustes_cone <- function(Z1, Z2, P, lambda = 0) {
 #' @param solver Assignment algorithm ("linear" or "auction")
 #' @return Vector of assignment indices
 #' @keywords internal
-solve_assignment_cone <- function(Z1, Z2, Q, solver) {
+solve_assignment_cone <- function(Z1, Z2, Q, solver, anchors = NULL) {
   
   # Pre-compute transformed embeddings to avoid repeated multiplication
   Z1_transformed <- Z1 %*% Q
@@ -690,16 +761,90 @@ solve_assignment_cone <- function(Z1, Z2, Q, solver) {
   
   n1 <- nrow(Z1)
   
-  # Solve the assignment problem
-  if (solver == "auction" && n1 >= 1000) {
-    # Use auction algorithm for large problems
-    assignment <- clue::solve_LSAP(D, method = "auction")
-  } else {
-    # Use exact algorithm (default)
-    assignment <- clue::solve_LSAP(D)
+  anchor_map <- NULL
+  if (!is.null(anchors) && !is.null(anchors$map)) {
+    anchor_map <- anchors$map
   }
-  
-  as.integer(assignment)
+
+  # Solve the assignment problem (optionally with hard anchors).
+  if (is.null(anchor_map) || all(is.na(anchor_map))) {
+    if (solver == "auction" && n1 >= 1000) {
+      assignment <- clue::solve_LSAP(D, method = "auction")
+    } else {
+      assignment <- clue::solve_LSAP(D)
+    }
+    return(as.integer(assignment))
+  }
+
+  anchor_idx1 <- which(!is.na(anchor_map))
+  anchor_idx2 <- as.integer(anchor_map[anchor_idx1])
+  if (any(anchor_idx2 < 1L | anchor_idx2 > nrow(Z2))) {
+    stop("Anchor mapping contains indices outside the target graph.", call. = FALSE)
+  }
+  if (anyDuplicated(anchor_idx2)) {
+    stop("Anchor mapping must be one-to-one (duplicate target indices found).", call. = FALSE)
+  }
+
+  free_i <- setdiff(seq_len(n1), anchor_idx1)
+  free_j <- setdiff(seq_len(nrow(Z2)), anchor_idx2)
+
+  P <- integer(n1)
+  P[anchor_idx1] <- anchor_idx2
+  if (!length(free_i)) return(P)
+
+  if (length(free_i) != length(free_j)) {
+    stop("Anchor mapping size is incompatible with graph sizes.", call. = FALSE)
+  }
+
+  D_sub <- D[free_i, free_j, drop = FALSE]
+  if (solver == "auction" && length(free_i) >= 1000) {
+    assignment <- clue::solve_LSAP(D_sub, method = "auction")
+  } else {
+    assignment <- clue::solve_LSAP(D_sub)
+  }
+
+  P[free_i] <- free_j[as.integer(assignment)]
+  P
+}
+
+#' Resolve anchor correspondences for CONE-Align
+#'
+#' Returns a mapping from source indices to target indices using label vectors
+#' where shared non-NA values indicate anchored correspondences.
+#'
+#' @param vec1 Anchor labels for source domain (length n1)
+#' @param vec2 Anchor labels for target domain (length n2)
+#' @return A list with `map` (integer vector length n1, NA for unanchored)
+#'   and `values` of shared anchors; or NULL if no anchors found.
+#' @keywords internal
+resolve_cone_anchor_map <- function(vec1, vec2) {
+  idx1 <- which(!is.na(vec1))
+  idx2 <- which(!is.na(vec2))
+  if (length(idx1) == 0 || length(idx2) == 0) return(NULL)
+
+  vals1 <- vec1[idx1]
+  vals2 <- vec2[idx2]
+
+  if (anyDuplicated(vals1)) {
+    stop("Anchor labels must be unique within the source domain.", call. = FALSE)
+  }
+  if (anyDuplicated(vals2)) {
+    stop("Anchor labels must be unique within the target domain.", call. = FALSE)
+  }
+
+  common <- intersect(vals1, vals2)
+  if (!length(common)) {
+    stop("No shared anchor labels found across domains.", call. = FALSE)
+  }
+
+  i_pos <- match(common, vals1)
+  j_pos <- match(common, vals2)
+  idx1 <- idx1[i_pos]
+  idx2 <- idx2[j_pos]
+
+  map <- rep(NA_integer_, length(vec1))
+  map[idx1] <- idx2
+  list(map = map, values = common)
 }
 
 #' Compute Pairwise Squared Distances

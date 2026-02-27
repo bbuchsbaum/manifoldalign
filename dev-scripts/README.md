@@ -12,6 +12,7 @@ Contains ad-hoc test scripts used during development:
 ### `benchmarks/`
 Contains benchmark scripts and results:
 - `benchmark_parrot.R` - Performance benchmarks for PARROT algorithm
+- `benchmark_graph_aligners.R` - Compares Token-OT Graph Align vs other graph aligners (PARROT/CONE-Align/GRASP)
 - `eigen_*.png` - Benchmark visualization plots
 - `eigen_benchmark_results.csv` - Benchmark result data
 

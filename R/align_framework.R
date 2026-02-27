@@ -375,10 +375,14 @@ apply_transform.align_transform <- function(transform, X, ...) {
   } else if (grp == "perm") {
     # Permutation/assignment acts on rows: op (n_to x n_from) times X (n_from x d)
     X <- as.matrix(X)
-    op <- as.matrix(op)
+    op <- transform$op
     if (ncol(op) != nrow(X)) {
       stop("apply_transform[perm]: dimension mismatch: ncol(op) != nrow(X)")
     }
+    if (inherits(op, "Matrix")) {
+      return(as.matrix(op %*% X))
+    }
+    op <- as.matrix(op)
     return(op %*% X)
   }
   stop("apply_transform: not implemented for group '", grp, "'")
