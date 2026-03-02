@@ -58,13 +58,17 @@ apply_supervision_budget <- function(domains, id_keep_frac = 1, condition_keep_f
   set.seed(seed)
   out <- ensure_eval_columns(domains)
 
-  ids_common <- Reduce(intersect, lapply(out, function(dom) as.character(dom$design$eval_id)))
-  if (!length(ids_common)) return(out)
+  id_pool <- unlist(lapply(out, function(dom) as.character(dom$design$eval_id)), use.names = FALSE)
+  id_counts <- table(id_pool)
+  # Keep supervision candidates that appear in at least two domains (pairwise overlap),
+  # rather than requiring all-domain overlap.
+  ids_shared <- names(id_counts[id_counts >= 2L])
+  if (!length(ids_shared)) return(out)
 
-  id_keep_n <- max(2L, min(length(ids_common), floor(id_keep_frac * length(ids_common))))
-  cond_keep_n <- max(2L, min(length(ids_common), floor(condition_keep_frac * length(ids_common))))
-  id_keep <- if (id_keep_n >= length(ids_common)) ids_common else sample(ids_common, size = id_keep_n, replace = FALSE)
-  cond_keep <- if (cond_keep_n >= length(ids_common)) ids_common else sample(ids_common, size = cond_keep_n, replace = FALSE)
+  id_keep_n <- max(2L, min(length(ids_shared), floor(id_keep_frac * length(ids_shared))))
+  cond_keep_n <- max(2L, min(length(ids_shared), floor(condition_keep_frac * length(ids_shared))))
+  id_keep <- if (id_keep_n >= length(ids_shared)) ids_shared else sample(ids_shared, size = id_keep_n, replace = FALSE)
+  cond_keep <- if (cond_keep_n >= length(ids_shared)) ids_shared else sample(ids_shared, size = cond_keep_n, replace = FALSE)
 
   for (i in seq_along(out)) {
     di <- out[[i]]$design
@@ -259,6 +263,150 @@ subsample_domain_overlap <- function(domains, keep_fracs = c(1, 0.75, 0.65), see
 }
 
 build_benchmark_scenarios <- function(base_domains, seed = 1L) {
+  make_gaussian_class_domains <- function(
+    seed = 1L,
+    n_domains = 3L,
+    n_classes = 4L,
+    n_per_class = 40L,
+    d = 12L,
+    class_sep = 2.0,
+    domain_noise_sd = 0.12
+  ) {
+    set.seed(seed)
+    n <- as.integer(n_classes * n_per_class)
+    class_levels <- sprintf("class_%02d", seq_len(n_classes))
+    class_idx <- rep(seq_len(n_classes), each = n_per_class)
+    class_labels <- class_levels[class_idx]
+    eval_id <- sprintf("sample_%04d", seq_len(n))
+
+    means <- matrix(stats::rnorm(n_classes * d), nrow = n_classes, ncol = d)
+    means <- scale(means, center = TRUE, scale = FALSE)
+    means <- means * class_sep
+
+    latent <- matrix(0, nrow = n, ncol = d)
+    for (cc in seq_len(n_classes)) {
+      idx <- which(class_idx == cc)
+      A <- matrix(stats::rnorm(d * d), nrow = d, ncol = d)
+      Q <- qr.Q(qr(A))
+      vals <- stats::runif(d, min = 0.25, max = 1.0)
+      cov_half <- Q %*% diag(sqrt(vals), nrow = d)
+      Z <- matrix(stats::rnorm(length(idx) * d), nrow = length(idx), ncol = d)
+      latent[idx, ] <- Z %*% cov_half + matrix(means[cc, ], nrow = length(idx), ncol = d, byrow = TRUE)
+    }
+    latent <- scale(latent, center = TRUE, scale = FALSE)
+
+    domains <- vector("list", n_domains)
+    for (dd in seq_len(n_domains)) {
+      R <- qr.Q(qr(matrix(stats::rnorm(d * d), nrow = d, ncol = d)))
+      scales <- stats::runif(d, min = 0.8, max = 1.2)
+      shift <- stats::rnorm(d, sd = 0.10)
+      Xd <- latent %*% R %*% diag(scales, nrow = d) +
+        matrix(shift, nrow = n, ncol = d, byrow = TRUE) +
+        matrix(stats::rnorm(n * d, sd = domain_noise_sd), nrow = n, ncol = d)
+      Xd <- scale(Xd, center = TRUE, scale = FALSE)
+      design <- data.frame(
+        id = eval_id,
+        eval_id = eval_id,
+        condition = factor(class_labels, levels = class_levels),
+        condition_true = factor(class_labels, levels = class_levels),
+        stringsAsFactors = FALSE
+      )
+      domains[[dd]] <- list(x = Xd, design = design)
+      names(domains)[dd] <- sprintf("domain%d", dd)
+    }
+    domains
+  }
+
+  make_open_set_gaussian_domains <- function(
+    seed = 1L,
+    n_per_class = 32L,
+    d = 12L,
+    class_sep = 2.0,
+    domain_noise_sd = 0.14
+  ) {
+    set.seed(seed)
+
+    domain_class_map <- list(
+      domain1 = c("class_A", "class_B", "class_C", "class_D"),
+      domain2 = c("class_B", "class_C", "class_D", "class_E"),
+      domain3 = c("class_C", "class_D", "class_E", "class_F")
+    )
+
+    class_levels <- unique(unlist(domain_class_map))
+    n_classes <- length(class_levels)
+
+    class_means <- matrix(stats::rnorm(n_classes * d), nrow = n_classes, ncol = d)
+    class_means <- scale(class_means, center = TRUE, scale = FALSE) * class_sep
+    rownames(class_means) <- class_levels
+
+    class_latent <- setNames(vector("list", length(class_levels)), class_levels)
+    for (cl in class_levels) {
+      A <- matrix(stats::rnorm(d * d), nrow = d, ncol = d)
+      Q <- qr.Q(qr(A))
+      vals <- stats::runif(d, min = 0.20, max = 1.10)
+      cov_half <- Q %*% diag(sqrt(vals), nrow = d)
+      Z <- matrix(stats::rnorm(n_per_class * d), nrow = n_per_class, ncol = d)
+      class_latent[[cl]] <- Z %*% cov_half + matrix(class_means[cl, ], nrow = n_per_class, ncol = d, byrow = TRUE)
+    }
+
+    class_counts <- table(unlist(domain_class_map))
+    domains <- vector("list", length(domain_class_map))
+    names(domains) <- names(domain_class_map)
+
+    for (dd in seq_along(domain_class_map)) {
+      domain_name <- names(domain_class_map)[dd]
+      domain_classes <- domain_class_map[[dd]]
+
+      R <- qr.Q(qr(matrix(stats::rnorm(d * d), nrow = d, ncol = d)))
+      scales <- stats::runif(d, min = 0.80, max = 1.25)
+      shift <- stats::rnorm(d, sd = 0.12)
+
+      X_blocks <- vector("list", length(domain_classes))
+      id_blocks <- vector("list", length(domain_classes))
+      cond_blocks <- vector("list", length(domain_classes))
+
+      for (ii in seq_along(domain_classes)) {
+        cl <- domain_classes[[ii]]
+        base <- class_latent[[cl]]
+        Xi <- base %*% R %*% diag(scales, nrow = d) +
+          matrix(shift, nrow = nrow(base), ncol = d, byrow = TRUE) +
+          matrix(stats::rnorm(length(base), sd = domain_noise_sd), nrow = nrow(base), ncol = d)
+        X_blocks[[ii]] <- Xi
+
+        if (class_counts[[cl]] >= 2L) {
+          id_blocks[[ii]] <- sprintf("shared_%s_%03d", cl, seq_len(n_per_class))
+        } else {
+          id_blocks[[ii]] <- sprintf("private_%s_%s_%03d", domain_name, cl, seq_len(n_per_class))
+        }
+        cond_blocks[[ii]] <- rep(cl, n_per_class)
+      }
+
+      Xd <- do.call(rbind, X_blocks)
+      eval_id <- unlist(id_blocks, use.names = FALSE)
+      cond <- unlist(cond_blocks, use.names = FALSE)
+
+      ord <- sample.int(nrow(Xd))
+      Xd <- Xd[ord, , drop = FALSE]
+      eval_id <- eval_id[ord]
+      cond <- cond[ord]
+
+      Xd <- scale(Xd, center = TRUE, scale = FALSE)
+
+      domains[[dd]] <- list(
+        x = Xd,
+        design = data.frame(
+          id = eval_id,
+          eval_id = eval_id,
+          condition = factor(cond, levels = class_levels),
+          condition_true = factor(cond, levels = class_levels),
+          stringsAsFactors = FALSE
+        )
+      )
+    }
+
+    domains
+  }
+
   list(
     clean = list(
       name = "clean",
@@ -284,6 +432,49 @@ build_benchmark_scenarios <- function(base_domains, seed = 1L) {
       id_keep_frac = 0.8,
       condition_keep_frac = 0.8,
       perturb_sd = 0.02
+    ),
+    gaussian_classes = list(
+      name = "gaussian_classes",
+      domains = make_gaussian_class_domains(
+        seed = seed + 31L,
+        n_domains = 3L,
+        n_classes = 4L,
+        n_per_class = 40L,
+        d = 12L,
+        class_sep = 2.2,
+        domain_noise_sd = 0.10
+      ),
+      id_keep_frac = 0.7,
+      condition_keep_frac = 0.35,
+      perturb_sd = 0.010
+    ),
+    gaussian_overlap = list(
+      name = "gaussian_overlap",
+      domains = make_gaussian_class_domains(
+        seed = seed + 32L,
+        n_domains = 3L,
+        n_classes = 4L,
+        n_per_class = 40L,
+        d = 12L,
+        class_sep = 1.2,
+        domain_noise_sd = 0.18
+      ),
+      id_keep_frac = 0.7,
+      condition_keep_frac = 0.25,
+      perturb_sd = 0.015
+    ),
+    open_set_overlap = list(
+      name = "open_set_overlap",
+      domains = make_open_set_gaussian_domains(
+        seed = seed + 33L,
+        n_per_class = 32L,
+        d = 12L,
+        class_sep = 1.6,
+        domain_noise_sd = 0.12
+      ),
+      id_keep_frac = 0.85,
+      condition_keep_frac = 0.65,
+      perturb_sd = 0.012
     )
   )
 }
@@ -395,6 +586,65 @@ label_knn_accuracy <- function(scores, labels, k = 5L) {
   mean(pred == y)
 }
 
+holdout_condition_knn_accuracy <- function(scores, raw_domains, k = 5L) {
+  truth <- unlist(lapply(raw_domains, function(dom) {
+    design <- dom$design
+    if ("condition_true" %in% names(design)) {
+      as.character(design$condition_true)
+    } else if ("condition" %in% names(design)) {
+      as.character(design$condition)
+    } else {
+      rep(NA_character_, nrow(dom$x))
+    }
+  }), use.names = FALSE)
+
+  train_lbl <- unlist(lapply(raw_domains, function(dom) {
+    design <- dom$design
+    if ("condition_train" %in% names(design)) {
+      as.character(design$condition_train)
+    } else if ("condition" %in% names(design)) {
+      as.character(design$condition)
+    } else {
+      rep(NA_character_, nrow(dom$x))
+    }
+  }), use.names = FALSE)
+
+  truth_levels <- unique(stats::na.omit(truth))
+  is_train <- !is.na(train_lbl) & (train_lbl %in% truth_levels)
+  is_holdout <- !is.na(truth) & !is_train
+
+  train_idx <- which(is_train)
+  hold_idx <- which(is_holdout)
+  if (!length(train_idx) || !length(hold_idx)) return(NA_real_)
+
+  Xtrain <- as.matrix(scores[train_idx, , drop = FALSE])
+  Xhold <- as.matrix(scores[hold_idx, , drop = FALSE])
+  ytrain <- train_lbl[train_idx]
+  yhold <- truth[hold_idx]
+
+  k_eff <- min(as.integer(k), nrow(Xtrain))
+  if (k_eff < 1L) return(NA_real_)
+
+  if (requireNamespace("RANN", quietly = TRUE)) {
+    nn <- RANN::nn2(data = Xtrain, query = Xhold, k = k_eff)$nn.idx
+    if (!is.matrix(nn)) nn <- matrix(nn, ncol = 1L)
+    pred <- apply(nn, 1, function(idx) {
+      votes <- table(ytrain[idx])
+      names(votes)[which.max(votes)]
+    })
+    return(mean(pred == yhold))
+  }
+
+  D <- as.matrix(stats::dist(rbind(Xhold, Xtrain)))
+  D <- D[seq_len(nrow(Xhold)), nrow(Xhold) + seq_len(nrow(Xtrain)), drop = FALSE]
+  pred <- apply(D, 1, function(row_d) {
+    idx <- head(order(row_d), k_eff)
+    votes <- table(ytrain[idx])
+    names(votes)[which.max(votes)]
+  })
+  mean(pred == yhold)
+}
+
 evaluate_fit <- function(fit, raw_domains, holdout_pairs = NULL) {
   scores <- extract_scores(fit)
   domain_sizes <- vapply(raw_domains, function(d) nrow(d$x), integer(1))
@@ -410,7 +660,8 @@ evaluate_fit <- function(fit, raw_domains, holdout_pairs = NULL) {
     identity_mse = identity_pair_mse(score_blocks, raw_domains),
     holdout_identity_mse = holdout_identity_mse(score_blocks, holdout_pairs),
     geometry_spearman = geometry_spearman(score_blocks, raw_domains),
-    condition_knn_acc = label_knn_accuracy(scores, pooled_labels, k = 5L)
+    condition_knn_acc = label_knn_accuracy(scores, pooled_labels, k = 5L),
+    holdout_condition_knn_acc = holdout_condition_knn_accuracy(scores, raw_domains, k = 5L)
   )
 }
 
@@ -470,11 +721,16 @@ run_one <- function(method,
   }
   set.seed(as.integer(method_seed))
 
+  is_open_set <- identical(scenario_name, "open_set_overlap")
+
   t0 <- proc.time()[["elapsed"]]
   note <- NA_character_
   precomputed_metrics <- NULL
   fit <- switch(method,
     global_geo = {
+      gg_knn <- if (is_open_set) 24L else 12L
+      gg_landmarks <- if (is_open_set) 160L else 120L
+      gg_max_pairs <- if (is_open_set) 120L else 80L
       if (supervision == "id") {
         manifoldalign::global_geo_align(
           hd,
@@ -482,8 +738,8 @@ run_one <- function(method,
           preproc = NULL,
           ncomp = ncomp,
           control = manifoldalign::global_geo_align_control(
-            knn = 12,
-            n_landmarks_total = 120,
+            knn = gg_knn,
+            n_landmarks_total = gg_landmarks,
             k_embed = max(3L * ncomp, ncomp + 6L),
             scale_method = "none",
             ridge_eps = 1e-4,
@@ -498,12 +754,12 @@ run_one <- function(method,
           preproc = NULL,
           ncomp = ncomp,
           control = manifoldalign::global_geo_align_control(
-            knn = 12,
-            n_landmarks_total = 120,
+            knn = gg_knn,
+            n_landmarks_total = gg_landmarks,
             k_embed = max(3L * ncomp, ncomp + 6L),
             scale_method = "none",
             ridge_eps = 1e-4,
-            max_pairs_per_label = 80,
+            max_pairs_per_label = gg_max_pairs,
             verbose = FALSE,
             seed = as.integer(method_seed)
           )
@@ -548,6 +804,35 @@ run_one <- function(method,
         )
       } else {
         stop("lra requires supervision mode 'id' or 'condition'")
+      }
+    },
+    ssma = {
+      ssma_ctrl <- manifoldalign::ssma_align_control(
+        knn = 12L,
+        rank_per_domain = 64L,
+        solver = "reduced",
+        max_pairs_per_label = 80L,
+        verbose = FALSE,
+        seed = as.integer(method_seed)
+      )
+      if (supervision == "id") {
+        manifoldalign::ssma_align(
+          hd,
+          correspondences = correspondences,
+          preproc = multivarious::center(),
+          ncomp = ncomp,
+          control = ssma_ctrl
+        )
+      } else if (supervision == "condition") {
+        manifoldalign::ssma_align(
+          hd,
+          y = condition_train,
+          preproc = multivarious::center(),
+          ncomp = ncomp,
+          control = ssma_ctrl
+        )
+      } else {
+        stop("ssma requires supervision mode 'id' or 'condition'")
       }
     },
     gpca = {
@@ -631,18 +916,36 @@ run_one <- function(method,
     },
     cone_multi = {
       if (supervision != "none") stop("cone_multi uses supervision='none'")
-      manifoldalign::cone_align_multiple(
-        hd,
-        ref_idx = 1L,
-        preproc = multivarious::center(),
-        ncomp = ncomp,
-        sigma = 0.73,
-        lambda = 0.1,
-        solver = "linear",
-        max_iter = 30,
-        tol = 0.01,
-        knn = 10
-      )
+      cone_start <- if (is_open_set) min(as.integer(ncomp), 7L) else as.integer(ncomp)
+      cone_grid <- seq.int(from = cone_start, to = 2L, by = -1L)
+      cone_fit <- NULL
+      cone_err <- NULL
+      for (kc in cone_grid) {
+        fit_try <- tryCatch(
+          manifoldalign::cone_align_multiple(
+            hd,
+            ref_idx = 1L,
+            preproc = multivarious::center(),
+            ncomp = kc,
+            sigma = 0.73,
+            lambda = 0.1,
+            solver = "linear",
+            max_iter = 30,
+            tol = 0.01,
+            knn = 10
+          ),
+          error = function(e) e
+        )
+        if (!inherits(fit_try, "error")) {
+          cone_fit <- fit_try
+          break
+        }
+        cone_err <- fit_try
+      }
+      if (is.null(cone_fit)) {
+        stop(cone_err$message)
+      }
+      cone_fit
     },
     grasp_multi = {
       if (supervision != "none") stop("grasp_multi uses supervision='none'")
@@ -1016,6 +1319,7 @@ run_benchmark <- function(n_reps = 3L, ncomp = 8L, seed = 20260208L) {
     global_geo = c("id", "condition"),
     kema = c("id", "condition"),
     lra = c("id", "condition"),
+    ssma = c("id", "condition"),
     gpca = c("id", "condition"),
     uot = "none",
     uot_hks = "none",
@@ -1080,6 +1384,7 @@ run_benchmark <- function(n_reps = 3L, ncomp = 8L, seed = 20260208L) {
                 holdout_identity_mse = NA_real_,
                 geometry_spearman = NA_real_,
                 condition_knn_acc = NA_real_,
+                holdout_condition_knn_acc = NA_real_,
                 scenario = scenario_name,
                 rep = rep_id,
                 ok = FALSE,
@@ -1120,7 +1425,9 @@ summarize_benchmark <- function(results) {
       geometry_spearman_mean = mean(df$geometry_spearman, na.rm = TRUE),
       geometry_spearman_sd = stats::sd(df$geometry_spearman, na.rm = TRUE),
       condition_knn_acc_mean = mean(df$condition_knn_acc, na.rm = TRUE),
-      condition_knn_acc_sd = stats::sd(df$condition_knn_acc, na.rm = TRUE)
+      condition_knn_acc_sd = stats::sd(df$condition_knn_acc, na.rm = TRUE),
+      holdout_condition_knn_acc_mean = mean(df$holdout_condition_knn_acc, na.rm = TRUE),
+      holdout_condition_knn_acc_sd = stats::sd(df$holdout_condition_knn_acc, na.rm = TRUE)
     )
   })
   do.call(rbind, out)

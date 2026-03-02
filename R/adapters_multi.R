@@ -114,3 +114,26 @@ fit_many.spectral_mnn_aligner <- function(algo, domains, ...) {
   }
   stop("spectral_mnn_aligner: fit_many expects a hyperdesign or list of matrices.")
 }
+
+#' SSMA aligner (native multi-view)
+#'
+#' @return An object of class `c("ssma_aligner", "aligner")` representing
+#'   a semi-supervised manifold alignment (SSMA) algorithm descriptor.
+#' @examples
+#' algo <- ssma_aligner()
+#' aligner_capabilities(algo)
+#' @export
+ssma_aligner <- function() {
+  new_aligner("ssma", group = "GL", supports_multi = TRUE)
+}
+
+#' @export
+fit_many.ssma_aligner <- function(algo, domains, ...) {
+  if (inherits(domains, "hyperdesign")) {
+    return(ssma_align(domains, ...))
+  }
+  if (is.list(domains) && all(vapply(domains, is.matrix, logical(1)))) {
+    return(ssma_align(domains, ...))
+  }
+  stop("ssma_aligner: fit_many expects a hyperdesign or list of matrices.")
+}

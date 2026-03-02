@@ -314,3 +314,125 @@ test_that("benchmark_graph_alignment_methods runs (fpgw only)", {
   expect_equal(res$top1_accuracy, 1)
   expect_equal(res$coverage, 1)
 })
+
+test_that("benchmark_graph_alignment_methods runs (ssma only)", {
+  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("multivarious")
+  skip_if_not_installed("Matrix")
+
+  set.seed(3)
+  res <- benchmark_graph_alignment_methods(
+    sizes = 12L,
+    d = 3L,
+    noise_sd = 0.02,
+    structure = "ring",
+    n_reps = 1L,
+    n_anchors = 3L,
+    methods = "ssma",
+    ssma_solver = "reduced",
+    ssma_knn = 6L,
+    ssma_rank_per_domain = 8L,
+    verbose = FALSE
+  )
+
+  expect_s3_class(res, "data.frame")
+  expect_true(all(res$method == "ssma_align"))
+  expect_true(all(is.na(res$error)))
+  expect_true(all(is.finite(res$top1_accuracy)))
+  expect_true(all(is.finite(res$coverage)))
+})
+
+test_that("benchmark SSMA procrustes decode is opt-in", {
+  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("multivarious")
+  skip_if_not_installed("Matrix")
+  skip_if_not_installed("clue")
+
+  args <- list(
+    sizes = 12L,
+    d = 3L,
+    noise_sd = 0.02,
+    structure = "ring",
+    n_reps = 1L,
+    n_anchors = 4L,
+    methods = "ssma",
+    ssma_solver = "reduced",
+    ssma_knn = 6L,
+    ssma_rank_per_domain = 8L,
+    seed = 77L,
+    verbose = FALSE
+  )
+
+  res_nn <- do.call(
+    benchmark_graph_alignment_methods,
+    c(args, list(decode_mode = "common_nn", ssma_procrustes = FALSE))
+  )
+  res_lap_default <- do.call(
+    benchmark_graph_alignment_methods,
+    c(args, list(decode_mode = "common_procrustes_lap", ssma_procrustes = FALSE))
+  )
+  res_lap_optin <- do.call(
+    benchmark_graph_alignment_methods,
+    c(args, list(decode_mode = "common_procrustes_lap", ssma_procrustes = TRUE))
+  )
+
+  expect_equal(res_lap_default$top1_accuracy, res_nn$top1_accuracy)
+  expect_equal(res_lap_default$coverage, res_nn$coverage)
+  expect_true(all(is.finite(res_lap_optin$top1_accuracy)))
+  expect_true(all(is.finite(res_lap_optin$coverage)))
+})
+
+test_that("benchmark_graph_alignment_methods runs (lra only)", {
+  skip_if_not_installed("multivarious")
+  skip_if_not_installed("Matrix")
+  skip_if_not_installed("glmnet")
+  skip_if_not_installed("RSpectra")
+
+  set.seed(4)
+  res <- benchmark_graph_alignment_methods(
+    sizes = 12L,
+    d = 3L,
+    noise_sd = 0.02,
+    structure = "ring",
+    n_reps = 1L,
+    n_anchors = 3L,
+    methods = "lra",
+    lra_solver = "operator",
+    lra_lambda = 0.01,
+    lra_mu = 0.5,
+    verbose = FALSE
+  )
+
+  expect_s3_class(res, "data.frame")
+  expect_true(all(res$method == "lowrank_align"))
+  expect_true(all(is.na(res$error)))
+  expect_true(all(is.finite(res$top1_accuracy)))
+  expect_true(all(is.finite(res$coverage)))
+})
+
+test_that("benchmark_graph_alignment_methods runs (gpca only)", {
+  skip_if_not_installed("multivarious")
+  skip_if_not_installed("Matrix")
+  skip_if_not_installed("genpca")
+  skip_if_not_installed("PRIMME")
+
+  set.seed(5)
+  res <- benchmark_graph_alignment_methods(
+    sizes = 12L,
+    d = 3L,
+    noise_sd = 0.02,
+    structure = "ring",
+    n_reps = 1L,
+    n_anchors = 3L,
+    methods = "gpca",
+    gpca_u = 0.4,
+    gpca_lambda = 0.1,
+    verbose = FALSE
+  )
+
+  expect_s3_class(res, "data.frame")
+  expect_true(all(res$method == "gpca_align"))
+  expect_true(all(is.na(res$error)))
+  expect_true(all(is.finite(res$top1_accuracy)))
+  expect_true(all(is.finite(res$coverage)))
+})
