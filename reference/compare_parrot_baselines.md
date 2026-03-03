@@ -31,9 +31,9 @@ comparison <- compare_parrot_baselines(vdata)
 #> METHOD COMPARISON
 #> =================
 #>                          method      runtime top1_accuracy top5_accuracy
-#> parrot                   PARROT 0.2054741383     0.4333333             1
-#> feature_only       Feature-Only 0.0003035069     0.6666667            NA
-#> anchor_prop  Anchor-Propagation 0.0043668747     0.1666667            NA
+#> parrot                   PARROT 0.2079117298     0.4333333             1
+#> feature_only       Feature-Only 0.0003225803     0.6666667            NA
+#> anchor_prop  Anchor-Propagation 0.0044896603     0.1666667            NA
 #>                    mrr
 #> parrot       0.6777778
 #> feature_only        NA

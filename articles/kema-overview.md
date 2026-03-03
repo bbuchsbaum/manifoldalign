@@ -71,13 +71,13 @@ reg_fit <- kema(
 
 str(reg_fit, max.level = 1)
 #> List of 13
-#>  $ v            : num [1:12, 1:2] 0.1363 0.3086 0.4057 -0.6629 0.0448 ...
+#>  $ v            : num [1:12, 1:2] -0.1363 -0.3086 -0.4057 0.6629 -0.0448 ...
 #>  $ preproc      :List of 2
 #>   ..- attr(*, "class")= chr [1:2] "concat_pre_processor" "pre_processor"
 #>  $ s            :Formal class 'dgeMatrix' [package "Matrix"] with 4 slots
 #>  $ sdev         : num [1:2] 0.0126 0.2044
 #>  $ block_indices:List of 3
-#>  $ alpha        : num [1:240, 1:2] -0.03815 -0.15545 0.08751 -0.21601 0.00162 ...
+#>  $ alpha        : num [1:240, 1:2] 0.03815 0.15544 -0.0875 0.21601 -0.00167 ...
 #>  $ Ks           :List of 3
 #>  $ sample_frac  : num 1
 #>  $ dweight      : num 0.1
@@ -87,7 +87,7 @@ str(reg_fit, max.level = 1)
 #>  $ eigenvalues  :List of 3
 #>  $ retry_info   :List of 3
 #>  - attr(*, "class")= chr [1:5] "kema" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...
-#>  - attr(*, ".cache")=<environment: 0x5595fd70ce68>
+#>  - attr(*, ".cache")=<environment: 0x5650d4366218>
 ```
 
 ``` r
@@ -205,7 +205,7 @@ solution.
 
 ``` r
 subspace_similarity(exact_fit$s[, 1:2], rekema_fit$s[, 1:2])
-#> [1] 0.8987106 0.8294382
+#> [1] 0.8987104 0.8294390
 ```
 
 ## Scalable Mode (Operator-Based)
