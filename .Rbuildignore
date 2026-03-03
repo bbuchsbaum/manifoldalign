@@ -1,30 +1,47 @@
-^.*.Rproj$
-^.Rproj\.user$
-^experimental$
-^data-raw$
-^.git$
-^.gitignore$
-^README.Rmd$
-^README.md$
-^CLAUDE.md$
-^KEMA_TEST_STATUS.md$
-^ruleset.md$
-^repomix-output.xml$
-^repomix-output.txt$
-^TODO\.md$
-^TODO_PSEUDOLABELING_IMPROVEMENTS\.md$
-^dev-scripts$
-^docs$
-^examples$
-^METHOD_COMPARISON_TABLE\.md$
-^test_assessment\.md$
-^debug.*\.R$
-^test_.*\.R$
-^EXAMPLES_ADDED\.md$
-^PRD_MultiSetUOTAlign_V2_Gaps\.md$
-^check_docs\.R$
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.git$
+^\.gitignore$
+^\.github$
+^\.DS_Store$
 ^\.omc$
 ^\.claude$
-^\.DS_Store$
+
+# pkgdown
+^_pkgdown\.yml$
+^docs$
+
+# Development directories
+^experimental$
+^data-raw$
+^dev-scripts$
+^examples$
+^notes$
+
+# Development notes and docs
+^README\.Rmd$
+^README\.md$
+^CLAUDE\.md$
+^KEMA_TEST_STATUS\.md$
+^EXAMPLES_ADDED\.md$
+^METHOD_COMPARISON_TABLE\.md$
+^PRD_MultiSetUOTAlign_V2_Gaps\.md$
+^ms_diffusion\.md$
+^ruleset\.md$
+^test_assessment\.md$
+^TODO\.md$
+^TODO_PSEUDOLABELING_IMPROVEMENTS\.md$
+
+# Reference papers
+.*\.pdf$
+
+# Ad-hoc scripts
+^check_docs\.R$
+^debug.*\.R$
+^test_.*\.R$
+
+# Build artifacts
+^repomix-output\.xml$
+^repomix-output\.txt$
 ^manifoldalign\.Rcheck$
 ^manifoldalign_.*\.tar\.gz$

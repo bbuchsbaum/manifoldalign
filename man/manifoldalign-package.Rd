@@ -8,6 +8,15 @@
 \description{
 Internal package documentation and dynamic library registration.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://bbuchsbaum.github.io/manifoldalign/}
+  \item \url{https://github.com/bbuchsbaum/manifoldalign}
+  \item Report bugs at \url{https://github.com/bbuchsbaum/manifoldalign/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Brad Buchsbaum \email{brad.buchsbaum@gmail.com}
 

@@ -27,6 +27,7 @@ Imports:
     RANN,
     clue
 Suggests:
+    pkgdown,
     testthat (>= 3.0.0),
     FNN,
     ggplot2,
@@ -53,5 +54,7 @@ LinkingTo:
     Rcpp,
     RcppArmadillo,
     roptim
+URL: https://bbuchsbaum.github.io/manifoldalign/, https://github.com/bbuchsbaum/manifoldalign
+BugReports: https://github.com/bbuchsbaum/manifoldalign/issues
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr

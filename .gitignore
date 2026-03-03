@@ -21,9 +21,12 @@ Thumbs.db
 *~
 *.tmp
 *.bak
-.omc/
 
-# Documentation build artifacts  
+# Tooling
+.omc/
+.claude/
+
+# Documentation build artifacts
 docs/
 _site/
 inst/doc/
@@ -35,4 +38,27 @@ inst/doc/
 *.a
 
 # Log files
-*.log 
+*.log
+
+# Reference papers / PDFs (store elsewhere, not in repo)
+*.pdf
+
+# Development notes (not package documentation)
+notes/
+EXAMPLES_ADDED.md
+METHOD_COMPARISON_TABLE.md
+PRD_MultiSetUOTAlign_V2_Gaps.md
+ms_diffusion.md
+ruleset.md
+test_assessment.md
+check_docs.R
+KEMA_TEST_STATUS.md
+TODO.md
+TODO_PSEUDOLABELING_IMPROVEMENTS.md
+repomix-output.xml
+repomix-output.txt
+
+# Test strategy docs (not test code)
+tests/TESTING_GUIDE.md
+tests/TESTING_STRATEGY.md
+tests/testthat/COUPLED_DIAG_MATH_TESTS.md
