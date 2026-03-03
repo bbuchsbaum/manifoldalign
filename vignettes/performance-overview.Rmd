@@ -1,11 +1,21 @@
 ---
-title: "Alignment Method Performance Overview"
-author: "manifoldalign authors"
+title: Alignment Method Performance Overview
+author: manifoldalign authors
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Alignment Method Performance Overview}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: '%\VignetteIndexEntry{Alignment Method Performance Overview} %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}'
+params:
+  family: red
+  preset: homage
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+
 ---
 
 ```{r, include = FALSE}

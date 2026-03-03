@@ -1,10 +1,20 @@
 ---
-title: "Spectral Graph Alignment with grasp"
+title: Spectral Graph Alignment with grasp
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Spectral Graph Alignment with grasp}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: '%\VignetteIndexEntry{Spectral Graph Alignment with grasp} %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}'
+params:
+  family: red
+  preset: homage
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+
 ---
 
 ```{r, include = FALSE}
@@ -28,6 +38,7 @@ vignettes.
 ## Setup
 
 ```{r setup}
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(manifoldalign)
 library(multidesign)
 library(multivarious)

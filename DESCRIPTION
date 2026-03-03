@@ -58,3 +58,4 @@ URL: https://bbuchsbaum.github.io/manifoldalign/, https://github.com/bbuchsbaum/
 BugReports: https://github.com/bbuchsbaum/manifoldalign/issues
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
+Config/Needs/website: albersdown

@@ -1,10 +1,20 @@
 ---
-title: "Generalized PCA Alignment with gpca_align"
+title: Generalized PCA Alignment with gpca_align
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Generalized PCA Alignment with gpca_align}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: '%\VignetteIndexEntry{Generalized PCA Alignment with gpca_align} %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}'
+params:
+  family: red
+  preset: homage
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+
 ---
 
 ```{r, include = FALSE}
@@ -34,6 +44,7 @@ exploring your own data.
 ## Setup
 
 ```{r setup}
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(manifoldalign)
 library(multidesign)
 library(multivarious)

@@ -1,10 +1,20 @@
 ---
-title: "Multiset Manifold Alignment with mma_align_multiple"
+title: Multiset Manifold Alignment with mma_align_multiple
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Multiset Manifold Alignment with mma_align_multiple}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+vignette: '%\VignetteIndexEntry{Multiset Manifold Alignment with mma_align_multiple}
+  %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}'
+params:
+  family: red
+  preset: homage
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+
 ---
 
 ```{r, include = FALSE}
@@ -33,6 +43,7 @@ modes, and inspect diagnostics returned by `alignment_quality()`.
 ## Setup
 
 ```{r setup}
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(manifoldalign)
 library(multidesign)
 library(tibble)
