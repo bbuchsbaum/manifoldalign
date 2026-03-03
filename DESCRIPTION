@@ -58,7 +58,7 @@ BugReports: https://github.com/bbuchsbaum/manifoldalign/issues
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Remotes:
-    bbuchsbaum/graphweights,
+    neighborweights=bbuchsbaum/graphweights,
     bbuchsbaum/genpca,
     bbuchsbaum/multidesign,
     bbuchsbaum/albersdown
