@@ -22,11 +22,13 @@ includes:
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  eval = FALSE
+  eval = FALSE,
+  message = FALSE,
+  warning = FALSE
 )
 ```
 
-This vignette summarises the performance characteristics of the alignment algorithms implemented in **manifoldalign**. It expands upon the high-level comparison found in `METHOD_COMPARISON_TABLE.md`, with additional commentary on computational and memory demands, strengths, and limitations. The goal is to help practitioners choose an appropriate method for their data size, structure, and supervision level.
+This vignette summarises the performance characteristics of the alignment algorithms implemented in **manifoldalign**, with commentary on computational and memory demands, strengths, and limitations. The goal is to help practitioners choose an appropriate method for their data size, structure, and supervision level.
 
 ## Reading the tables
 
@@ -191,6 +193,3 @@ devtools::test_active_file("tests/testthat/test-toy-manifold-benchmarks.R")
 
 These benchmarks print progress messages and use reduced dataset sizes to keep runtime reasonable. Use them as a starting point for custom profiling in your environment.
 
----
-
-This vignette will evolve alongside the `METHOD_COMPARISON_TABLE.md` and test matrices. Contributions welcome—especially empirical measurements on real datasets and tips for tuning each method.

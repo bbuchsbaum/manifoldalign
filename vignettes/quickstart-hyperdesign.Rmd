@@ -1,7 +1,7 @@
 ---
-title: 'Quickstart: Building a hyperdesign and running KEMA/GPA'
+title: 'Quickstart: Building a hyperdesign and running alignments'
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{Quickstart: Building a hyperdesign and running KEMA/GPA}
+vignette: '%\VignetteIndexEntry{Quickstart: Building a hyperdesign and running alignments}
   %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}'
 params:
   family: red
@@ -17,40 +17,152 @@ includes:
 
 ---
 
-This short vignette shows how to construct a minimal `hyperdesign` from
-plain matrices and label vectors using `as_hyperdesign()`, then run
-KEMA and Generalized Procrustes (GPA) via `align_many()` with the
-native multi-view adapters.
-
-```r
-library(manifoldalign)
-set.seed(1)
-
-# Two domains with simple class labels
-X1 <- matrix(rnorm(200), 100, 2)
-X2 <- matrix(rnorm(200), 100, 2)
-y1 <- sample(c("A","B"), 100, TRUE)
-y2 <- sample(c("A","B"), 100, TRUE)
-
-# Build a minimal hyperdesign object (no multidesign dependency needed)
-hd <- as_hyperdesign(list(X1, X2), labels = list(y1, y2), label_name = "label",
-                     domain_names = c("d1","d2"))
-
-# KEMA (native multi-view)
-# Note: pass y as a bare symbol referring to the label column in each domain
-# (eval=FALSE to keep vignette fast)
-# res_kema <- align_many(hd, kema_aligner(), y = label, ncomp = 2)
-
-# GPA (Generalized Procrustes; native multi-view)
-# Here the label is interpreted as a task identifier per sample/column after
-# appropriate preprocessing inside GPA. For simple matrices, this quickstart
-# demonstrates the routing only. See ?generalized_procrustes for details.
-# res_gpa <- align_many(hd, gpa_aligner(), y = label, max_iter = 50)
-
-# For pairwise methods (e.g., PARROT or GRASP), use align_many() the same way,
-# and the driver will perform synchronization to a consensus.
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 6,
+  fig.height = 4
+)
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(albersdown::theme_albers(params$family))
+}
 ```
 
-Tip: For larger N, configure `graph="auto"` and `sync` options in
-`align_many()` to choose spectral permutation consensus, GL least-squares,
-or orthogonal rotation synchronization.
+You have data from multiple sources — different instruments, subjects, or
+conditions — and you want to project them into a shared space where samples
+from the same class land near each other regardless of origin. That is what
+**manifoldalign** does.
+
+This vignette gets you from raw matrices to an aligned embedding in under
+a minute.
+
+## Setup
+
+```{r setup}
+library(manifoldalign)
+library(multidesign)
+library(ggplot2)
+```
+
+## Create a hyperdesign
+
+A `hyperdesign` is the multi-domain container that every alignment function
+in the package accepts. You build one from a list of data matrices plus
+their associated design metadata.
+
+We will use the built-in `alignment_benchmark` dataset, which provides three
+domains with two latent classes and moderate domain-specific transformations.
+
+```{r build-hyperdesign}
+bench <- manifoldalign::alignment_benchmark
+
+domain_list <- lapply(bench$domains, function(dom) {
+  multidesign(dom$x, dom$design)
+})
+
+hd <- hyperdesign(domain_list)
+hd
+```
+
+Each domain has `r nrow(domain_list[[1]]$x)` samples and its own feature
+dimensionality. The `condition` column in each design frame holds the class
+labels.
+
+## Align with KEMA
+
+`kema()` projects all domains into a shared latent space using kernel
+manifold alignment. Pass the label column via `y` so the algorithm can
+build within- and between-class graphs.
+
+```{r run-kema}
+kema_fit <- kema(
+  hd,
+  y = condition,
+  ncomp = 2,
+  knn = 3,
+  sigma = 0.8,
+  solver = "regression",
+  preproc = multivarious::pass()
+)
+```
+
+The result contains aligned scores for all domains stacked row-wise.
+
+```{r plot-kema, echo = FALSE, fig.cap = "KEMA projects three domains into a shared 2D space. Points from the same class cluster together despite originating from different domains."}
+domain_names <- names(domain_list)
+domain_sizes <- vapply(domain_list, function(d) nrow(d$x), integer(1))
+
+scores <- as.data.frame(as.matrix(kema_fit$s)[, 1:2])
+colnames(scores) <- c("comp1", "comp2")
+scores$domain <- rep(domain_names, times = domain_sizes)
+scores$condition <- rep(bench$labels, length(domain_names))
+
+ggplot(scores, aes(comp1, comp2, colour = condition, shape = domain)) +
+  geom_point(size = 2.2, alpha = 0.85) +
+  labs(x = "Component 1", y = "Component 2")
+```
+
+Classes separate cleanly, and the three domains overlap — alignment is
+working.
+
+## Align with GPCA
+
+`gpca_align()` takes the same hyperdesign and produces a linear (non-kernel)
+shared embedding. It is faster than KEMA on large datasets where kernel
+matrices become expensive.
+
+```{r run-gpca}
+gpca_fit <- gpca_align(
+  hd,
+  y = condition,
+  ncomp = 2,
+  preproc = replicate(length(domain_list), multivarious::pass(), simplify = FALSE)
+)
+```
+
+```{r plot-gpca, echo = FALSE, fig.cap = "GPCA alignment: a linear alternative that scales better to high-dimensional data."}
+scores_gpca <- as.data.frame(as.matrix(gpca_fit$s)[, 1:2])
+colnames(scores_gpca) <- c("comp1", "comp2")
+scores_gpca$domain <- rep(domain_names, times = domain_sizes)
+scores_gpca$condition <- rep(bench$labels, length(domain_names))
+
+ggplot(scores_gpca, aes(comp1, comp2, colour = condition, shape = domain)) +
+  geom_point(size = 2.2, alpha = 0.85) +
+  labs(x = "Component 1", y = "Component 2")
+```
+
+## Building a hyperdesign from scratch
+
+If you don't have a packaged dataset, build one from plain matrices:
+
+```{r from-scratch}
+set.seed(42)
+X1 <- matrix(rnorm(80 * 5), 80, 5)
+X2 <- matrix(rnorm(80 * 3), 80, 3)
+labels <- rep(c("A", "B"), each = 40)
+
+hd_custom <- as_hyperdesign(
+  list(X1, X2),
+  labels = list(labels, labels),
+  label_name = "condition",
+  domain_names = c("source", "target")
+)
+
+hd_custom
+```
+
+This `hyperdesign` works with every alignment function in the package.
+
+## What's next?
+
+Each alignment method has its own vignette with deeper examples:
+
+- `vignette("kema-overview")` — full/regression/scalable KEMA solvers
+- `vignette("gpca-align")` — graph sparsification and label balancing
+- `vignette("cone-align")` — unsupervised graph alignment
+- `vignette("parrot-align")` — optimal transport with anchors
+- `vignette("fpgw_tutorial")` — fused partial Gromov-Wasserstein
+- `vignette("performance-overview")` — method comparison table

@@ -21,10 +21,15 @@ includes:
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
+  message = FALSE,
+  warning = FALSE,
   fig.width = 6,
   fig.height = 4,
   dev = "png"
 )
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(albersdown::theme_albers(params$family))
+}
 ```
 
 ## Overview
@@ -43,7 +48,6 @@ modes, and inspect diagnostics returned by `alignment_quality()`.
 ## Setup
 
 ```{r setup}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(manifoldalign)
 library(multidesign)
 library(tibble)

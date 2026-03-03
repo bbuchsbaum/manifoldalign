@@ -20,12 +20,16 @@ includes:
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
 )
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(albersdown::theme_albers(params$family))
+}
 ```
 
 ```{r setup}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(manifoldalign)
 library(multidesign)
 library(tibble)
@@ -213,21 +217,6 @@ You can use different distance metrics for within-domain distances:
 ```{r custom-metric}
 # Use Manhattan distance instead of Euclidean
 result_manhattan <- fpgw(hd, omega1 = 0.5, metric = "manhattan")
-```
-
-### Preprocessing
-
-Apply preprocessing to normalize features before alignment:
-
-```{r preprocessing}
-# Create preprocessing pipeline
-preproc <- multivarious::prep(
-  multivarious::center(),  # Center features
-  multivarious::scale()    # Scale to unit variance
-)
-
-# This would apply preprocessing if supported
-# result_preproc <- fpgw(hd, omega1 = 0.5, preproc = preproc)
 ```
 
 ## References

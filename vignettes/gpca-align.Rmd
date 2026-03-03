@@ -20,14 +20,39 @@ includes:
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
 )
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(albersdown::theme_albers(params$family))
+}
+
+zscore_columns <- function(mat) {
+  center <- sweep(mat, 2, colMeans(mat), "-")
+  sds <- sqrt(colMeans(center^2))
+  sds[sds == 0] <- 1
+  center / sds
+}
+
+rms_alignment <- function(scores, sizes, names) {
+  offsets <- c(0, cumsum(sizes))
+  idx <- setNames(vector("list", length(names)), names)
+  for (i in seq_along(names)) {
+    idx[[names[i]]] <- seq(offsets[i] + 1L, offsets[i + 1L])
+  }
+  purrr::map_dfr(combn(names, 2, simplify = FALSE), function(pair) {
+    mat_i <- scores[idx[[pair[1]]], , drop = FALSE]
+    mat_j <- scores[idx[[pair[2]]], , drop = FALSE]
+    tibble(domain_i = pair[1], domain_j = pair[2],
+           rms = sqrt(mean(rowSums((mat_i - mat_j)^2))))
+  })
+}
 ```
 
 ## Overview
 
-`gpca_align()` implements the Generalized PCA alignment described in
-`R/gpca_align.R`.  It constructs a coupled metric across domains and then solves
+`gpca_align()` implements Generalized PCA alignment.  It constructs a coupled metric across domains and then solves
 a generalized PCA problem to obtain a shared latent embedding.  The helper
 `gpca_align_control()` exposes safeguards for graph sparsification, label
 balancing and dense-matrix memory limits, making it practical on real data.
@@ -44,7 +69,6 @@ exploring your own data.
 ## Setup
 
 ```{r setup}
-if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) ggplot2::theme_set(albersdown::theme_albers(params$family))
 library(manifoldalign)
 library(multidesign)
 library(multivarious)
@@ -71,15 +95,6 @@ domain_names <- names(domain_list)
 domain_sizes <- vapply(domain_list, function(dom) nrow(dom$x), integer(1))
 ```
 
-```{r gpca-helpers}
-# Standardise columns while guarding against zero variance
-zscore_columns <- function(mat) {
-  center <- sweep(mat, 2, colMeans(mat), "-")
-  sds <- sqrt(colMeans(center^2))
-  sds[sds == 0] <- 1
-  center / sds
-}
-```
 
 When `data` is a `hyperdesign`, call `gpca_align()` and supply the label column
 name via the `y` argument.
@@ -100,26 +115,6 @@ str(gpca_fit, max.level = 1)
 ```
 
 ```{r gpca-metrics}
-# RMS alignment between domain pairs
-rms_alignment <- function(scores, sizes, names) {
-  offsets <- c(0, cumsum(sizes))
-  idx <- setNames(vector('list', length(names)), names)
-  for (i in seq_along(names)) {
-    idx[[names[i]]] <- seq(offsets[i] + 1L, offsets[i + 1L])
-  }
-  purrr::map_dfr(combn(names, 2, simplify = FALSE), function(pair) {
-    i_idx <- idx[[pair[1]]]
-    j_idx <- idx[[pair[2]]]
-    mat_i <- scores[i_idx, , drop = FALSE]
-    mat_j <- scores[j_idx, , drop = FALSE]
-    tibble(
-      domain_i = pair[1],
-      domain_j = pair[2],
-      rms = sqrt(mean(rowSums((mat_i - mat_j)^2)))
-    )
-  })
-}
-
 rms_alignment(as.matrix(gpca_fit$s), domain_sizes, domain_names)
 ```
 
