@@ -1,0 +1,89 @@
+# Generalized PCA Alignment for Hyperdesign Data
+
+Performs GPCA alignment on multi-domain data by constructing label-based
+similarity metrics and extracting aligned components via generalized
+eigenanalysis.
+
+## Usage
+
+``` r
+# S3 method for class 'hyperdesign'
+gpca_align(
+  data,
+  y,
+  preproc = center(),
+  ncomp = 2,
+  simfun = neighborweights::binary_label_matrix,
+  u = 0.5,
+  lambda = 0.1,
+  row_metric_scale = 1,
+  control = gpca_align_control(),
+  ...
+)
+```
+
+## Arguments
+
+- data:
+
+  A hyperdesign object containing multiple data domains
+
+- y:
+
+  Name of the label variable to use for alignment
+
+- preproc:
+
+  Preprocessing function to apply to the data (default \`center()\`)
+
+- ncomp:
+
+  Number of components to extract (default 2)
+
+- simfun:
+
+  Function to compute similarity between labels
+
+- u:
+
+  Trade-off parameter between within-domain and between-domain
+  similarity (0-1)
+
+- lambda:
+
+  Ridge regularisation added to the metric matrix
+
+- row_metric_scale:
+
+  Scaling applied to the assembled row metric before GPCA
+
+- control:
+
+  A list created by \[gpca_align_control()\] that tunes sparsification,
+  balancing, normalisation, and memory safeguards
+
+- ...:
+
+  Additional arguments passed to the method (unused).
+
+## Value
+
+A multiblock_biprojector object with aligned scores, loadings, and
+preprocessing info
+
+## Examples
+
+``` r
+# \donttest{
+library(multidesign)
+set.seed(1)
+X1 <- matrix(rnorm(40), 20, 2)
+X2 <- matrix(rnorm(40), 20, 2)
+labs <- factor(rep(c("A", "B"), each = 10))
+d1 <- list(x = X1, design = data.frame(label = labs))
+d2 <- list(x = X2, design = data.frame(label = labs))
+hd <- structure(list(d1, d2), class = "hyperdesign")
+result <- gpca_align(hd, y = label, ncomp = 2)
+#> Applying the same preprocessor to all 2 domains.
+# }
+```

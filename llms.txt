@@ -1,0 +1,457 @@
+# manifoldalign
+
+**manifoldalign** is an R package for aligning data from multiple
+domains into a shared latent space. It implements a broad family of
+manifold alignment and domain adaptation methods — from kernel-based and
+spectral approaches to optimal transport — preserving local manifold
+structure while matching samples across domains.
+
+## Alignment Methods
+
+| Method                 | Function                                                                                                                                                                                     | Description                                                       |
+|------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
+| **KEMA**               | [`kema()`](https://bbuchsbaum.github.io/manifoldalign/reference/kema.md)                                                                                                                     | Kernel Manifold Alignment with exact and regression-based solvers |
+| **GPCA**               | [`gpca_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/gpca_align.md)                                                                                                         | Generalized PCA alignment via shared subspace estimation          |
+| **GPA**                | [`generalized_procrustes()`](https://bbuchsbaum.github.io/manifoldalign/reference/generalized_procrustes.md)                                                                                 | Generalized Procrustes Analysis for partial observations          |
+| **CONE**               | [`cone_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/cone_align.md), [`cone_align_multiple()`](https://bbuchsbaum.github.io/manifoldalign/reference/cone_align_multiple.md) | Spectral graph alignment with anchor-based matching               |
+| **GRASP**              | [`grasp()`](https://bbuchsbaum.github.io/manifoldalign/reference/grasp.md), [`grasp_multiset()`](https://bbuchsbaum.github.io/manifoldalign/reference/grasp_multiset.md)                     | Graph Spectral alignment using structural descriptors             |
+| **PARROT**             | [`parrot()`](https://bbuchsbaum.github.io/manifoldalign/reference/parrot.md)                                                                                                                 | Position-Aware Regularized OT alignment                           |
+| **FPGW**               | [`fpgw()`](https://bbuchsbaum.github.io/manifoldalign/reference/fpgw.md)                                                                                                                     | Fused Partial Gromov-Wasserstein transport                        |
+| **Gromov-Wasserstein** | [`gromov_wasserstein()`](https://bbuchsbaum.github.io/manifoldalign/reference/gromov_wasserstein.md)                                                                                         | Structure-preserving optimal transport                            |
+| **Low-Rank**           | [`lowrank_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/lowrank_align.md)                                                                                                   | Memory-efficient alignment via low-rank factorization             |
+| **MMA**                | [`mma_align_multiple()`](https://bbuchsbaum.github.io/manifoldalign/reference/mma_align_multiple.md)                                                                                         | Multiset Manifold Alignment for \>2 domains                       |
+| **Coupled Diag.**      | [`coupled_diagonalization()`](https://bbuchsbaum.github.io/manifoldalign/reference/coupled_diagonalization.md)                                                                               | Joint diagonalization across modalities                           |
+| **Spectral MNN**       | [`spectral_mnn_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/spectral_mnn_align.md)                                                                                         | Mutual nearest neighbor spectral alignment                        |
+| **Token-OT Graph**     | [`token_ot_graph_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/token_ot_graph_align.md)                                                                                     | Token-level OT with graph structure                               |
+| **SSMA**               | [`ssma_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/ssma_align.md)                                                                                                         | Semi-Supervised Manifold Alignment                                |
+
+## Installation
+
+Install the development version from GitHub:
+
+``` r
+# install.packages("remotes")
+remotes::install_github("bbuchsbaum/manifoldalign")
+```
+
+## Quick Start
+
+``` r
+library(manifoldalign)
+
+# Create two domains with shared structure
+set.seed(1)
+X1 <- matrix(rnorm(100 * 20), 100, 20)
+X2 <- matrix(rnorm(80 * 15), 80, 15)
+labels1 <- rep(1:4, each = 25)
+labels2 <- rep(1:4, each = 20)
+
+# Build a hyperdesign (multi-domain container)
+hd <- as_hyperdesign(
+  list(X1, X2),
+  labels = list(labels1, labels2)
+)
+
+# Align with KEMA
+result <- kema(hd, ncomp = 5)
+
+# Or align with Generalized Procrustes
+result <- generalized_procrustes(hd, ncomp = 5)
+```
+
+## Unified Aligner Interface
+
+All pairwise alignment methods share a consistent adapter interface:
+
+``` r
+# Create an aligner
+aligner <- parrot_aligner(ncomp = 5)
+
+# Fit a pair of domains
+fit <- fit_pair(aligner, X1, X2, labels1, labels2)
+
+# Align many domains at once
+fit_many(aligner, list(X1, X2, X3), list(l1, l2, l3))
+```
+
+## Articles
+
+Detailed tutorials are available as package vignettes:
+
+- [Quickstart: Building a hyperdesign and running
+  KEMA/GPA](https://bbuchsbaum.github.io/manifoldalign/articles/quickstart-hyperdesign.html)
+- [Kernel Manifold Alignment with
+  KEMA](https://bbuchsbaum.github.io/manifoldalign/articles/kema-overview.html)
+- [Generalized PCA
+  Alignment](https://bbuchsbaum.github.io/manifoldalign/articles/gpca-align.html)
+- [Pairwise Graph Alignment with
+  CONE](https://bbuchsbaum.github.io/manifoldalign/articles/cone-align.html)
+- [Multi-Domain Graph Alignment with
+  CONE](https://bbuchsbaum.github.io/manifoldalign/articles/cone-align-multiple.html)
+- [Spectral Graph Alignment with
+  GRASP](https://bbuchsbaum.github.io/manifoldalign/articles/grasp-align.html)
+- [Position-Aware OT Alignment with
+  PARROT](https://bbuchsbaum.github.io/manifoldalign/articles/parrot-align.html)
+- [Fused-Partial
+  Gromov-Wasserstein](https://bbuchsbaum.github.io/manifoldalign/articles/fpgw_tutorial.html)
+- [Low-Rank
+  Alignment](https://bbuchsbaum.github.io/manifoldalign/articles/lowrank-align.html)
+- [Multiset Manifold
+  Alignment](https://bbuchsbaum.github.io/manifoldalign/articles/mma-align.html)
+- [Coupled
+  Diagonalization](https://bbuchsbaum.github.io/manifoldalign/articles/coupled-diagonalization.html)
+- [Performance
+  Overview](https://bbuchsbaum.github.io/manifoldalign/articles/performance-overview.html)
+
+## Documentation
+
+Full API reference and articles at
+<https://bbuchsbaum.github.io/manifoldalign/>.
+
+## License
+
+MIT
+
+## Albers theme
+
+This package uses the albersdown theme. Existing vignette theme hooks
+are replaced so `albers.css` and local `albers.js` render consistently
+on CRAN and GitHub Pages. The palette family is provided via
+`params$family` (default ‘red’). The pkgdown site uses
+`template: { package: albersdown }`.
+
+# Package index
+
+## All functions
+
+- [`Zt_times()`](https://bbuchsbaum.github.io/manifoldalign/reference/Zt_times.md)
+  : Apply Z^T to arbitrary multi-vectors without forming Z.
+- [`align_many()`](https://bbuchsbaum.github.io/manifoldalign/reference/align_many.md)
+  : Align multiple datasets by synchronizing pairwise transforms
+- [`aligner_capabilities()`](https://bbuchsbaum.github.io/manifoldalign/reference/aligner_capabilities.md)
+  : Capabilities for an aligner
+- [`alignment_benchmark`](https://bbuchsbaum.github.io/manifoldalign/reference/alignment_benchmark.md)
+  : Benchmark Data for Alignment Methods
+- [`alignment_quality()`](https://bbuchsbaum.github.io/manifoldalign/reference/alignment_quality.md)
+  : Alignment Quality Metrics
+- [`apply_transform()`](https://bbuchsbaum.github.io/manifoldalign/reference/apply_transform.md)
+  : Apply a transform to data
+- [`as.data.frame(`*`<pseudolabels>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/as.data.frame.pseudolabels.md)
+  : Convert pseudolabels to data.frame
+- [`as_hyperdesign()`](https://bbuchsbaum.github.io/manifoldalign/reference/as_hyperdesign.md)
+  : Construct a lightweight hyperdesign from matrices and labels
+- [`assess_ssma()`](https://bbuchsbaum.github.io/manifoldalign/reference/assess_ssma.md)
+  : Assess SSMA Alignment Quality on Synthetic Paired Domains
+- [`assign_pseudolabels()`](https://bbuchsbaum.github.io/manifoldalign/reference/assign_pseudolabels.md)
+  : Assign pseudolabels based on sparse similarity matrix clustering
+- [`benchmark_graph_alignment_methods()`](https://bbuchsbaum.github.io/manifoldalign/reference/benchmark_graph_alignment_methods.md)
+  : Benchmark graph alignment methods on synthetic permuted graphs
+- [`benchmark_parrot_scalability()`](https://bbuchsbaum.github.io/manifoldalign/reference/benchmark_parrot_scalability.md)
+  : Benchmark PARROT Scalability
+- [`benchmark_token_ot_graph_align_scalability()`](https://bbuchsbaum.github.io/manifoldalign/reference/benchmark_token_ot_graph_align_scalability.md)
+  : Benchmark token_ot_graph_align scalability on synthetic permuted
+  graphs
+- [`block_indices()`](https://bbuchsbaum.github.io/manifoldalign/reference/block_indices.md)
+  : Block indices for data list
+- [`choose_sigma()`](https://bbuchsbaum.github.io/manifoldalign/reference/choose_sigma.md)
+  : Choose optimal sigma for RBF kernel
+- [`coef(`*`<fpgw>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/coef.fpgw.md)
+  : Extract coefficients from FPGW
+- [`compare_parrot_baselines()`](https://bbuchsbaum.github.io/manifoldalign/reference/compare_parrot_baselines.md)
+  : Compare PARROT with Baseline Methods
+- [`compose_transform()`](https://bbuchsbaum.github.io/manifoldalign/reference/compose_transform.md)
+  : Compose two transforms (a-\>b and b-\>c)
+- [`compute_anchor_gradient_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_anchor_gradient_cpp.md)
+  : Compute anchor prior gradient
+- [`compute_diffusion_coordinates()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_diffusion_coordinates.md)
+  : Compute diffusion coordinates from a spectral basis
+- [`compute_diffusion_coordinates_from_adjacency()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_diffusion_coordinates_from_adjacency.md)
+  : Convenience: compute diffusion coordinates from an adjacency matrix
+- [`compute_edge_distances_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_edge_distances_cpp.md)
+  : Compute pairwise squared distances for connected nodes
+- [`compute_edge_gradient_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_edge_gradient_cpp.md)
+  : Compute edge consistency gradient
+- [`compute_graph_laplacian()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_graph_laplacian.md)
+  : Compute a (normalized) graph Laplacian from an adjacency matrix
+- [`compute_hks_descriptors()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_hks_descriptors.md)
+  : Compute Heat Kernel Signatures (HKS) from a spectral basis
+- [`compute_hks_from_adjacency()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_hks_from_adjacency.md)
+  : Convenience: compute HKS descriptors from an adjacency matrix
+- [`compute_laplacian_basis()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_laplacian_basis.md)
+  : Compute a Laplacian spectral basis (eigenpairs) from an adjacency
+  matrix
+- [`compute_neighborhood_gradient_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_neighborhood_gradient_cpp.md)
+  : Compute neighborhood consistency gradient
+- [`compute_parrot_cost_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_parrot_cost_cpp.md)
+  : Compute PARROT cost matrix
+- [`compute_rwr_vectorized_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_rwr_vectorized_cpp.md)
+  : Vectorized RWR computation
+- [`compute_squared_distances_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/compute_squared_distances_cpp.md)
+  : Compute squared Euclidean distance matrix
+- [`cone_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/cone_align.md)
+  : CONE-Align: Consensus Optimization for Node Embedding Alignment
+- [`cone_align_multiple()`](https://bbuchsbaum.github.io/manifoldalign/reference/cone_align_multiple.md)
+  : Multiple Graph CONE-Align: Consensus Optimization for Multi-Domain
+  Node Embedding Alignment
+- [`cone_multi_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/cone_multi_aligner.md)
+  : CONE-Align multiple aligner (native multi-view)
+- [`coskern()`](https://bbuchsbaum.github.io/manifoldalign/reference/coskern.md)
+  : Cosine kernel function
+- [`coupled_diagonalization()`](https://bbuchsbaum.github.io/manifoldalign/reference/coupled_diagonalization.md)
+  : Coupled Diagonalization for Multi-Modal Alignment
+- [`createSimFun()`](https://bbuchsbaum.github.io/manifoldalign/reference/createSimFun.md)
+  : Create a similarity function from a label similarity matrix
+- [`create_synthetic_similarity_matrix()`](https://bbuchsbaum.github.io/manifoldalign/reference/create_synthetic_similarity_matrix.md)
+  : Create synthetic similarity matrix for testing pseudolabeling
+- [`evaluate_parrot_accuracy()`](https://bbuchsbaum.github.io/manifoldalign/reference/evaluate_parrot_accuracy.md)
+  : Evaluate PARROT Alignment Accuracy
+- [`evaluate_pseudolabeling()`](https://bbuchsbaum.github.io/manifoldalign/reference/evaluate_pseudolabeling.md)
+  : Evaluate pseudolabeling performance against ground truth
+- [`fit_many()`](https://bbuchsbaum.github.io/manifoldalign/reference/fit_many.md)
+  : Native multi-domain entry point (optional)
+- [`fit_pair()`](https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.md)
+  : Fit a pairwise alignment model
+- [`fit_pair(`*`<grasp_aligner>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.grasp_aligner.md)
+  : Fit GRASP on a pair of domains
+- [`fit_pair(`*`<ot_procrustes_aligner>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.ot_procrustes_aligner.md)
+  : Fit OT-Procrustes on a pair of domains
+- [`fit_pair(`*`<parrot_aligner>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.parrot_aligner.md)
+  : Fit PARROT on a pair of domains
+- [`fit_pair(`*`<token_ot_graph_aligner>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.token_ot_graph_aligner.md)
+  : Fit Token-OT Graph alignment on a pair of domains
+- [`fitted(`*`<fpgw>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/fitted.fpgw.md)
+  : Extract fitted values
+- [`fpgw-methods`](https://bbuchsbaum.github.io/manifoldalign/reference/fpgw-methods.md)
+  : Additional methods for FPGW objects
+- [`fpgw()`](https://bbuchsbaum.github.io/manifoldalign/reference/fpgw.md)
+  : Fused-Partial Gromov-Wasserstein Distance
+- [`generalized_procrustes()`](https://bbuchsbaum.github.io/manifoldalign/reference/generalized_procrustes.md)
+  : Generalized Orthogonal Procrustes Alignment
+- [`generate_parrot_validation_data()`](https://bbuchsbaum.github.io/manifoldalign/reference/generate_parrot_validation_data.md)
+  : Generate Synthetic Network Alignment Data
+- [`generate_spiral_validation_data()`](https://bbuchsbaum.github.io/manifoldalign/reference/generate_spiral_validation_data.md)
+  : Generate Synthetic Two-Domain Spiral Data
+- [`get_parrot_use_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/get_parrot_use_cpp.md)
+  : Get whether to use Rcpp implementations in PARROT
+- [`global_geo_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/global_geo_align.md)
+  : Global-Geometry Multi-Dataset Alignment
+- [`global_geo_align_control()`](https://bbuchsbaum.github.io/manifoldalign/reference/global_geo_align_control.md)
+  : Control settings for \`global_geo_align.hyperdesign()\`
+- [`global_geo_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/global_geo_aligner.md)
+  : Global geometry aligner (native multi-view)
+- [`gpa_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/gpa_aligner.md)
+  : Generalized Procrustes aligner (native multi-view)
+- [`gpca_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/gpca_align.md)
+  : Generalized PCA Alignment
+- [`gpca_align(`*`<hyperdesign>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/gpca_align.hyperdesign.md)
+  : Generalized PCA Alignment for Hyperdesign Data
+- [`gpca_align_control()`](https://bbuchsbaum.github.io/manifoldalign/reference/gpca_align_control.md)
+  : Control settings for \`gpca_align.hyperdesign()\`
+- [`gram_Ld()`](https://bbuchsbaum.github.io/manifoldalign/reference/gram_Ld.md)
+  : Build Gram for between-class Laplacian using label factors.
+- [`gram_Ls()`](https://bbuchsbaum.github.io/manifoldalign/reference/gram_Ls.md)
+  : Build Gram for same-class Laplacian using label factors.
+- [`gram_ZZ()`](https://bbuchsbaum.github.io/manifoldalign/reference/gram_ZZ.md)
+  : Compute Z^T Z without forming Z explicitly.
+- [`gram_Z_A_Z()`](https://bbuchsbaum.github.io/manifoldalign/reference/gram_Z_A_Z.md)
+  : Generic helper for Z^T A Z using an operator.
+- [`gram_Z_diag_Z()`](https://bbuchsbaum.github.io/manifoldalign/reference/gram_Z_diag_Z.md)
+  : Fast path for diagonal A in Z^T A Z.
+- [`grasp()`](https://bbuchsbaum.github.io/manifoldalign/reference/grasp.md)
+  : Graph Alignment by Spectral Corresponding Functions (GRASP)
+- [`grasp_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/grasp_aligner.md)
+  : GRASP adapter for align_many()
+- [`grasp_multiset()`](https://bbuchsbaum.github.io/manifoldalign/reference/grasp_multiset.md)
+  : Multi-Graph GRASP: Graph Alignment by Spectral Corresponding
+  Functions
+- [`gromov_wasserstein()`](https://bbuchsbaum.github.io/manifoldalign/reference/gromov_wasserstein.md)
+  : Gromov-Wasserstein Distance
+- [`high_sim_pseudolabels()`](https://bbuchsbaum.github.io/manifoldalign/reference/high_sim_pseudolabels.md)
+  : High-similarity pseudolabels from multi-domain data
+- [`hks_time_grid()`](https://bbuchsbaum.github.io/manifoldalign/reference/hks_time_grid.md)
+  : Construct a diffusion-time grid for HKS/diffusion descriptors
+- [`invert_transform()`](https://bbuchsbaum.github.io/manifoldalign/reference/invert_transform.md)
+  : Invert a transform
+- [`kema()`](https://bbuchsbaum.github.io/manifoldalign/reference/kema.md)
+  : Kernel Manifold Alignment (KEMA)
+- [`kema_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/kema_aligner.md)
+  : Multi-view aligner adapters (native delegates)
+- [`latent_dim()`](https://bbuchsbaum.github.io/manifoldalign/reference/latent_dim.md)
+  : Latent dimension selected by the method (if applicable)
+- [`linear_sim_embed()`](https://bbuchsbaum.github.io/manifoldalign/reference/linear_sim_embed.md)
+  : Linear Similarity Embedding using Optimal Transport
+- [`lowrank_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/lowrank_align.md)
+  : Low-rank Alignment
+- [`make_Zop_from_Ks()`](https://bbuchsbaum.github.io/manifoldalign/reference/make_Zop_from_Ks.md)
+  : Build matrix-free operator for block-diagonal kernel matrix
+  constructed from pre-computed kernel blocks.
+- [`mma_align_multiple()`](https://bbuchsbaum.github.io/manifoldalign/reference/mma_align_multiple.md)
+  : Multiset Manifold Alignment (MMA)
+- [`mma_align_multiple(`*`<hyperdesign>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/mma_align_multiple.hyperdesign.md)
+  : Multiset Manifold Alignment (MMA)
+- [`multiscale_manifold_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/multiscale_manifold_align.md)
+  : Multiscale manifold alignment (Wang-Mahadevan style)
+- [`multiscale_manifold_align_control()`](https://bbuchsbaum.github.io/manifoldalign/reference/multiscale_manifold_align_control.md)
+  : Control settings for multiscale manifold alignment backends
+- [`multiset_uot_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/multiset_uot_align.md)
+  : Multi-subject UOT alignment to a shared template
+- [`multiset_uot_map()`](https://bbuchsbaum.github.io/manifoldalign/reference/multiset_uot_map.md)
+  : Map multiple subjects into template space from a multi-set fit
+- [`new_align_transform()`](https://bbuchsbaum.github.io/manifoldalign/reference/new_align_transform.md)
+  : Construct an alignment transform object
+- [`new_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/new_aligner.md)
+  : Generic alignment adapter interface and transform helpers
+- [`oos_predict()`](https://bbuchsbaum.github.io/manifoldalign/reference/oos_predict.md)
+  : Out-of-sample projection/prediction
+- [`ot_procrustes_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/ot_procrustes_aligner.md)
+  : OT + Procrustes aligner adapter for align_many()
+- [`pair_loss()`](https://bbuchsbaum.github.io/manifoldalign/reference/pair_loss.md)
+  : Pairwise loss (for weighting/diagnostics)
+- [`parrot()`](https://bbuchsbaum.github.io/manifoldalign/reference/parrot.md)
+  : Position-Aware Random Transport (PARROT) Network Alignment
+- [`parrot_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/parrot_aligner.md)
+  : PARROT adapter for align_many()
+- [`pivoted_chol_kernel_block()`](https://bbuchsbaum.github.io/manifoldalign/reference/pivoted_chol_kernel_block.md)
+  : Simple pivoted Cholesky kernel rank selection.
+- [`plot(`*`<fpgw>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/plot.fpgw.md)
+  : Plot method for FPGW
+- [`plot_cycle_consistency()`](https://bbuchsbaum.github.io/manifoldalign/reference/plot_cycle_consistency.md)
+  : Plot cycle-consistency residuals as a heatmap
+- [`plot_edge_residuals_heatmap()`](https://bbuchsbaum.github.io/manifoldalign/reference/plot_edge_residuals_heatmap.md)
+  : Plot edge residuals as a heatmap
+- [`predict(`*`<fpgw>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/predict.fpgw.md)
+  : Predict method for FPGW
+- [`predict(`*`<gromov_wasserstein>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/predict.gromov_wasserstein.md)
+  : Predict method for Gromov-Wasserstein
+- [`predict(`*`<simembed>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/predict.simembed.md)
+  : Predict Method for Similarity Embedding
+- [`print(`*`<fpgw>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/print.fpgw.md)
+  : Print Method for FPGW Objects
+- [`print(`*`<pseudolabels>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/print.pseudolabels.md)
+  : Print method for pseudolabels objects
+- [`print(`*`<simembed>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/print.simembed.md)
+  : Print Method for Similarity Embedding
+- [`profile_parrot_memory()`](https://bbuchsbaum.github.io/manifoldalign/reference/profile_parrot_memory.md)
+  : Profile PARROT Memory Usage
+- [`pseudolabeling`](https://bbuchsbaum.github.io/manifoldalign/reference/pseudolabeling.md)
+  : Pseudolabeling for Unsupervised Domain Adaptation
+- [`relative_transform()`](https://bbuchsbaum.github.io/manifoldalign/reference/relative_transform.md)
+  : Extract a relative transform from a pairwise fit
+- [`residuals(`*`<fpgw>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/residuals.fpgw.md)
+  : Extract residuals (not applicable for FPGW)
+- [`rotation_sync()`](https://bbuchsbaum.github.io/manifoldalign/reference/rotation_sync.md)
+  : Rotation synchronization for orthogonal group O(k)
+- [`run_kema_validation_suite()`](https://bbuchsbaum.github.io/manifoldalign/reference/run_kema_validation_suite.md)
+  : Comprehensive KEMA Numerical Validation
+- [`run_parrot_validation_suite()`](https://bbuchsbaum.github.io/manifoldalign/reference/run_parrot_validation_suite.md)
+  : Run PARROT Validation Suite
+- [`sinkhorn_unified()`](https://bbuchsbaum.github.io/manifoldalign/reference/sinkhorn_unified.md)
+  : Unified Sinkhorn algorithm with optional log-domain stabilization
+- [`sinkhorn_unified_potentials()`](https://bbuchsbaum.github.io/manifoldalign/reference/sinkhorn_unified_potentials.md)
+  : Unified Sinkhorn algorithm returning dual potentials for
+  warm-starting
+- [`solve_sylvester_rwr_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/solve_sylvester_rwr_cpp.md)
+  : Solve Sylvester equation for RWR cost
+- [`spectral_mnn_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/spectral_mnn_align.md)
+  : Spectral MNN Alignment
+- [`spectral_mnn_align_control()`](https://bbuchsbaum.github.io/manifoldalign/reference/spectral_mnn_align_control.md)
+  : Control settings for \`spectral_mnn_align()\`
+- [`spectral_mnn_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/spectral_mnn_aligner.md)
+  : Spectral MNN aligner (native multi-view)
+- [`ssma_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/ssma_align.md)
+  : Semi-Supervised Manifold Alignment (SSMA)
+- [`ssma_align_control()`](https://bbuchsbaum.github.io/manifoldalign/reference/ssma_align_control.md)
+  : Control settings for \`ssma_align()\`
+- [`ssma_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/ssma_aligner.md)
+  : SSMA aligner (native multi-view)
+- [`ssma_serial_control()`](https://bbuchsbaum.github.io/manifoldalign/reference/ssma_serial_control.md)
+  : Control settings for serial-correlation handling in SSMA graph
+  construction
+- [`structure_descriptors`](https://bbuchsbaum.github.io/manifoldalign/reference/structure_descriptors.md)
+  : Structural graph descriptors (HKS, diffusion coordinates)
+- [`summarize_bad_edges()`](https://bbuchsbaum.github.io/manifoldalign/reference/summarize_bad_edges.md)
+  : Summarize the worst edges by residual
+- [`summary(`*`<fpgw>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/summary.fpgw.md)
+  : Summary method for FPGW
+- [`summary(`*`<pseudolabels>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/summary.pseudolabels.md)
+  : Summary method for pseudolabels objects
+- [`token_ot_graph_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/token_ot_graph_align.md)
+  : Token-level Optimal Transport Graph Alignment
+- [`token_ot_graph_align_control()`](https://bbuchsbaum.github.io/manifoldalign/reference/token_ot_graph_align_control.md)
+  : Control settings for \`token_ot_graph_align()\`
+- [`token_ot_graph_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/token_ot_graph_aligner.md)
+  : Token-OT graph aligner adapter for align_many()
+- [`transform(`*`<fpgw>`*`)`](https://bbuchsbaum.github.io/manifoldalign/reference/transform.fpgw.md)
+  : Transform new data using FPGW alignment
+- [`uot_apply_map()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_apply_map.md)
+  : Apply a UOT coupling to map signals into template space
+- [`uot_apply_map_dense_mat_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_apply_map_dense_mat_cpp.md)
+  : Apply UOT coupling as a barycentric map (dense, matrix signal)
+- [`uot_apply_map_dense_vec_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_apply_map_dense_vec_cpp.md)
+  : Apply UOT coupling as a barycentric map (dense, vector signal)
+- [`uot_apply_map_sparse_mat_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_apply_map_sparse_mat_cpp.md)
+  : Apply UOT coupling as a barycentric map (sparse, matrix signal via
+  CSC)
+- [`uot_apply_map_sparse_vec_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_apply_map_sparse_vec_cpp.md)
+  : Apply UOT coupling as a barycentric map (sparse, vector signal)
+- [`uot_build_cost()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_build_cost.md)
+  : Build dense or sparse costs for multi-set UOT alignment
+- [`uot_build_sparse_cost_knn_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_build_sparse_cost_knn_cpp.md)
+  : Build a sparse cost graph from neighbour indices/distances (CSR+CSC)
+- [`uot_extract_coupling()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_extract_coupling.md)
+  : Extract a sparse coupling or mapping operator (dgCMatrix)
+- [`uot_extract_coupling_sparse_csc_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_extract_coupling_sparse_csc_cpp.md)
+  : Extract a sparse coupling / map operator from UOT dual potentials
+  (CSC)
+- [`uot_fit_pair()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_fit_pair.md)
+  : Fit a pairwise UOT alignment to a fixed template support
+- [`uot_kl_logpi2_meanF_dense_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_kl_logpi2_meanF_dense_cpp.md)
+  : Compute log second marginal and transported feature means (dense)
+- [`uot_kl_logpi2_meanF_sparse_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_kl_logpi2_meanF_sparse_cpp.md)
+  : Compute log second marginal and transported feature means (sparse
+  CSR)
+- [`uot_map()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_map.md)
+  : Map signals into template space using a \`uot_pair_fit\`
+- [`uot_operator()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_operator.md)
+  : Extract a reusable map/coupling operator from a \`uot_pair_fit\`
+- [`uot_ti_sinkhorn_kl()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_ti_sinkhorn_kl.md)
+  : Translation-invariant unbalanced OT (KL) via TI-Sinkhorn
+- [`uot_ti_sinkhorn_kl_dense_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_ti_sinkhorn_kl_dense_cpp.md)
+  : KL translation-invariant Sinkhorn (dense cost)
+- [`uot_ti_sinkhorn_kl_sparse_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_ti_sinkhorn_kl_sparse_cpp.md)
+  : KL translation-invariant Sinkhorn (sparse kNN cost)
+- [`uot_ti_sinkhorn_kl_sparse_csr_csc_cpp()`](https://bbuchsbaum.github.io/manifoldalign/reference/uot_ti_sinkhorn_kl_sparse_csr_csc_cpp.md)
+  : KL translation-invariant Sinkhorn (sparse CSR+CSC cost)
+- [`validate_kema_eigenvalues()`](https://bbuchsbaum.github.io/manifoldalign/reference/validate_kema_eigenvalues.md)
+  : Validate KEMA Eigenvalues Against Paper Specifications
+- [`validate_out_of_sample_reconstruction()`](https://bbuchsbaum.github.io/manifoldalign/reference/validate_out_of_sample_reconstruction.md)
+  : Test Out-of-Sample Reconstruction Accuracy
+
+# Articles
+
+### All vignettes
+
+- [Multi-Domain Graph Alignment with
+  cone_align_multiple](https://bbuchsbaum.github.io/manifoldalign/articles/cone-align-multiple.md):
+- [Pairwise Graph Alignment with
+  cone_align](https://bbuchsbaum.github.io/manifoldalign/articles/cone-align.md):
+- [Coupled Diagonalization across
+  Modalities](https://bbuchsbaum.github.io/manifoldalign/articles/coupled-diagonalization.md):
+- [Fused-Partial Gromov-Wasserstein for Domain
+  Alignment](https://bbuchsbaum.github.io/manifoldalign/articles/fpgw_tutorial.md):
+- [Generalized PCA Alignment with
+  gpca_align](https://bbuchsbaum.github.io/manifoldalign/articles/gpca-align.md):
+- [Spectral Graph Alignment with
+  grasp](https://bbuchsbaum.github.io/manifoldalign/articles/grasp-align.md):
+- [Kernel Manifold Alignment with
+  kema](https://bbuchsbaum.github.io/manifoldalign/articles/kema-overview.md):
+- [Low-Rank Alignment with
+  lowrank_align](https://bbuchsbaum.github.io/manifoldalign/articles/lowrank-align.md):
+- [Multiset Manifold Alignment with
+  mma_align_multiple](https://bbuchsbaum.github.io/manifoldalign/articles/mma-align.md):
+- [Position-Aware OT Alignment with
+  parrot](https://bbuchsbaum.github.io/manifoldalign/articles/parrot-align.md):
+- [Alignment Method Performance
+  Overview](https://bbuchsbaum.github.io/manifoldalign/articles/performance-overview.md):
+- [Quickstart: Building a hyperdesign and running
+  alignments](https://bbuchsbaum.github.io/manifoldalign/articles/quickstart-hyperdesign.md):

@@ -1,0 +1,51 @@
+# Alignment Quality Metrics
+
+Compute compact, label-free quality diagnostics for multiset alignment
+results. Supports mma_align_multiple in both reference and consensus
+modes.
+
+## Usage
+
+``` r
+alignment_quality(object)
+```
+
+## Arguments
+
+- object:
+
+  An alignment result, e.g. from `mma_align_multiple`
+
+## Value
+
+A list with fields: - mode: "reference" or "consensus" - per_domain:
+data.frame with per-domain metrics (n, mse, mse_soft, matched, coverage,
+mean_confidence, converged, iterations) - global: aggregate metrics
+(mse_weighted, mse_soft_weighted, K, ref_idx, mean_confidence,
+all_converged)
+
+## Details
+
+Metrics include per-domain mean squared alignment error under final
+assignments (if available) and a soft counterpart using posteriors. For
+reference mode, errors are measured to the reference domain; for
+consensus mode, errors are measured to the consensus centers.
+
+## Examples
+
+``` r
+# \donttest{
+# Simulate three domains with shared structure
+set.seed(42)
+X1 <- matrix(rnorm(100), 50, 2)
+X2 <- matrix(rnorm(100), 50, 2)
+X3 <- matrix(rnorm(100), 50, 2)
+
+# Create hyperdesign object
+hd <- as_hyperdesign(list(X1, X2, X3))
+
+# Perform alignment (requires mma_align_multiple)
+# result <- mma_align_multiple(hd, ncomp = 2)
+# quality <- alignment_quality(result)
+# }
+```

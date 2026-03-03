@@ -1,0 +1,20 @@
+pandoc: 3.1.11
+pkgdown: 2.2.0
+pkgdown_sha: ~
+articles:
+  cone-align-multiple: cone-align-multiple.html
+  cone-align: cone-align.html
+  coupled-diagonalization: coupled-diagonalization.html
+  fpgw_tutorial: fpgw_tutorial.html
+  gpca-align: gpca-align.html
+  grasp-align: grasp-align.html
+  kema-overview: kema-overview.html
+  lowrank-align: lowrank-align.html
+  mma-align: mma-align.html
+  parrot-align: parrot-align.html
+  performance-overview: performance-overview.html
+  quickstart-hyperdesign: quickstart-hyperdesign.html
+last_built: 2026-03-03T12:19Z
+urls:
+  reference: https://bbuchsbaum.github.io/manifoldalign/reference
+  article: https://bbuchsbaum.github.io/manifoldalign/articles

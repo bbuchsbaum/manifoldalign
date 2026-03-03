@@ -1,0 +1,325 @@
+# CONE-Align: Consensus Optimization for Node Embedding Alignment
+
+Performs CONE-Align on hyperdesign data structures. Aligns graph
+embeddings by alternating between orthogonal transformations and node
+assignments.
+
+Performs CONE-Align on hyperdesign data structures. Aligns graph
+embeddings by alternating between orthogonal transformations and node
+assignments.
+
+Performs CONE-Align on hyperdesign data structures containing graph
+domains.
+
+Performs CONE-Align on a list containing exactly two feature matrices.
+This provides a simplified interface for direct matrix input without
+requiring hyperdesign object construction.
+
+## Usage
+
+``` r
+cone_align(data, ...)
+
+cone_align(data, ...)
+
+# S3 method for class 'hyperdesign'
+cone_align(
+  data,
+  anchors = NULL,
+  preproc = center(),
+  ncomp = 10,
+  sigma = 0.73,
+  lambda = 0.1,
+  use_laplacian = TRUE,
+  solver = c("linear", "auction"),
+  max_iter = 30,
+  tol = 0.01,
+  knn = NULL,
+  ...
+)
+
+# S3 method for class 'list'
+cone_align(
+  data,
+  preproc = center(),
+  ncomp = 10,
+  sigma = 0.73,
+  lambda = 0.1,
+  use_laplacian = TRUE,
+  solver = c("linear", "auction"),
+  max_iter = 30,
+  tol = 0.01,
+  knn = NULL,
+  ...
+)
+
+# Default S3 method
+cone_align(data, ...)
+```
+
+## Arguments
+
+- data:
+
+  A list containing exactly two matrices representing node features for
+  each graph domain. Each matrix should have format: nodes x features.
+
+- ...:
+
+  Additional arguments (currently unused)
+
+- anchors:
+
+  Optional anchor information for semi-supervised alignment. For
+  hyperdesign inputs, use an unquoted column name in each domain's
+  design table. For list inputs, anchors are currently ignored.
+
+- preproc:
+
+  Preprocessing function to apply to the data (default: center())
+
+- ncomp:
+
+  Number of embedding dimensions (default: 10)
+
+- sigma:
+
+  Diffusion parameter for graph construction (default: 0.73)
+
+- lambda:
+
+  Regularization parameter for numerical stability (default: 0.1)
+
+- use_laplacian:
+
+  Whether to use Laplacian normalization (default: TRUE)
+
+- solver:
+
+  Assignment algorithm: "linear" for exact assignment (default),
+  "auction" for large-scale approximation
+
+- max_iter:
+
+  Maximum number of iterations (default: 30)
+
+- tol:
+
+  Convergence tolerance for assignment changes (default: 0.01)
+
+- knn:
+
+  Number of nearest neighbors for graph construction (default: adaptive)
+
+## Value
+
+A `multiblock_biprojector` object containing:
+
+- `s`: Aligned embeddings for all nodes
+
+- `v`: Primal vectors for out-of-sample projection
+
+- `assignment`: Node-to-node correspondence assignments
+
+- `rotation`: Orthogonal transformation matrices
+
+- `sdev`: Standard deviations of aligned components
+
+- Additional metadata for reconstruction and validation
+
+A `multiblock_biprojector` object containing:
+
+- `s`: Aligned embeddings for all nodes
+
+- `v`: Primal vectors for out-of-sample projection
+
+- `assignment`: Node-to-node correspondence assignments
+
+- `rotation`: Orthogonal transformation matrices
+
+- `sdev`: Standard deviations of aligned components
+
+- Additional metadata for reconstruction and validation
+
+A multiblock_biprojector object containing the CONE-Align results
+
+A multiblock_biprojector object containing the CONE-Align results
+
+## Details
+
+CONE-Align tackles graph alignment by iteratively refining both
+orthogonal transformations and node-to-node correspondences. The
+algorithm alternates between two steps: (1) finding optimal orthogonal
+rotations given current assignments via Procrustes analysis, and (2)
+updating assignments given current transformations via linear
+assignment.
+
+CONE-Align operates through the following algorithmic blocks:
+
+- **Spectral Embedding**: Compute Laplacian eigenmaps for each graph
+
+- **Orthogonal Alignment**: Find rotation matrices via Procrustes
+  analysis
+
+- **Assignment Update**: Solve linear assignment problem for
+  correspondences
+
+- **Convergence Check**: Iterate until assignments stabilize
+
+The algorithm minimizes the objective: \$\$\sum\_{i,j} \|\|Q_i^T Z_i -
+P\_{ij} Q_j^T Z_j\|\|\_F^2\$\$
+
+where \\Z_i\\ are the embeddings, \\Q_i\\ are orthogonal transforms, and
+\\P\_{ij}\\ are permutation matrices.
+
+Key parameters:
+
+- `ncomp`: Dimension of spectral embeddings
+
+- `sigma`: Bandwidth for embedding computation
+
+- `lambda`: Regularization for numerical stability
+
+- `solver`: Assignment algorithm ("linear" or "auction")
+
+CONE-Align tackles graph alignment by iteratively refining both
+orthogonal transformations and node-to-node correspondences. The
+algorithm alternates between two steps: (1) finding optimal orthogonal
+rotations given current assignments via Procrustes analysis, and (2)
+updating assignments given current transformations via linear
+assignment.
+
+CONE-Align operates through the following algorithmic blocks:
+
+- **Spectral Embedding**: Compute Laplacian eigenmaps for each graph
+
+- **Orthogonal Alignment**: Find rotation matrices via Procrustes
+  analysis
+
+- **Assignment Update**: Solve linear assignment problem for
+  correspondences
+
+- **Convergence Check**: Iterate until assignments stabilize
+
+The algorithm minimizes the objective: \$\$\sum\_{i,j} \|\|Q_i^T Z_i -
+P\_{ij} Q_j^T Z_j\|\|\_F^2\$\$
+
+where \\Z_i\\ are the embeddings, \\Q_i\\ are orthogonal transforms, and
+\\P\_{ij}\\ are permutation matrices.
+
+Currently supports \*exactly two\* domains. For multi-graph alignment
+with three or more domains, see
+[`cone_align_multiple`](https://bbuchsbaum.github.io/manifoldalign/reference/cone_align_multiple.md).
+
+Key parameters:
+
+- `ncomp`: Dimension of spectral embeddings
+
+- `sigma`: Bandwidth for embedding computation
+
+- `lambda`: Regularization for numerical stability
+
+- `solver`: Assignment algorithm ("linear" or "auction")
+
+- `knn`: Number of nearest neighbors for graph construction
+
+## References
+
+Heimann, M., Shen, H., Safavi, T., & Koutra, D. (2018). REGAL:
+Representation learning-based graph alignment. In Proceedings of the
+27th ACM International Conference on Information and Knowledge
+Management (pp. 117-126).
+
+Heimann, M., Shen, H., Safavi, T., & Koutra, D. (2018). REGAL:
+Representation learning-based graph alignment. In Proceedings of the
+27th ACM International Conference on Information and Knowledge
+Management (pp. 117-126).
+
+## See also
+
+`cone_align.hyperdesign`
+
+`cone_align.hyperdesign`
+
+## Examples
+
+``` r
+# \donttest{
+# Example with hyperdesign graph data
+
+# Create synthetic graph domains
+set.seed(123)
+domain1 <- list(
+  x = matrix(rnorm(100), 50, 2),  # Node features
+  design = data.frame(node_id = 1:50)
+)
+domain2 <- list(
+  x = matrix(rnorm(100), 50, 2),
+  design = data.frame(node_id = 1:50)  
+)
+
+# Create hyperdesign
+hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign")
+
+# Run CONE-Align with default parameters
+result <- cone_align(hd, ncomp = 10)
+#> Converged after 5 iterations.
+
+# Access alignment results
+node_assignment <- result$assignment
+aligned_embeddings <- result$s
+
+# Use exact solver for optimal results
+result_exact <- cone_align(hd, ncomp = 10, solver = "linear")
+#> Converged after 5 iterations.
+# }
+
+# \donttest{
+# Example with hyperdesign graph data
+library(multidesign)
+library(tibble)
+
+# Create synthetic graph domains (node coordinates for graph construction)
+set.seed(123)
+X1 <- matrix(rnorm(100), 50, 2)  # Node coordinates for domain 1
+X2 <- matrix(rnorm(100), 50, 2)  # Node coordinates for domain 2
+
+# Create design data frames with node indices (CONE-Align doesn't use features)
+design1 <- tibble(node_id = 1:50)
+design2 <- tibble(node_id = 1:50)
+
+# Create multidesign objects
+md1 <- multidesign(X1, design1)
+md2 <- multidesign(X2, design2)
+
+# Create hyperdesign from multidesign objects
+hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
+
+# Run CONE-Align (purely spectral, uses graph structure from X)
+result <- cone_align(hd, ncomp = 10)
+#> Converged after 5 iterations.
+
+# Access alignment results
+node_assignment <- result$assignment
+aligned_embeddings <- result$s
+
+# Use exact solver for optimal results
+result_exact <- cone_align(hd, ncomp = 10, solver = "linear")
+#> Converged after 5 iterations.
+# }
+
+# \donttest{
+# Simple example with two feature matrices
+set.seed(123)
+X1 <- matrix(rnorm(100), 50, 2)  # 50 nodes, 2 features
+X2 <- matrix(rnorm(100), 50, 2)  # 50 nodes, 2 features
+
+# Run CONE-Align directly on matrices
+result <- cone_align(list(X1, X2), ncomp = 5)
+#> Converged after 4 iterations.
+
+# Access results
+assignments <- result$assignment
+embeddings <- result$s
+# }
+```
