@@ -38,20 +38,20 @@ results <- benchmark_parrot_scalability(sizes = c(20, 50), n_reps = 2)
 #> Benchmarking PARROT scalability...
 #> 
 #> Testing n=20 nodes:
-#>   Rep 1/2... 0.38s
-#>   Rep 2/2... 0.33s
+#>   Rep 1/2... 0.37s
+#>   Rep 2/2... 0.32s
 #> 
 #> Testing n=50 nodes:
-#>   Rep 1/2... 0.32s
-#>   Rep 2/2... 0.32s
+#>   Rep 1/2... 0.31s
+#>   Rep 2/2... 0.31s
 #> 
 #> 
 #> SCALABILITY SUMMARY
 #> ===================
 #>   n_nodes total_time.mean total_time.sd
-#> 1      20     0.357855916   0.035356654
-#> 2      50     0.322767377   0.002981468
+#> 1      20     0.346880436   0.035162610
+#> 2      50     0.308369875   0.002536903
 #> 
-#> Estimated complexity: O(n^-0.11)
+#> Estimated complexity: O(n^-0.13)
 # }
 ```

@@ -43,11 +43,6 @@ md2 <- multidesign(X2, design2)
 hd <- hyperdesign(list(d1 = md1, d2 = md2))
 algo <- kema_aligner()
 result <- fit_many(algo, hd, y = labels, ncomp = 2)
-#> Semi-supervised KEMA: 60 labeled samples, 0 unlabeled samples
-#> Auto-selected sigma = 1.1419 using median distance heuristic
-#> Using RBF kernel with auto-tuned sigma
-#> normalize_laplacian(): 60 isolated nodes detected - treating as disconnected components.
-#> Warning: Regression solver produced poor results (subspace angle: 35.4 deg, best match: 0.759). Automatically retrying with solver='exact' for higher fidelity.
-#> Retry with exact solver completed successfully.
+#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.946, max_B_orth_offdiag=4.32e-10
 # }
 ```

@@ -30,6 +30,8 @@ kema(
   sample_frac = 1,
   use_laplacian = TRUE,
   solver = "regression",
+  backend = "auto",
+  backend_control = NULL,
   dweight = 0.1,
   rweight = 0,
   simfun = neighborweights::binary_label_matrix,
@@ -52,6 +54,8 @@ kema(
   sample_frac = 1,
   use_laplacian = TRUE,
   solver = "regression",
+  backend = "auto",
+  backend_control = NULL,
   dweight = 0.1,
   rweight = 0,
   simfun = neighborweights::binary_label_matrix,
@@ -115,28 +119,39 @@ kema(data, ...)
 
 - use_laplacian:
 
-  Whether to use Laplacian normalization (default: TRUE)
+  Deprecated compatibility argument; ignored.
 
 - solver:
 
-  Solver method: "regression" for fast approximation (default) or
-  "exact" for precise solution
+  Deprecated compatibility argument; accepted values are
+  \`"regression"\` and \`"exact"\`, but both currently route to the
+  original KEMA solver.
+
+- backend:
+
+  Backend for the original eigensolver. One of \`"auto"\`,
+  \`"full_exact"\`, \`"reduced_exact"\`, or \`"operator_exact"\`.
+
+- backend_control:
+
+  Optional list controlling auto backend thresholds and fidelity checks
+  (passed through to \`kema_orig()\`).
 
 - dweight:
 
-  Weight for dissimilarity/repulsion terms (default: 0.1)
+  Deprecated compatibility argument; ignored.
 
 - rweight:
 
-  Weight for repulsion graph (default: 0)
+  Deprecated compatibility argument; ignored.
 
 - simfun:
 
-  Function to compute similarity between labels
+  Deprecated compatibility argument; ignored.
 
 - disfun:
 
-  Function to compute dissimilarity between labels (optional)
+  Deprecated compatibility argument; ignored.
 
 - lambda:
 
@@ -144,9 +159,7 @@ kema(data, ...)
 
 - centre_kernel:
 
-  Whether to center kernel matrices (default: FALSE).
-  \*\*\[EXTENSION\]\*\* The original paper uses uncentered kernels. Set
-  TRUE for centered variant.
+  Deprecated compatibility argument; ignored.
 
 ## Value
 
@@ -173,65 +186,22 @@ representation that preserves both the intrinsic geometry of each domain
 and the class structure across domains. It supports semi-supervised
 learning with missing labels (NA values).
 
-The algorithm offers two solver methods: - "regression": Fast
-approximation using spectral regression (default). This method first
-solves the eigenvalue problem on graph Laplacians, then uses ridge
-regression to find kernel coefficients. It's much faster but may be less
-accurate for non-linear kernels. - "exact": Precise solution using the
-correct generalized eigenvalue formulation. This method solves the
-mathematically correct KEMA optimization problem but is more
-computationally intensive, especially for large datasets.
+Current behavior routes \`kema()\` to a paper-faithful implementation
+(\`kema_orig\`) of the original Tuia & Camps-Valls generalized
+eigenproblems. Legacy extension arguments are still accepted for
+compatibility.
 
-KEMA solves the following optimization problem: \$\$\max\_{\alpha}
-\frac{\alpha^T K A K^T \alpha}{\alpha^T K B K^T \alpha}\$\$
+KEMA solves the original paper objective: \$\$K(L+\mu L_s)K\Lambda =
+\lambda K L_d K\Lambda\$\$ and its reduced-rank REKEMA counterpart when
+\`sample_frac \< 1\`.
 
-where:
+\`kema()\` now delegates to the paper-faithful \`kema_orig()\` backend
+and solves the original generalized eigenproblems from Tuia &
+Camps-Valls (2016), including the reduced-rank REKEMA form when
+\`sample_frac \< 1\`.
 
-- `A = u*L + (1-u)*Ls` captures manifold structure (L) and same-class
-  alignment (Ls)
-
-- `B = rweight*Lr + dweight*Ld + lambda*I` captures class separation and
-  regularization
-
-- `K` is the block-diagonal kernel matrix across domains
-
-The trade-off parameter `u` controls the balance between preserving
-manifold geometry and enforcing class alignment. The solver parameter
-determines the computational approach:
-
-- "regression": Fast two-step approximation (eigendecomposition + ridge
-  regression)
-
-- "exact": Direct solution of the generalized eigenvalue problem
-
-For large datasets, use `sample_frac < 1` to enable REKEMA, which uses
-landmark points to reduce computational complexity from O(n^2) to O(r^2)
-where r is the number of landmarks.
-
-This implementation follows the Tuia & Camps-Valls (2016) paper with
-extensions:
-
-\*\*Core KEMA (from paper):\*\* - Generalized eigenvalue problem:
-Phi(L+mu\*Ls)Phi^T\*v = lambda \* Phi\*Ld\*Phi^T\*v (Eq. 4) -
-Kernelization: K(L+mu\*Ls)K\*Lambda = lambda \* K\*Ld\*K \* Lambda (Eq.
-6) - Reduced-rank KEMA (REKEMA) for computational efficiency -
-Matrix-free eigensolver with Jacobi preconditioning
-
-\*\*Extensions (not in original paper):\*\* - `solver="regression"`:
-Fast spectral regression approximation (default) - `rweight`: Additional
-repulsion graph Lr for within-domain separation - Semi-supervised
-support: Handles NA labels for unlabeled samples - Enhanced numerical
-stability and error handling
-
-The algorithm offers two solver methods: - "regression":
-\*\*\[EXTENSION\]\*\* Fast approximation using spectral regression
-(default). This method first solves the eigenvalue problem on graph
-Laplacians, then uses ridge regression to find kernel coefficients. Much
-faster but may be less accurate for non-linear kernels. - "exact":
-Precise solution using the correct generalized eigenvalue formulation
-from the paper. This method solves the mathematically correct KEMA
-optimization problem but is more computationally intensive, especially
-for large datasets.
+Legacy extension arguments remain in the API for backward compatibility
+but are ignored by the current implementation.
 
 ## References
 
@@ -284,52 +254,23 @@ hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
 
 # Run KEMA with default settings
 result <- kema(hd, y = labels, ncomp = 2, knn = 3)
-#> Semi-supervised KEMA: 40 labeled samples, 0 unlabeled samples
-#> Auto-selected sigma = 1.1158 using median distance heuristic
-#> Using RBF kernel with auto-tuned sigma
-#> normalize_laplacian(): 40 isolated nodes detected - treating as disconnected components.
-#> Warning: Regression solver produced poor results (subspace angle: 19.6 deg, best match: 0.801). Automatically retrying with solver='exact' for higher fidelity.
-#> Retry with exact solver completed successfully.
+#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=1, max_B_orth_offdiag=5.63e-11
 
 # Semi-supervised learning with missing labels
 design1$labels[1:4] <- NA  # Mark a few samples as unlabeled
 md1_semi <- multidesign(X1, design1)
 hd_semi <- hyperdesign(list(domain1 = md1_semi, domain2 = md2))
 result_semi <- kema(hd_semi, y = labels, ncomp = 2)
-#> Semi-supervised KEMA: 36 labeled samples, 4 unlabeled samples
-#> Auto-selected sigma = 1.1417 using median distance heuristic
-#> Using RBF kernel with auto-tuned sigma
-#> Warning: class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.
-#> normalize_laplacian(): 4 isolated nodes detected - treating as disconnected components.
-#> normalize_laplacian(): 40 isolated nodes detected - treating as disconnected components.
-#> Warning: Regression solver produced poor results (subspace angle: 14.9 deg, best match: 0.95). Automatically retrying with solver='exact' for higher fidelity.
-#> Retry with exact solver completed successfully.
+#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=1, max_B_orth_offdiag=6.7e-11
 
 # Use exact solver for highest accuracy
 result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)
-#> Semi-supervised KEMA: 40 labeled samples, 0 unlabeled samples
-#> Auto-selected sigma = 1.1558 using median distance heuristic
-#> Using RBF kernel with auto-tuned sigma
-#> normalize_laplacian(): 40 isolated nodes detected - treating as disconnected components.
+#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.0252, max_B_orth_offdiag=1.15e-10
 
 # Use REKEMA for large datasets
 result_rekema <- kema(hd, y = labels, sample_frac = 0.5, ncomp = 2)
-#> Semi-supervised KEMA: 40 labeled samples, 0 unlabeled samples
-#> Auto-selected sigma = 1.1287 using median distance heuristic
-#> Using RBF kernel with auto-tuned sigma
 #> REKEMA block 1: 20 x 10 kernel matrix
 #> REKEMA block 2: 20 x 10 kernel matrix
-#> normalize_laplacian(): 40 isolated nodes detected - treating as disconnected components.
-#> Warning: REKEMA regression approximation fidelity is below target:
-#>   Best component match: 0.479
-#>   Subspace angle (deg): 40.4
-#>   Samples: 40, Kernel rank: 20
-#> Consider using solver='exact' or increasing sample_frac.
-#> Warning: Regression solver produced poor results (subspace angle: 40.4 deg, best match: 0.479). Automatically retrying with solver='exact' for higher fidelity.
-#> REKEMA: Solving reduced 20 x 20 eigenvalue problem instead of 40 x 40
-#> REKEMA: Scaling lambda from 1e-04 to 2e-04 (factor: 2) to maintain regularization energy
-#> REKEMA: Added regularization to ill-conditioned B matrix
-#> Retry with exact solver completed successfully.
 # }
 
 # \donttest{
@@ -354,24 +295,13 @@ md <- multidesign(X, data_design)
 
 # Run KEMA alignment across subjects
 result <- kema(md, y = condition, subject = subject, ncomp = 2)
-#> Semi-supervised KEMA: 80 labeled samples, 0 unlabeled samples
-#> normalize_laplacian(): 80 isolated nodes detected - treating as disconnected components.
-#> Warning: Regression solver produced poor results (subspace angle: 80.2 deg, best match: 0.602). Automatically retrying with solver='exact' for higher fidelity.
-#> Retry with exact solver completed successfully.
+#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.00307, max_B_orth_offdiag=1.01e-12
 
 # Semi-supervised learning with missing labels
 data_design$condition[sample(nrow(data_design), 20)] <- NA
 md_semi <- multidesign(X, data_design)
 result_semi <- kema(md_semi, y = condition, subject = subject, ncomp = 2)
-#> Semi-supervised KEMA: 60 labeled samples, 20 unlabeled samples
-#> Warning: class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.
-#> Warning: class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.
-#> Warning: class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.
-#> Warning: class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.
-#> normalize_laplacian(): 20 isolated nodes detected - treating as disconnected components.
-#> normalize_laplacian(): 80 isolated nodes detected - treating as disconnected components.
-#> Warning: Regression solver produced poor results (subspace angle: 71 deg, best match: 0.875). Automatically retrying with solver='exact' for higher fidelity.
-#> Retry with exact solver completed successfully.
+#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.0353, max_B_orth_offdiag=3.61e-13
 # }
 
 # \donttest{
@@ -390,50 +320,21 @@ hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign
 
 # Run KEMA with default settings
 result <- kema(hd, y = labels, ncomp = 2)
-#> Semi-supervised KEMA: 100 labeled samples, 0 unlabeled samples
-#> Auto-selected sigma = 1.1446 using median distance heuristic
-#> Using RBF kernel with auto-tuned sigma
-#> normalize_laplacian(): 100 isolated nodes detected - treating as disconnected components.
-#> Warning: Regression solver produced poor results (subspace angle: 29 deg, best match: 0.797). Automatically retrying with solver='exact' for higher fidelity.
-#> Retry with exact solver completed successfully.
+#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.986, max_B_orth_offdiag=3.47e-10
 
 # Semi-supervised learning with missing labels
 hd_semi <- hd
 hd_semi$domain1$design$labels[1:10] <- NA  # Mark some samples as unlabeled
 result_semi <- kema(hd_semi, y = labels, ncomp = 2)
-#> Semi-supervised KEMA: 90 labeled samples, 10 unlabeled samples
-#> Auto-selected sigma = 1.0682 using median distance heuristic
-#> Using RBF kernel with auto-tuned sigma
-#> Warning: class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.
-#> normalize_laplacian(): 10 isolated nodes detected - treating as disconnected components.
-#> normalize_laplacian(): 100 isolated nodes detected - treating as disconnected components.
-#> Warning: Regression solver produced poor results (subspace angle: 31.3 deg, best match: 0.863). Automatically retrying with solver='exact' for higher fidelity.
-#> Retry with exact solver completed successfully.
+#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.907, max_B_orth_offdiag=5.75e-10
 
 # Use exact solver for highest accuracy
 result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)
-#> Semi-supervised KEMA: 100 labeled samples, 0 unlabeled samples
-#> Auto-selected sigma = 1.236 using median distance heuristic
-#> Using RBF kernel with auto-tuned sigma
-#> normalize_laplacian(): 100 isolated nodes detected - treating as disconnected components.
+#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.986, max_B_orth_offdiag=3.47e-10
 
 # Use REKEMA for large datasets
 result_rekema <- kema(hd, y = labels, sample_frac = 0.5, ncomp = 2)
-#> Semi-supervised KEMA: 100 labeled samples, 0 unlabeled samples
-#> Auto-selected sigma = 1.1201 using median distance heuristic
-#> Using RBF kernel with auto-tuned sigma
 #> REKEMA block 1: 50 x 25 kernel matrix
 #> REKEMA block 2: 50 x 25 kernel matrix
-#> normalize_laplacian(): 100 isolated nodes detected - treating as disconnected components.
-#> Warning: REKEMA regression approximation fidelity is below target:
-#>   Best component match: 0.512
-#>   Subspace angle (deg): 37.9
-#>   Samples: 100, Kernel rank: 50
-#> Consider using solver='exact' or increasing sample_frac.
-#> Warning: Regression solver produced poor results (subspace angle: 37.9 deg, best match: 0.512). Automatically retrying with solver='exact' for higher fidelity.
-#> REKEMA: Solving reduced 50 x 50 eigenvalue problem instead of 100 x 100
-#> REKEMA: Scaling lambda from 1e-04 to 2e-04 (factor: 2) to maintain regularization energy
-#> REKEMA: Added regularization to ill-conditioned B matrix
-#> Retry with exact solver completed successfully.
 # }
 ```

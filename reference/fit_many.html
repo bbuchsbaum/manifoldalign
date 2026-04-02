@@ -95,12 +95,7 @@
 <span class="r-in"><span><span class="va">hd</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/multidesign/man/hyperdesign.html" class="external-link">hyperdesign</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>d1 <span class="op">=</span> <span class="va">md1</span>, d2 <span class="op">=</span> <span class="va">md2</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">algo</span> <span class="op">&lt;-</span> <span class="fu"><a href="kema_aligner.html">kema_aligner</a></span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu">fit_many</span><span class="op">(</span><span class="va">algo</span>, <span class="va">hd</span>, y <span class="op">=</span> <span class="va">labels</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 60 labeled samples, 0 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Auto-selected sigma = 1.1419 using median distance heuristic</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Using RBF kernel with auto-tuned sigma</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 60 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Regression solver produced poor results (subspace angle: 35.4 deg, best match: 0.759). Automatically retrying with solver='exact' for higher fidelity.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Retry with exact solver completed successfully.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.946, max_B_orth_offdiag=4.32e-10</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>

@@ -89,6 +89,8 @@ preserving manifold structure and aligning same-class samples.</p>
 <span>  sample_frac <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  use_laplacian <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  solver <span class="op">=</span> <span class="st">"regression"</span>,</span>
+<span>  backend <span class="op">=</span> <span class="st">"auto"</span>,</span>
+<span>  backend_control <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  dweight <span class="op">=</span> <span class="fl">0.1</span>,</span>
 <span>  rweight <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>  simfun <span class="op">=</span> <span class="fu">neighborweights</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/neighborweights/man/binary_label_matrix.html" class="external-link">binary_label_matrix</a></span>,</span>
@@ -111,6 +113,8 @@ preserving manifold structure and aligning same-class samples.</p>
 <span>  sample_frac <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  use_laplacian <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  solver <span class="op">=</span> <span class="st">"regression"</span>,</span>
+<span>  backend <span class="op">=</span> <span class="st">"auto"</span>,</span>
+<span>  backend_control <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  dweight <span class="op">=</span> <span class="fl">0.1</span>,</span>
 <span>  rweight <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>  simfun <span class="op">=</span> <span class="fu">neighborweights</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/pkg/neighborweights/man/binary_label_matrix.html" class="external-link">binary_label_matrix</a></span>,</span>
@@ -177,28 +181,39 @@ center())</p></dd>
 
 
 <dt id="arg-use-laplacian">use_laplacian<a class="anchor" aria-label="anchor" href="#arg-use-laplacian"></a></dt>
-<dd><p>Whether to use Laplacian normalization (default: TRUE)</p></dd>
+<dd><p>Deprecated compatibility argument; ignored.</p></dd>
 
 
 <dt id="arg-solver">solver<a class="anchor" aria-label="anchor" href="#arg-solver"></a></dt>
-<dd><p>Solver method: "regression" for fast approximation (default)
-or "exact" for precise solution</p></dd>
+<dd><p>Deprecated compatibility argument; accepted values are
+`"regression"` and `"exact"`, but both currently route to the original
+KEMA solver.</p></dd>
+
+
+<dt id="arg-backend">backend<a class="anchor" aria-label="anchor" href="#arg-backend"></a></dt>
+<dd><p>Backend for the original eigensolver. One of `"auto"`,
+`"full_exact"`, `"reduced_exact"`, or `"operator_exact"`.</p></dd>
+
+
+<dt id="arg-backend-control">backend_control<a class="anchor" aria-label="anchor" href="#arg-backend-control"></a></dt>
+<dd><p>Optional list controlling auto backend thresholds and
+fidelity checks (passed through to `kema_orig()`).</p></dd>
 
 
 <dt id="arg-dweight">dweight<a class="anchor" aria-label="anchor" href="#arg-dweight"></a></dt>
-<dd><p>Weight for dissimilarity/repulsion terms (default: 0.1)</p></dd>
+<dd><p>Deprecated compatibility argument; ignored.</p></dd>
 
 
 <dt id="arg-rweight">rweight<a class="anchor" aria-label="anchor" href="#arg-rweight"></a></dt>
-<dd><p>Weight for repulsion graph (default: 0)</p></dd>
+<dd><p>Deprecated compatibility argument; ignored.</p></dd>
 
 
 <dt id="arg-simfun">simfun<a class="anchor" aria-label="anchor" href="#arg-simfun"></a></dt>
-<dd><p>Function to compute similarity between labels</p></dd>
+<dd><p>Deprecated compatibility argument; ignored.</p></dd>
 
 
 <dt id="arg-disfun">disfun<a class="anchor" aria-label="anchor" href="#arg-disfun"></a></dt>
-<dd><p>Function to compute dissimilarity between labels (optional)</p></dd>
+<dd><p>Deprecated compatibility argument; ignored.</p></dd>
 
 
 <dt id="arg-lambda">lambda<a class="anchor" aria-label="anchor" href="#arg-lambda"></a></dt>
@@ -207,9 +222,7 @@ or "exact" for precise solution</p></dd>
 
 
 <dt id="arg-centre-kernel">centre_kernel<a class="anchor" aria-label="anchor" href="#arg-centre-kernel"></a></dt>
-<dd><p>Whether to center kernel matrices (default: FALSE).
-**[EXTENSION]** The original paper uses uncentered kernels. Set TRUE for
-centered variant.</p></dd>
+<dd><p>Deprecated compatibility argument; ignored.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -229,54 +242,18 @@ centered variant.</p></dd>
 representation that preserves both the intrinsic geometry of each domain and
 the class structure across domains. It supports semi-supervised learning
 with missing labels (NA values).</p>
-<p>The algorithm offers two solver methods:
-- "regression": Fast approximation using spectral regression (default). This
-  method first solves the eigenvalue problem on graph Laplacians, then uses
-  ridge regression to find kernel coefficients. It's much faster but may be
-  less accurate for non-linear kernels.
-- "exact": Precise solution using the correct generalized eigenvalue
-  formulation. This method solves the mathematically correct KEMA
-  optimization problem but is more computationally intensive, especially for
-  large datasets.</p>
+<p>Current behavior routes `kema()` to a paper-faithful implementation
+(`kema_orig`) of the original Tuia &amp; Camps-Valls generalized eigenproblems.
+Legacy extension arguments are still accepted for compatibility.</p>
 
-<p>KEMA solves the following optimization problem:
-$$\max_{\alpha} \frac{\alpha^T K A K^T \alpha}{\alpha^T K B K^T \alpha}$$</p>
-<p>where:</p><ul><li><p><code>A = u*L + (1-u)*Ls</code> captures manifold structure (L) and
-    same-class alignment (Ls)</p></li>
-<li><p><code>B = rweight*Lr + dweight*Ld + lambda*I</code> captures class
-    separation and regularization</p></li>
-<li><p><code>K</code> is the block-diagonal kernel matrix across domains</p></li>
-</ul><p>The trade-off parameter <code>u</code> controls the balance between preserving
-manifold geometry and enforcing class alignment. The solver parameter
-determines the computational approach:</p><ul><li><p>"regression": Fast two-step approximation (eigendecomposition +
-    ridge regression)</p></li>
-<li><p>"exact": Direct solution of the generalized eigenvalue problem</p></li>
-</ul><p>For large datasets, use <code>sample_frac &lt; 1</code> to enable REKEMA, which uses
-landmark points to reduce computational complexity from O(n^2) to O(r^2) where
-r is the number of landmarks.</p>
-<p>This implementation follows the Tuia &amp; Camps-Valls (2016) paper with
-extensions:</p>
-<p>**Core KEMA (from paper):**
-- Generalized eigenvalue problem: Phi(L+mu*Ls)Phi^T*v = lambda * Phi*Ld*Phi^T*v (Eq. 4)
-- Kernelization: K(L+mu*Ls)K*Lambda = lambda * K*Ld*K * Lambda (Eq. 6)
-- Reduced-rank KEMA (REKEMA) for computational efficiency
-- Matrix-free eigensolver with Jacobi preconditioning</p>
-<p>**Extensions (not in original paper):**
-- <code>solver="regression"</code>: Fast spectral regression approximation
-  (default)
-- <code>rweight</code>: Additional repulsion graph Lr for within-domain
-  separation
-- Semi-supervised support: Handles NA labels for unlabeled samples
-- Enhanced numerical stability and error handling</p>
-<p>The algorithm offers two solver methods:
-- "regression": **[EXTENSION]** Fast approximation using spectral
-  regression (default). This method first solves the eigenvalue problem on
-  graph Laplacians, then uses ridge regression to find kernel coefficients.
-  Much faster but may be less accurate for non-linear kernels.
-- "exact": Precise solution using the correct generalized eigenvalue
-  formulation from the paper. This method solves the mathematically correct
-  KEMA optimization problem but is more computationally intensive,
-  especially for large datasets.</p>
+<p>KEMA solves the original paper objective:
+$$K(L+\mu L_s)K\Lambda = \lambda K L_d K\Lambda$$
+and its reduced-rank REKEMA counterpart when `sample_frac &lt; 1`.</p>
+<p>`kema()` now delegates to the paper-faithful `kema_orig()` backend and solves
+the original generalized eigenproblems from Tuia &amp; Camps-Valls (2016),
+including the reduced-rank REKEMA form when `sample_frac &lt; 1`.</p>
+<p>Legacy extension arguments remain in the API for backward compatibility but
+are ignored by the current implementation.</p>
     </div>
     <div class="section level2">
     <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a></h2>
@@ -328,52 +305,23 @@ adaptation. PLoS ONE, 11(2), e0148655.</p>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Run KEMA with default settings</span></span></span>
 <span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">hd</span>, y <span class="op">=</span> <span class="va">labels</span>, ncomp <span class="op">=</span> <span class="fl">2</span>, knn <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 40 labeled samples, 0 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Auto-selected sigma = 1.1158 using median distance heuristic</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Using RBF kernel with auto-tuned sigma</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 40 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Regression solver produced poor results (subspace angle: 19.6 deg, best match: 0.801). Automatically retrying with solver='exact' for higher fidelity.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Retry with exact solver completed successfully.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=1, max_B_orth_offdiag=5.63e-11</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Semi-supervised learning with missing labels</span></span></span>
 <span class="r-in"><span><span class="va">design1</span><span class="op">$</span><span class="va">labels</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">4</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>  <span class="co"># Mark a few samples as unlabeled</span></span></span>
 <span class="r-in"><span><span class="va">md1_semi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/multidesign/man/multidesign.html" class="external-link">multidesign</a></span><span class="op">(</span><span class="va">X1</span>, <span class="va">design1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">hd_semi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/multidesign/man/hyperdesign.html" class="external-link">hyperdesign</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>domain1 <span class="op">=</span> <span class="va">md1_semi</span>, domain2 <span class="op">=</span> <span class="va">md2</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">result_semi</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">hd_semi</span>, y <span class="op">=</span> <span class="va">labels</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 36 labeled samples, 4 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Auto-selected sigma = 1.1417 using median distance heuristic</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Using RBF kernel with auto-tuned sigma</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 4 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 40 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Regression solver produced poor results (subspace angle: 14.9 deg, best match: 0.95). Automatically retrying with solver='exact' for higher fidelity.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Retry with exact solver completed successfully.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=1, max_B_orth_offdiag=6.7e-11</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Use exact solver for highest accuracy</span></span></span>
 <span class="r-in"><span><span class="va">result_exact</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">hd</span>, y <span class="op">=</span> <span class="va">labels</span>, solver <span class="op">=</span> <span class="st">"exact"</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 40 labeled samples, 0 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Auto-selected sigma = 1.1558 using median distance heuristic</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Using RBF kernel with auto-tuned sigma</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 40 isolated nodes detected - treating as disconnected components.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.0252, max_B_orth_offdiag=1.15e-10</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Use REKEMA for large datasets</span></span></span>
 <span class="r-in"><span><span class="va">result_rekema</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">hd</span>, y <span class="op">=</span> <span class="va">labels</span>, sample_frac <span class="op">=</span> <span class="fl">0.5</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 40 labeled samples, 0 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Auto-selected sigma = 1.1287 using median distance heuristic</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Using RBF kernel with auto-tuned sigma</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA block 1: 20 x 10 kernel matrix</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA block 2: 20 x 10 kernel matrix</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 40 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>REKEMA regression approximation fidelity is below target:</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span>   Best component match: 0.479</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span>   Subspace angle (deg): 40.4</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span>   Samples: 40, Kernel rank: 20</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> Consider using solver='exact' or increasing sample_frac.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Regression solver produced poor results (subspace angle: 40.4 deg, best match: 0.479). Automatically retrying with solver='exact' for higher fidelity.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA: Solving reduced 20 x 20 eigenvalue problem instead of 40 x 40</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA: Scaling lambda from 1e-04 to 2e-04 (factor: 2) to maintain regularization energy</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA: Added regularization to ill-conditioned B matrix</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Retry with exact solver completed successfully.</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># \donttest{</span></span></span>
@@ -398,24 +346,13 @@ adaptation. PLoS ONE, 11(2), e0148655.</p>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Run KEMA alignment across subjects</span></span></span>
 <span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">md</span>, y <span class="op">=</span> <span class="va">condition</span>, subject <span class="op">=</span> <span class="va">subject</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 80 labeled samples, 0 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 80 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Regression solver produced poor results (subspace angle: 80.2 deg, best match: 0.602). Automatically retrying with solver='exact' for higher fidelity.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Retry with exact solver completed successfully.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.00307, max_B_orth_offdiag=1.01e-12</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Semi-supervised learning with missing labels</span></span></span>
 <span class="r-in"><span><span class="va">data_design</span><span class="op">$</span><span class="va">condition</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">data_design</span><span class="op">)</span>, <span class="fl">20</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span></span></span>
 <span class="r-in"><span><span class="va">md_semi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/multidesign/man/multidesign.html" class="external-link">multidesign</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">data_design</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">result_semi</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">md_semi</span>, y <span class="op">=</span> <span class="va">condition</span>, subject <span class="op">=</span> <span class="va">subject</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 60 labeled samples, 20 unlabeled samples</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 20 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 80 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Regression solver produced poor results (subspace angle: 71 deg, best match: 0.875). Automatically retrying with solver='exact' for higher fidelity.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Retry with exact solver completed successfully.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.0353, max_B_orth_offdiag=3.61e-13</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># \donttest{</span></span></span>
@@ -434,51 +371,22 @@ adaptation. PLoS ONE, 11(2), e0148655.</p>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Run KEMA with default settings</span></span></span>
 <span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">hd</span>, y <span class="op">=</span> <span class="va">labels</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 100 labeled samples, 0 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Auto-selected sigma = 1.1446 using median distance heuristic</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Using RBF kernel with auto-tuned sigma</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 100 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Regression solver produced poor results (subspace angle: 29 deg, best match: 0.797). Automatically retrying with solver='exact' for higher fidelity.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Retry with exact solver completed successfully.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.986, max_B_orth_offdiag=3.47e-10</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Semi-supervised learning with missing labels</span></span></span>
 <span class="r-in"><span><span class="va">hd_semi</span> <span class="op">&lt;-</span> <span class="va">hd</span></span></span>
 <span class="r-in"><span><span class="va">hd_semi</span><span class="op">$</span><span class="va">domain1</span><span class="op">$</span><span class="va">design</span><span class="op">$</span><span class="va">labels</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>  <span class="co"># Mark some samples as unlabeled</span></span></span>
 <span class="r-in"><span><span class="va">result_semi</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">hd_semi</span>, y <span class="op">=</span> <span class="va">labels</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 90 labeled samples, 10 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Auto-selected sigma = 1.0682 using median distance heuristic</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Using RBF kernel with auto-tuned sigma</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>class_graph failed for stratum with labels containing NAs. Creating empty class graph. Error: Cannot create a graph object because the adjacency matrix contains NAs.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 10 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 100 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Regression solver produced poor results (subspace angle: 31.3 deg, best match: 0.863). Automatically retrying with solver='exact' for higher fidelity.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Retry with exact solver completed successfully.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.907, max_B_orth_offdiag=5.75e-10</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Use exact solver for highest accuracy</span></span></span>
 <span class="r-in"><span><span class="va">result_exact</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">hd</span>, y <span class="op">=</span> <span class="va">labels</span>, solver <span class="op">=</span> <span class="st">"exact"</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 100 labeled samples, 0 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Auto-selected sigma = 1.236 using median distance heuristic</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Using RBF kernel with auto-tuned sigma</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 100 isolated nodes detected - treating as disconnected components.</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.986, max_B_orth_offdiag=3.47e-10</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Use REKEMA for large datasets</span></span></span>
 <span class="r-in"><span><span class="va">result_rekema</span> <span class="op">&lt;-</span> <span class="fu">kema</span><span class="op">(</span><span class="va">hd</span>, y <span class="op">=</span> <span class="va">labels</span>, sample_frac <span class="op">=</span> <span class="fl">0.5</span>, ncomp <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Semi-supervised KEMA: 100 labeled samples, 0 unlabeled samples</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Auto-selected sigma = 1.1201 using median distance heuristic</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Using RBF kernel with auto-tuned sigma</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA block 1: 50 x 25 kernel matrix</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA block 2: 50 x 25 kernel matrix</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> normalize_laplacian(): 100 isolated nodes detected - treating as disconnected components.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>REKEMA regression approximation fidelity is below target:</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span>   Best component match: 0.512</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span>   Subspace angle (deg): 37.9</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span>   Samples: 100, Kernel rank: 50</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> Consider using solver='exact' or increasing sample_frac.</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Regression solver produced poor results (subspace angle: 37.9 deg, best match: 0.512). Automatically retrying with solver='exact' for higher fidelity.</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA: Solving reduced 50 x 50 eigenvalue problem instead of 100 x 100</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA: Scaling lambda from 1e-04 to 2e-04 (factor: 2) to maintain regularization energy</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> REKEMA: Added regularization to ill-conditioned B matrix</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Retry with exact solver completed successfully.</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>

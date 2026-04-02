@@ -156,6 +156,8 @@
   : Kernel Manifold Alignment (KEMA)
 - [`kema_aligner()`](https://bbuchsbaum.github.io/manifoldalign/reference/kema_aligner.md)
   : Multi-view aligner adapters (native delegates)
+- [`kema_orig()`](https://bbuchsbaum.github.io/manifoldalign/reference/kema_orig.md)
+  : Original Kernel Manifold Alignment (KEMA)
 - [`latent_dim()`](https://bbuchsbaum.github.io/manifoldalign/reference/latent_dim.md)
   : Latent dimension selected by the method (if applicable)
 - [`linear_sim_embed()`](https://bbuchsbaum.github.io/manifoldalign/reference/linear_sim_embed.md)

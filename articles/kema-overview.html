@@ -151,32 +151,36 @@ shapes.</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="va">reg_fit</span>, max.level <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="co">#&gt; List of 13</span></span>
-<span><span class="co">#&gt;  $ v            : num [1:12, 1:2] 0.1363 0.3086 0.4057 -0.6629 0.0448 ...</span></span>
-<span><span class="co">#&gt;  $ preproc      :List of 2</span></span>
+<span><span class="co">#&gt; List of 17</span></span>
+<span><span class="co">#&gt;  $ v                 : num [1:12, 1:2] -0.1424 -0.1778 -0.1167 -0.0991 -0.143 ...</span></span>
+<span><span class="co">#&gt;  $ preproc           :List of 2</span></span>
 <span><span class="co">#&gt;   ..- attr(*, "class")= chr [1:2] "concat_pre_processor" "pre_processor"</span></span>
-<span><span class="co">#&gt;  $ s            :Formal class 'dgeMatrix' [package "Matrix"] with 4 slots</span></span>
-<span><span class="co">#&gt;  $ sdev         : num [1:2] 0.0126 0.2044</span></span>
-<span><span class="co">#&gt;  $ block_indices:List of 3</span></span>
-<span><span class="co">#&gt;  $ alpha        : num [1:240, 1:2] -0.03815 -0.15544 0.08751 -0.21601 0.00165 ...</span></span>
-<span><span class="co">#&gt;  $ Ks           :List of 3</span></span>
-<span><span class="co">#&gt;  $ sample_frac  : num 1</span></span>
-<span><span class="co">#&gt;  $ dweight      : num 0.1</span></span>
-<span><span class="co">#&gt;  $ rweight      : num 0</span></span>
-<span><span class="co">#&gt;  $ labels       : Factor w/ 2 levels "class_A","class_B": 1 1 1 1 1 1 1 1 1 1 ...</span></span>
+<span><span class="co">#&gt;  $ s                 :Formal class 'dgeMatrix' [package "Matrix"] with 4 slots</span></span>
+<span><span class="co">#&gt;  $ sdev              : num [1:2] 0.00418 0.0059</span></span>
+<span><span class="co">#&gt;  $ block_indices     :List of 3</span></span>
+<span><span class="co">#&gt;  $ alpha             : num [1:240, 1:2] -0.006449 -0.000482 -0.000725 -0.003054 0.001746 ...</span></span>
+<span><span class="co">#&gt;  $ Ks                :List of 3</span></span>
+<span><span class="co">#&gt;  $ sample_frac       : num 1</span></span>
+<span><span class="co">#&gt;  $ labels            : Factor w/ 2 levels "class_A","class_B": 1 1 1 1 1 1 1 1 1 1 ...</span></span>
 <span><span class="co">#&gt;   ..- attr(*, "names")= chr [1:240] "domain11" "domain12" "domain13" "domain14" ...</span></span>
-<span><span class="co">#&gt;  $ eigenvalues  :List of 3</span></span>
-<span><span class="co">#&gt;  $ retry_info   :List of 3</span></span>
-<span><span class="co">#&gt;  - attr(*, "class")= chr [1:5] "kema" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...</span></span>
-<span><span class="co">#&gt;  - attr(*, ".cache")=&lt;environment: 0x55eb50fddac0&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt;  $ eigenvalues       :List of 3</span></span>
+<span><span class="co">#&gt;  $ formulation       : chr "kema_orig_eq6_full_exact"</span></span>
+<span><span class="co">#&gt;  $ backend           : chr "full_exact"</span></span>
+<span><span class="co">#&gt;  $ backend_requested : chr "auto"</span></span>
+<span><span class="co">#&gt;  $ backend_candidates: chr "full_exact"</span></span>
+<span><span class="co">#&gt;  $ fidelity          :List of 6</span></span>
+<span><span class="co">#&gt;  $ fidelity_history  :List of 1</span></span>
+<span><span class="co">#&gt;  $ classes           : chr "kema"</span></span>
+<span><span class="co">#&gt;  - attr(*, "class")= chr [1:5] "kema_orig" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...</span></span>
+<span><span class="co">#&gt;  - attr(*, ".cache")=&lt;environment: 0x5562da50faf0&gt;</span></span></code></pre></div>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">rms_alignment</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">reg_fit</span><span class="op">$</span><span class="va">s</span><span class="op">)</span>, <span class="va">domain_sizes</span>, <span class="va">domain_names</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
-<span><span class="co">#&gt;   domain_i domain_j   rms</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  0.132</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  0.123</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.147</span></span></code></pre></div>
+<span><span class="co">#&gt;   domain_i domain_j     rms</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  0.013<span style="text-decoration: underline;">0</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  0.011<span style="text-decoration: underline;">9</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.001<span style="text-decoration: underline;">16</span></span></span></code></pre></div>
 <p>We plot z-scored aligned scores (each component standardized across
 all domains); this keeps the visual scale comparable while preserving
 class separation.</p>
@@ -213,15 +217,15 @@ It is more faithful but slower on very large kernels.</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">exact_fit</span><span class="op">$</span><span class="va">eigenvalues</span><span class="op">$</span><span class="va">values</span></span>
-<span><span class="co">#&gt; [1] 0.03514406 3.25289594</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 0.01373906 0.49999987</span></span></code></pre></div>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">rms_alignment</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">exact_fit</span><span class="op">$</span><span class="va">s</span><span class="op">)</span>, <span class="va">domain_sizes</span>, <span class="va">domain_names</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
-<span><span class="co">#&gt;   domain_i domain_j   rms</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  0.132</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  0.123</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.147</span></span></code></pre></div>
+<span><span class="co">#&gt;   domain_i domain_j     rms</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  0.013<span style="text-decoration: underline;">0</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  0.011<span style="text-decoration: underline;">9</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.001<span style="text-decoration: underline;">16</span></span></span></code></pre></div>
 <p>A quick sanity check compares the subspaces recovered by the two
 solvers.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
@@ -255,20 +259,20 @@ solver on the reduced system.</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">rekema_fit</span><span class="op">$</span><span class="va">eigenvalues</span><span class="op">$</span><span class="va">solver</span></span>
-<span><span class="co">#&gt; [1] "rekema_exact"</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "exact"</span></span></code></pre></div>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">rms_alignment</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">rekema_fit</span><span class="op">$</span><span class="va">s</span><span class="op">)</span>, <span class="va">domain_sizes</span>, <span class="va">domain_names</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
-<span><span class="co">#&gt;   domain_i domain_j   rms</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  0.198</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  0.200</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.236</span></span></code></pre></div>
+<span><span class="co">#&gt;   domain_i domain_j     rms</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  0.006<span style="text-decoration: underline;">96</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  0.008<span style="text-decoration: underline;">90</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.011<span style="text-decoration: underline;">7</span></span></span></code></pre></div>
 <p>Even with landmarks the subspace remains close to the full exact
 solution.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://bbuchsbaum.github.io/multivarious/reference/subspace_similarity.html" class="external-link">subspace_similarity</a></span><span class="op">(</span><span class="va">exact_fit</span><span class="op">$</span><span class="va">s</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span>, <span class="va">rekema_fit</span><span class="op">$</span><span class="va">s</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0.8987106 0.8294382</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 0.86740310 0.04146403</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="scalable-mode-operator-based">Scalable Mode (Operator-Based)<a class="anchor" aria-label="anchor" href="#scalable-mode-operator-based"></a>
@@ -296,11 +300,11 @@ refactor. This keeps the API identical while avoiding dense
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">rms_alignment</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">scalable_fit</span><span class="op">$</span><span class="va">s</span><span class="op">)</span>, <span class="va">domain_sizes</span>, <span class="va">domain_names</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
-<span><span class="co">#&gt;   domain_i domain_j   rms</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  0.132</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  0.123</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.147</span></span></code></pre></div>
+<span><span class="co">#&gt;   domain_i domain_j     rms</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  0.013<span style="text-decoration: underline;">0</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  0.011<span style="text-decoration: underline;">9</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.001<span style="text-decoration: underline;">16</span></span></span></code></pre></div>
 <p>The scalable path should agree closely with the baseline exact
 solution.</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
@@ -349,24 +353,24 @@ few representative settings.</p>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 18 × 4</span></span></span>
 <span><span class="co">#&gt;    sigma   knn     u mean_rms</span></span>
 <span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span>   0.5     3  0.7    0.052<span style="text-decoration: underline;">8</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span>   0.8     3  0.7    0.052<span style="text-decoration: underline;">8</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span>   1.1     3  0.7    0.052<span style="text-decoration: underline;">8</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span>   1.1     6  0.35   0.056<span style="text-decoration: underline;">9</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span>   0.8     6  0.35   0.057<span style="text-decoration: underline;">0</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span>   0.5     6  0.35   0.057<span style="text-decoration: underline;">3</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span>   0.5     3  0.35   0.079<span style="text-decoration: underline;">6</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span>   0.8     3  0.35   0.079<span style="text-decoration: underline;">7</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span>   1.1     3  0.35   0.079<span style="text-decoration: underline;">7</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span>   0.5     6  0.7    0.095<span style="text-decoration: underline;">4</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">11</span>   0.8     6  0.7    0.095<span style="text-decoration: underline;">9</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">12</span>   1.1     6  0.7    0.096<span style="text-decoration: underline;">0</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">13</span>   1.1     6  0.5    0.107 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">14</span>   0.8     6  0.5    0.107 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">15</span>   0.5     6  0.5    0.108 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">16</span>   1.1     3  0.5    0.134 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">17</span>   0.8     3  0.5    0.134 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">18</span>   0.5     3  0.5    0.134</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span>   0.5     3  0.5  0.000<span style="text-decoration: underline;">172</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span>   0.5     6  0.5  0.000<span style="text-decoration: underline;">198</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span>   0.8     3  0.7  0.008<span style="text-decoration: underline;">66</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span>   0.8     6  0.7  0.008<span style="text-decoration: underline;">67</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span>   0.8     3  0.35 0.008<span style="text-decoration: underline;">67</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span>   0.8     6  0.35 0.008<span style="text-decoration: underline;">68</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span>   0.8     6  0.5  0.008<span style="text-decoration: underline;">68</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span>   0.8     3  0.5  0.008<span style="text-decoration: underline;">69</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span>   0.5     3  0.7  0.009<span style="text-decoration: underline;">37</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span>   0.5     3  0.35 0.009<span style="text-decoration: underline;">50</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">11</span>   0.5     6  0.7  0.009<span style="text-decoration: underline;">52</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">12</span>   0.5     6  0.35 0.009<span style="text-decoration: underline;">55</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">13</span>   1.1     3  0.7  0.009<span style="text-decoration: underline;">61</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">14</span>   1.1     6  0.7  0.009<span style="text-decoration: underline;">61</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">15</span>   1.1     3  0.5  0.009<span style="text-decoration: underline;">62</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">16</span>   1.1     6  0.5  0.009<span style="text-decoration: underline;">62</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">17</span>   1.1     3  0.35 0.009<span style="text-decoration: underline;">62</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">18</span>   1.1     6  0.35 0.009<span style="text-decoration: underline;">62</span></span></span></code></pre></div>
 <p>The embedding geometry shifts noticeably between configurations with
 the lowest and highest mean RMS:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">

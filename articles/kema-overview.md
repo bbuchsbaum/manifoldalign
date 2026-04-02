@@ -70,34 +70,38 @@ reg_fit <- kema(
 )
 
 str(reg_fit, max.level = 1)
-#> List of 13
-#>  $ v            : num [1:12, 1:2] 0.1363 0.3086 0.4057 -0.6629 0.0448 ...
-#>  $ preproc      :List of 2
+#> List of 17
+#>  $ v                 : num [1:12, 1:2] -0.1424 -0.1778 -0.1167 -0.0991 -0.143 ...
+#>  $ preproc           :List of 2
 #>   ..- attr(*, "class")= chr [1:2] "concat_pre_processor" "pre_processor"
-#>  $ s            :Formal class 'dgeMatrix' [package "Matrix"] with 4 slots
-#>  $ sdev         : num [1:2] 0.0126 0.2044
-#>  $ block_indices:List of 3
-#>  $ alpha        : num [1:240, 1:2] -0.03815 -0.15544 0.08751 -0.21601 0.00165 ...
-#>  $ Ks           :List of 3
-#>  $ sample_frac  : num 1
-#>  $ dweight      : num 0.1
-#>  $ rweight      : num 0
-#>  $ labels       : Factor w/ 2 levels "class_A","class_B": 1 1 1 1 1 1 1 1 1 1 ...
+#>  $ s                 :Formal class 'dgeMatrix' [package "Matrix"] with 4 slots
+#>  $ sdev              : num [1:2] 0.00418 0.0059
+#>  $ block_indices     :List of 3
+#>  $ alpha             : num [1:240, 1:2] -0.006449 -0.000482 -0.000725 -0.003054 0.001746 ...
+#>  $ Ks                :List of 3
+#>  $ sample_frac       : num 1
+#>  $ labels            : Factor w/ 2 levels "class_A","class_B": 1 1 1 1 1 1 1 1 1 1 ...
 #>   ..- attr(*, "names")= chr [1:240] "domain11" "domain12" "domain13" "domain14" ...
-#>  $ eigenvalues  :List of 3
-#>  $ retry_info   :List of 3
-#>  - attr(*, "class")= chr [1:5] "kema" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...
-#>  - attr(*, ".cache")=<environment: 0x55eb50fddac0>
+#>  $ eigenvalues       :List of 3
+#>  $ formulation       : chr "kema_orig_eq6_full_exact"
+#>  $ backend           : chr "full_exact"
+#>  $ backend_requested : chr "auto"
+#>  $ backend_candidates: chr "full_exact"
+#>  $ fidelity          :List of 6
+#>  $ fidelity_history  :List of 1
+#>  $ classes           : chr "kema"
+#>  - attr(*, "class")= chr [1:5] "kema_orig" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...
+#>  - attr(*, ".cache")=<environment: 0x5562da50faf0>
 ```
 
 ``` r
 rms_alignment(as.matrix(reg_fit$s), domain_sizes, domain_names)
 #> # A tibble: 3 × 3
-#>   domain_i domain_j   rms
-#>   <chr>    <chr>    <dbl>
-#> 1 domain1  domain2  0.132
-#> 2 domain1  domain3  0.123
-#> 3 domain2  domain3  0.147
+#>   domain_i domain_j     rms
+#>   <chr>    <chr>      <dbl>
+#> 1 domain1  domain2  0.0130 
+#> 2 domain1  domain3  0.0119 
+#> 3 domain2  domain3  0.00116
 ```
 
 We plot z-scored aligned scores (each component standardized across all
@@ -139,17 +143,17 @@ exact_fit <- kema(
 )
 
 exact_fit$eigenvalues$values
-#> [1] 0.03514406 3.25289594
+#> [1] 0.01373906 0.49999987
 ```
 
 ``` r
 rms_alignment(as.matrix(exact_fit$s), domain_sizes, domain_names)
 #> # A tibble: 3 × 3
-#>   domain_i domain_j   rms
-#>   <chr>    <chr>    <dbl>
-#> 1 domain1  domain2  0.132
-#> 2 domain1  domain3  0.123
-#> 3 domain2  domain3  0.147
+#>   domain_i domain_j     rms
+#>   <chr>    <chr>      <dbl>
+#> 1 domain1  domain2  0.0130 
+#> 2 domain1  domain3  0.0119 
+#> 3 domain2  domain3  0.00116
 ```
 
 A quick sanity check compares the subspaces recovered by the two
@@ -187,17 +191,17 @@ rekema_fit <- kema(
 )
 
 rekema_fit$eigenvalues$solver
-#> [1] "rekema_exact"
+#> [1] "exact"
 ```
 
 ``` r
 rms_alignment(as.matrix(rekema_fit$s), domain_sizes, domain_names)
 #> # A tibble: 3 × 3
-#>   domain_i domain_j   rms
-#>   <chr>    <chr>    <dbl>
-#> 1 domain1  domain2  0.198
-#> 2 domain1  domain3  0.200
-#> 3 domain2  domain3  0.236
+#>   domain_i domain_j     rms
+#>   <chr>    <chr>      <dbl>
+#> 1 domain1  domain2  0.00696
+#> 2 domain1  domain3  0.00890
+#> 3 domain2  domain3  0.0117
 ```
 
 Even with landmarks the subspace remains close to the full exact
@@ -205,7 +209,7 @@ solution.
 
 ``` r
 subspace_similarity(exact_fit$s[, 1:2], rekema_fit$s[, 1:2])
-#> [1] 0.8987106 0.8294382
+#> [1] 0.86740310 0.04146403
 ```
 
 ## Scalable Mode (Operator-Based)
@@ -235,11 +239,11 @@ scalable_fit$eigenvalues$solver
 ``` r
 rms_alignment(as.matrix(scalable_fit$s), domain_sizes, domain_names)
 #> # A tibble: 3 × 3
-#>   domain_i domain_j   rms
-#>   <chr>    <chr>    <dbl>
-#> 1 domain1  domain2  0.132
-#> 2 domain1  domain3  0.123
-#> 3 domain2  domain3  0.147
+#>   domain_i domain_j     rms
+#>   <chr>    <chr>      <dbl>
+#> 1 domain1  domain2  0.0130 
+#> 2 domain1  domain3  0.0119 
+#> 3 domain2  domain3  0.00116
 ```
 
 The scalable path should agree closely with the baseline exact solution.
@@ -290,24 +294,24 @@ grid_summary
 #> # A tibble: 18 × 4
 #>    sigma   knn     u mean_rms
 #>    <dbl> <dbl> <dbl>    <dbl>
-#>  1   0.5     3  0.7    0.0528
-#>  2   0.8     3  0.7    0.0528
-#>  3   1.1     3  0.7    0.0528
-#>  4   1.1     6  0.35   0.0569
-#>  5   0.8     6  0.35   0.0570
-#>  6   0.5     6  0.35   0.0573
-#>  7   0.5     3  0.35   0.0796
-#>  8   0.8     3  0.35   0.0797
-#>  9   1.1     3  0.35   0.0797
-#> 10   0.5     6  0.7    0.0954
-#> 11   0.8     6  0.7    0.0959
-#> 12   1.1     6  0.7    0.0960
-#> 13   1.1     6  0.5    0.107 
-#> 14   0.8     6  0.5    0.107 
-#> 15   0.5     6  0.5    0.108 
-#> 16   1.1     3  0.5    0.134 
-#> 17   0.8     3  0.5    0.134 
-#> 18   0.5     3  0.5    0.134
+#>  1   0.5     3  0.5  0.000172
+#>  2   0.5     6  0.5  0.000198
+#>  3   0.8     3  0.7  0.00866 
+#>  4   0.8     6  0.7  0.00867 
+#>  5   0.8     3  0.35 0.00867 
+#>  6   0.8     6  0.35 0.00868 
+#>  7   0.8     6  0.5  0.00868 
+#>  8   0.8     3  0.5  0.00869 
+#>  9   0.5     3  0.7  0.00937 
+#> 10   0.5     3  0.35 0.00950 
+#> 11   0.5     6  0.7  0.00952 
+#> 12   0.5     6  0.35 0.00955 
+#> 13   1.1     3  0.7  0.00961 
+#> 14   1.1     6  0.7  0.00961 
+#> 15   1.1     3  0.5  0.00962 
+#> 16   1.1     6  0.5  0.00962 
+#> 17   1.1     3  0.35 0.00962 
+#> 18   1.1     6  0.35 0.00962
 ```
 
 The embedding geometry shifts noticeably between configurations with the
