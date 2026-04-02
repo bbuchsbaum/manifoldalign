@@ -40,110 +40,43 @@ skip_benchmarks_unless_enabled <- function() {
 
 # ============= TOY DATASET GENERATORS WITH MEANINGFUL CLASS STRUCTURE =============
 
-# -------- helper: random rotation matrix in d dims ----------
-rand_rotation <- function(d, seed=NULL) {
-  if(!is.null(seed)) set.seed(seed)
-  Q <- qr.Q(qr(matrix(rnorm(d^2), d)))
-  # enforce det = +1
-  if (det(Q) < 0) Q[,1] <- -Q[,1]
-  Q
-}
-
-# -------- DATA SET A: *Linear / Affine* with TRUE CLASS STRUCTURE ----------
-#   - Creates two meaningful Gaussian blobs that persist across views
-#   - Tests: affine‑invariant embedding, centring, scaling, supervised methods
-# --------------------------------------------------------------
 gen_linear_triplet <- function(n = 60, noise = 0.01, seed = 1) {
-  set.seed(seed)
-  
-  # Create two meaningful classes as Gaussian blobs
-  n1 <- floor(n/2)
-  n2 <- n - n1
-  
-  # Class 1: centered at (-0.5, -0.5), Class 2: centered at (0.5, 0.5)
-  latent_c1 <- matrix(rnorm(n1*2, mean=c(-0.5, -0.5), sd=0.3), n1, 2)
-  latent_c2 <- matrix(rnorm(n2*2, mean=c(0.5, 0.5), sd=0.3), n2, 2)
-  latent <- rbind(latent_c1, latent_c2)
-  colnames(latent) <- c("u1","u2")
-  
-  # True class labels
-  true_labels <- factor(c(rep("class1", n1), rep("class2", n2)))
-
-  # Apply different affine transformations to create views
-  R1 <- rand_rotation(2, seed+1);  b1 <- c(0.2,-0.4)
-  R2 <- rand_rotation(2, seed+2);  b2 <- c(-0.7, 0.6)
-  R3 <- rand_rotation(2, seed+3);  b3 <- c( 0.1, 0.8)
-
-  X1 <- latent %*% diag(c(1.0, 0.7)) %*% R1  + matrix(b1, n, 2, TRUE) + rnorm(n*2,0,noise)
-  X2 <- latent %*% diag(c(0.5, 1.2)) %*% R2  + matrix(b2, n, 2, TRUE) + rnorm(n*2,0,noise)
-  X3 <- latent %*% diag(c(1.5, 0.4)) %*% R3  + matrix(b3, n, 2, TRUE) + rnorm(n*2,0,noise)
-
-  list(latent = latent, view1 = X1, view2 = X2, view3 = X3, 
-       true_labels = true_labels, class_centers = list(c(-0.5, -0.5), c(0.5, 0.5)))
+  manifoldalign:::synthetic_alignment_scenario(
+    "linear_affine",
+    profile = "full",
+    seed = seed,
+    n = n,
+    noise = noise
+  )
 }
 
-# -------- DATA SET B: *Non‑linear but isometric* with PARAMETRIC STRUCTURE ----------
-#   Shared 1‑D parameter t ∈ [0,2π] with natural progression-based classes
-# --------------------------------------------------------------
-gen_isometric_triplet <- function(n = 50, noise = 0.02, seed = 2) {  # Reduced n for faster testing
-  set.seed(seed)
-  t <- sort(runif(n, 0, 2*pi))          # latent coord
-
-  # Create classes based on parameter progression (early vs late in curve)
-  class_boundary <- pi  # Split at halfway point
-  true_labels <- factor(ifelse(t < class_boundary, "early", "late"))
-
-  v1 <- cbind(t, 0)                     # straight line
-  v2 <- cbind(cos(t), sin(t))           # unit circle
-  v3 <- cbind(cos(t), sin(t), t/(2*pi)) # 3‑D helix, 1 turn
-
-  v1 <- v1 + matrix(rnorm(n*2,0,noise), n,2)
-  v2 <- v2 + matrix(rnorm(n*2,0,noise), n,2)
-  v3 <- v3 + matrix(rnorm(n*3,0,noise), n,3)
-
-  list(latent = t, view1 = v1, view2 = v2, view3 = v3, 
-       true_labels = true_labels, parameter_boundary = class_boundary)
+gen_isometric_triplet <- function(n = 50, noise = 0.02, seed = 2) {
+  manifoldalign:::synthetic_alignment_scenario(
+    "isometric_curve",
+    profile = "full",
+    seed = seed,
+    n = n,
+    noise = noise
+  )
 }
 
-# -------- DATA SET C: *Non‑isometric / density‑skewed* with SPATIAL CLASSES --------
-#   Classes based on spatial regions to test robustness
-# --------------------------------------------------------------
 gen_hard_triplet <- function(n_side = 10, noise = 0.03, seed = 3) {
-  set.seed(seed)
-  u <- seq(-1, 1, length.out = n_side)
-  grid <- as.matrix(expand.grid(u, u))          # latent (n x 2)
-
-  # Create spatial classes: left vs right half
-  true_labels <- factor(ifelse(grid[,1] < 0, "left", "right"))
-
-  # ---- view1: identity + small noise
-  v1 <- grid + matrix(rnorm(nrow(grid)*2, 0, noise), ncol = 2)
-
-  # ---- view2: swiss roll embedding in 3‑D (INCREASED COMPLEXITY)
-  theta <- (grid[,1] + 1) * 2 * pi      # Increased from 1*pi to 2*pi for more twists
-  height <- grid[,2]                   
-  v2 <- cbind(theta * cos(theta),
-              height,
-              theta * sin(theta)) + matrix(rnorm(nrow(grid)*3, 0, noise), ncol=3)
-
-  # ---- view3: affine + density skew + quadrant corruption
-  A <- matrix(c(2, 0.5, 0, 0.2), 2, 2)  # anisotropic scale & shear
-  v3 <- grid %*% A
-  # add heteroscedastic noise in lower‑left quadrant
-  idx_hard <- which(grid[,1] < 0 & grid[,2] < 0)
-  v3[idx_hard,] <- v3[idx_hard,] + matrix(rnorm(length(idx_hard)*2, 0, 0.2), ncol=2)  # Increased noise
-  v3 <- v3 + matrix(rnorm(nrow(grid)*2, 0, noise), ncol=2)
-
-  list(latent = grid, view1 = v1, view2 = v2, view3 = v3,
-       hard_indices = idx_hard, true_labels = true_labels)
+  manifoldalign:::synthetic_alignment_scenario(
+    "hard_nonisometric",
+    profile = "full",
+    seed = seed,
+    n_side = n_side,
+    noise = noise
+  )
 }
 
-# -------- convenience wrapper ---------------------------------
 generate_all_toy_sets <- function() {
-  list(
-    linear_affine     = gen_linear_triplet(),
-    isometric_curve   = gen_isometric_triplet(),
-    hard_nonisometric = gen_hard_triplet()
+  registry <- manifoldalign:::synthetic_alignment_scenarios(profile = "full")
+  stats::setNames(
+    lapply(registry$scenario, function(name) {
+      manifoldalign:::synthetic_alignment_scenario(name, profile = "full")
+    }),
+    registry$scenario
   )
 }
 
@@ -200,33 +133,17 @@ evaluate_assignment_accuracy_strict <- function(predicted_assignment, true_assig
 toy_to_hyperdesign <- function(toy_data, use_true_labels = TRUE) {
   require_package_strict("multidesign")
   require_package_strict("tibble")
-  
-  view_names <- names(toy_data)[!names(toy_data) %in% c("latent", "hard_indices", "true_labels", "class_centers", "parameter_boundary")]
-  
-  # Use meaningful labels if available, otherwise error
-  if (use_true_labels && "true_labels" %in% names(toy_data)) {
-    labels <- toy_data$true_labels
-  } else {
-    stop("toy_to_hyperdesign requires meaningful labels. Set use_true_labels=TRUE or provide labels explicitly.")
+
+  if (!use_true_labels) {
+    stop("toy_to_hyperdesign requires meaningful labels. Set use_true_labels=TRUE.", call. = FALSE)
   }
-  
-  # Create hyperdesign structure
-  domain_list <- list()
-  for (i in seq_along(view_names)) {
-    view_name <- view_names[i]
-    X <- as.matrix(toy_data[[view_name]])
-    
-    design_df <- data.frame(
-      sample_id = seq_len(nrow(X)),
-      label = labels,
-      stringsAsFactors = FALSE
-    )
-    
-    domain_list[[view_name]] <- list(x = X, design = design_df)
-  }
-  
-  class(domain_list) <- c("hyperdesign", "list")
-  domain_list
+
+  manifoldalign:::synthetic_alignment_to_hyperdesign(
+    toy_data,
+    label = toy_data$true_labels,
+    label_col = "label",
+    id_col = "sample_id"
+  )
 }
 
 # ============= STRICT ALGORITHM TESTS WITH TIGHT THRESHOLDS =============

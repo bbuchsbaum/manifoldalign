@@ -24,6 +24,24 @@
 #' @param cg_max_iter Integer maximum iterations for iterative solves.
 #' @param seed Integer random seed.
 #' @param verbose Logical; print backend progress messages.
+#' @param scale_selection How to weight scales when assembling the multiscale
+#'   dictionary. One of `"energy"`, `"supervised"`, or `"hybrid"`.
+#' @param supervision_weight Weight in `[0, 1]` used when
+#'   `scale_selection = "hybrid"`.
+#' @param min_scale_weight Relative threshold in `[0, 1)` for keeping a scale in
+#'   the final dictionary.
+#' @param max_basis_per_scale Integer cap on the number of basis vectors retained
+#'   from each scale after compression.
+#' @param regularization Positive ridge regularization for the final dictionary
+#'   generalized eigenproblem.
+#' @param tune Logical; whether to tune `cross_edge_weight`, `rank_per_domain`,
+#'   and `max_levels` over small candidate grids before the final fit.
+#' @param candidate_cross_edge_weight Optional numeric vector of candidate
+#'   cross-edge weights used when `tune = TRUE`.
+#' @param candidate_rank_per_domain Optional integer vector of candidate
+#'   `rank_per_domain` values used when `tune = TRUE`.
+#' @param candidate_max_levels Optional integer vector of candidate `max_levels`
+#'   values used when `tune = TRUE`.
 #'
 #' @return A list with class `multiscale_manifold_align_control`.
 #' @export
@@ -50,12 +68,22 @@ multiscale_manifold_align_control <- function(
   shift_invert_delta = 1e-3,
   cg_tol = 1e-6,
   cg_max_iter = 500L,
+  scale_selection = c("energy", "supervised", "hybrid"),
+  supervision_weight = 0.5,
+  min_scale_weight = 0.05,
+  max_basis_per_scale = 32L,
+  regularization = 1e-6,
+  tune = FALSE,
+  candidate_cross_edge_weight = NULL,
+  candidate_rank_per_domain = NULL,
+  candidate_max_levels = NULL,
   seed = 1L,
   verbose = FALSE
 ) {
   backend <- match.arg(backend)
   operator_mode <- match.arg(operator_mode)
   eigen_solver <- match.arg(eigen_solver)
+  scale_selection <- match.arg(scale_selection)
 
   if (!is.logical(enabled) || length(enabled) != 1L || is.na(enabled)) {
     stop("`enabled` must be TRUE or FALSE.", call. = FALSE)
@@ -114,6 +142,39 @@ multiscale_manifold_align_control <- function(
   if (!is.numeric(cg_max_iter) || length(cg_max_iter) != 1L || is.na(cg_max_iter) || cg_max_iter < 1) {
     stop("`cg_max_iter` must be an integer >= 1.", call. = FALSE)
   }
+  if (!is.numeric(supervision_weight) || length(supervision_weight) != 1L || is.na(supervision_weight) ||
+      supervision_weight < 0 || supervision_weight > 1) {
+    stop("`supervision_weight` must be in [0, 1].", call. = FALSE)
+  }
+  if (!is.numeric(min_scale_weight) || length(min_scale_weight) != 1L || is.na(min_scale_weight) ||
+      min_scale_weight < 0 || min_scale_weight >= 1) {
+    stop("`min_scale_weight` must be in [0, 1).", call. = FALSE)
+  }
+  if (!is.numeric(max_basis_per_scale) || length(max_basis_per_scale) != 1L || is.na(max_basis_per_scale) ||
+      max_basis_per_scale < 1) {
+    stop("`max_basis_per_scale` must be an integer >= 1.", call. = FALSE)
+  }
+  if (!is.numeric(regularization) || length(regularization) != 1L || is.na(regularization) || regularization <= 0) {
+    stop("`regularization` must be a positive scalar.", call. = FALSE)
+  }
+  if (!is.logical(tune) || length(tune) != 1L || is.na(tune)) {
+    stop("`tune` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.null(candidate_cross_edge_weight) &&
+      (!is.numeric(candidate_cross_edge_weight) || !length(candidate_cross_edge_weight) ||
+       any(!is.finite(candidate_cross_edge_weight)) || any(candidate_cross_edge_weight <= 0))) {
+    stop("`candidate_cross_edge_weight` must be NULL or a positive numeric vector.", call. = FALSE)
+  }
+  if (!is.null(candidate_rank_per_domain) &&
+      (!is.numeric(candidate_rank_per_domain) || !length(candidate_rank_per_domain) ||
+       any(!is.finite(candidate_rank_per_domain)) || any(candidate_rank_per_domain < 1))) {
+    stop("`candidate_rank_per_domain` must be NULL or a positive integer vector.", call. = FALSE)
+  }
+  if (!is.null(candidate_max_levels) &&
+      (!is.numeric(candidate_max_levels) || !length(candidate_max_levels) ||
+       any(!is.finite(candidate_max_levels)) || any(candidate_max_levels < 1))) {
+    stop("`candidate_max_levels` must be NULL or an integer vector with values >= 1.", call. = FALSE)
+  }
   if (!is.numeric(seed) || length(seed) != 1L || is.na(seed)) {
     stop("`seed` must be a numeric scalar.", call. = FALSE)
   }
@@ -145,6 +206,15 @@ multiscale_manifold_align_control <- function(
       shift_invert_delta = as.numeric(shift_invert_delta),
       cg_tol = as.numeric(cg_tol),
       cg_max_iter = as.integer(cg_max_iter),
+      scale_selection = scale_selection,
+      supervision_weight = as.numeric(supervision_weight),
+      min_scale_weight = as.numeric(min_scale_weight),
+      max_basis_per_scale = as.integer(max_basis_per_scale),
+      regularization = as.numeric(regularization),
+      tune = tune,
+      candidate_cross_edge_weight = if (is.null(candidate_cross_edge_weight)) NULL else as.numeric(candidate_cross_edge_weight),
+      candidate_rank_per_domain = if (is.null(candidate_rank_per_domain)) NULL else as.integer(candidate_rank_per_domain),
+      candidate_max_levels = if (is.null(candidate_max_levels)) NULL else as.integer(candidate_max_levels),
       seed = as.integer(seed),
       verbose = verbose
     ),

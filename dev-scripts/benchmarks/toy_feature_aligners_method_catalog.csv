@@ -1,0 +1,14 @@
+"method","method_family","supervision_regime","side_information","dimensionality_constraint","variant_family","variant","backend","tuned","kernel","landmarking","scale_selection"
+"spectral_mnn_exact","spectral_mnn","exact_correspondence","row_id_correspondence","unrestricted","spectral_mnn","exact",NA,FALSE,NA,NA,NA
+"ssma_exact","ssma","exact_correspondence","row_id_correspondence","unrestricted","ssma","exact",NA,FALSE,NA,NA,NA
+"multiscale_spectral_energy","multiscale","exact_correspondence","row_id_correspondence","unrestricted","multiscale","spectral_energy","spectral",FALSE,NA,NA,"energy"
+"multiscale_spectral_supervised","multiscale","exact_correspondence","row_id_correspondence","unrestricted","multiscale","spectral_supervised","spectral",FALSE,NA,NA,"supervised"
+"multiscale_spectral_hybrid","multiscale","exact_correspondence","row_id_correspondence","unrestricted","multiscale","spectral_hybrid","spectral",FALSE,NA,NA,"hybrid"
+"multiscale_spectral_hybrid_tuned","multiscale","exact_correspondence","row_id_correspondence","unrestricted","multiscale","spectral_hybrid_tuned","spectral",TRUE,NA,NA,"hybrid"
+"multiscale_randomized_hybrid_tuned","multiscale","exact_correspondence","row_id_correspondence","unrestricted","multiscale","randomized_hybrid_tuned","randomized_dwt",TRUE,NA,NA,"hybrid"
+"lowrank_label","lowrank","label_supervision","labels","unrestricted","lowrank","label",NA,FALSE,NA,NA,NA
+"gpca_label","gpca","label_supervision","labels","unrestricted","gpca","label",NA,FALSE,NA,NA,NA
+"kema_linear_label","kema","label_supervision","labels","unrestricted","kema","linear_label",NA,FALSE,"linear","full",NA
+"kema_rbf_full_label","kema","label_supervision","labels","unrestricted","kema","rbf_full_label",NA,FALSE,"rbf","full",NA
+"kema_rbf_reduced_label","kema","label_supervision","labels","unrestricted","kema","rbf_reduced_label",NA,FALSE,"rbf","reduced",NA
+"genproc_rowid_exact","generalized_procrustes","exact_correspondence","row_id_correspondence","equal_feature_dim","generalized_procrustes","rowid_exact",NA,FALSE,NA,NA,NA
