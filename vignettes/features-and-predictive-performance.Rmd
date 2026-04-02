@@ -1,0 +1,258 @@
+---
+title: 'Features, Correspondences, and Predictive Performance'
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Features, Correspondences, and Predictive Performance}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+params:
+  family: red
+  preset: homage
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 6,
+  fig.height = 4
+)
+if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown", quietly = TRUE)) {
+  ggplot2::theme_set(albersdown::theme_albers(params$family))
+}
+```
+
+You have multiple data domains, and each row also has an external feature
+vector. Those features might come from text embeddings, anatomy, metadata, or
+another modality entirely. The alignment problem is:
+
+- use the observed matrices to learn a shared manifold,
+- use feature similarity to define cross-domain supervision,
+- use held-out feature agreement to define predictive performance.
+
+The important point is that predictive performance is **not** “reconstruct the
+feature vector.” It is “does a held-out row land near rows in other domains
+whose features are similar?”
+
+## Setup
+
+```{r libraries}
+library(manifoldalign)
+library(multidesign)
+library(ggplot2)
+```
+
+```{r helpers, include = FALSE}
+feature_correspondences <- function(Fa, Fb) {
+  Fa <- as.matrix(Fa)
+  Fb <- as.matrix(Fb)
+
+  Fa_norm <- sqrt(rowSums(Fa * Fa))
+  Fb_norm <- sqrt(rowSums(Fb * Fb))
+  Fa_norm[Fa_norm <= 0] <- 1
+  Fb_norm[Fb_norm <= 0] <- 1
+
+  sim <- (Fa / Fa_norm) %*% t(Fb / Fb_norm)
+  j_best <- max.col(sim, ties.method = "first")
+  i_best <- max.col(t(sim), ties.method = "first")
+  keep <- which(i_best[j_best] == seq_along(j_best))
+
+  data.frame(
+    domain_i = 1L,
+    index_i = keep,
+    domain_j = 2L,
+    index_j = j_best[keep]
+  )
+}
+
+aggregate_cv <- function(res, label) {
+  data.frame(
+    scenario = label,
+    metric = c("top-1", "top-k"),
+    value = c(
+      mean(res$scores$mean_top1_similarity),
+      mean(res$scores$mean_topk_similarity)
+    )
+  )
+}
+```
+
+## Simulate two aligned domains
+
+We will generate two observed matrices from the same latent variables and keep
+separate feature vectors for scoring.
+
+```{r simulate-data}
+set.seed(20260420)
+n <- 60
+latent_dim <- 3
+
+Z <- matrix(rnorm(n * latent_dim), n, latent_dim)
+A1 <- matrix(rnorm(latent_dim * 8), latent_dim, 8)
+A2 <- matrix(rnorm(latent_dim * 6), latent_dim, 6)
+
+X1 <- Z %*% A1 + matrix(rnorm(n * 8, sd = 0.05), n, 8)
+X2 <- Z %*% A2 + matrix(rnorm(n * 6, sd = 0.05), n, 6)
+
+features_true <- list(
+  a = Z + matrix(rnorm(n * latent_dim, sd = 0.02), n, latent_dim),
+  b = Z + matrix(rnorm(n * latent_dim, sd = 0.02), n, latent_dim)
+)
+```
+
+The observed data go into a `hyperdesign`. The feature matrices stay outside
+the fit and will be used for correspondences and held-out evaluation.
+
+```{r build-hyperdesign}
+hd <- hyperdesign(list(
+  a = multidesign(X1, data.frame(row_id = seq_len(n))),
+  b = multidesign(X2, data.frame(row_id = seq_len(n)))
+))
+
+hd
+```
+
+## Turn feature similarity into correspondences
+
+Here we use mutual top-1 cosine matches between the feature vectors. In a real
+problem you might use a threshold, mutual top-`k`, or weighted anchors.
+
+```{r correspondences}
+full_corr <- feature_correspondences(features_true$a, features_true$b)
+
+nrow(full_corr)
+head(full_corr)
+
+stopifnot(nrow(full_corr) >= 0.8 * n)
+```
+
+That correspondence table is only for the full data. During cross-validation we
+must rebuild it on each training split so held-out rows do not leak into the
+fit.
+
+## Score held-out rows
+
+`cv_alignment_rows()` does row-wise cross-validation. We hold out rows from
+domain `a`, fit on the remaining data, project the held-out rows, and score
+them against the training rows in domain `b`.
+
+```{r rowwise-cv}
+rows <- list(
+  list(a = 1:10),
+  list(a = 11:20),
+  list(a = 21:30)
+)
+
+fit_fn <- function(analysis) {
+  ids_a <- analysis$a$design$row_id
+  ids_b <- analysis$b$design$row_id
+
+  corr <- feature_correspondences(
+    features_true$a[ids_a, , drop = FALSE],
+    features_true$b[ids_b, , drop = FALSE]
+  )
+
+  manifoldalign::ssma_align(
+    analysis,
+    correspondences = corr,
+    preproc = multivarious::center(),
+    ncomp = 2,
+    control = manifoldalign::ssma_align_control(
+      knn = 8,
+      rank_per_domain = 12,
+      verbose = FALSE
+    )
+  )
+}
+
+cv_signal <- manifoldalign::cv_alignment_rows(
+  hd,
+  rows = rows,
+  fit_fn = fit_fn,
+  features = features_true,
+  k = 3,
+  target_pool = "analysis"
+)
+
+cv_signal$scores
+
+stopifnot(all(is.finite(cv_signal$scores$mean_top1_similarity)))
+stopifnot(all(is.finite(cv_signal$scores$mean_topk_similarity)))
+stopifnot(mean(cv_signal$scores$mean_top1_similarity) > 0.5)
+```
+
+The key score is `mean_top1_similarity`: for each held-out query row, project it
+into the fitted space, retrieve its nearest neighbor in the target block, and
+measure the cosine similarity of their external feature vectors.
+
+## Does the score detect broken semantic structure?
+
+A good held-out metric should drop when the feature-defined target structure is
+destroyed. We can test that by shuffling the target feature rows while keeping
+the fitted model fixed.
+
+```{r negative-control}
+set.seed(20260421)
+features_shuffled <- list(
+  a = features_true$a,
+  b = features_true$b[sample(seq_len(n)), , drop = FALSE]
+)
+
+cv_shuffled <- manifoldalign::cv_alignment_rows(
+  hd,
+  rows = rows,
+  fit_fn = fit_fn,
+  features = features_shuffled,
+  k = 3,
+  target_pool = "analysis"
+)
+
+comparison <- rbind(
+  aggregate_cv(cv_signal, "Aligned features"),
+  aggregate_cv(cv_shuffled, "Shuffled target features")
+)
+
+comparison
+
+stopifnot(
+  mean(cv_signal$scores$mean_top1_similarity) >
+    mean(cv_shuffled$scores$mean_top1_similarity) + 0.2
+)
+```
+
+```{r plot-comparison, echo = FALSE, fig.cap = "Held-out feature agreement drops when the target feature rows are shuffled, which is what we want from a predictive scoring rule."}
+ggplot(comparison, aes(metric, value, fill = scenario)) +
+  geom_col(position = "dodge", width = 0.7) +
+  scale_y_continuous(limits = c(-0.1, 1)) +
+  labs(x = NULL, y = "Mean feature similarity")
+```
+
+This is the predictive story:
+
+- the alignment is fit on the observed matrices,
+- feature similarity defines the semantic notion of a good cross-domain match,
+- held-out performance asks whether new rows land near semantically similar
+  rows in the fitted space.
+
+## Design takeaway
+
+If your features are only there to define supervision and evaluation, keep
+them **outside** the fit and use them to:
+
+1. build correspondence edges on the training rows,
+2. score held-out rows with `cv_alignment_rows()`.
+
+If the features are a real modality you want represented in the embedding, you
+can also add them as another domain in the alignment itself. That is a
+different model, and cross-validation then has to hold out the matching feature
+rows too.
