@@ -341,3 +341,40 @@ test_that("gpca_align handles edge cases and maintains numerical stability", {
   
   expect_true(all(is.finite(result_psd$s)))
 })
+
+test_that("gpca_align supports mixed feature dimensions with stateful preprocessing", {
+  skip_if_not_installed("genpca")
+  skip_if_not_installed("PRIMME")
+
+  set.seed(20260402)
+  n <- 24L
+  latent <- matrix(rnorm(n * 3L), n, 3L)
+  labels <- factor(rep(c("A", "B", "C"), length.out = n))
+  X1 <- latent %*% matrix(rnorm(3L * 4L), 3L, 4L) + matrix(rnorm(n * 4L, sd = 0.05), n, 4L)
+  X2 <- latent %*% matrix(rnorm(3L * 7L), 3L, 7L) + matrix(rnorm(n * 7L, sd = 0.05), n, 7L)
+
+  hd <- multidesign::hyperdesign(list(
+    domain1 = multidesign::multidesign(X1, data.frame(lbl = labels)),
+    domain2 = multidesign::multidesign(X2, data.frame(lbl = labels))
+  ))
+
+  fit <- gpca_align.hyperdesign(
+    hd,
+    y = lbl,
+    preproc = multivarious::center(),
+    ncomp = 2,
+    control = gpca_align_control(knn = 6L, verbose = FALSE)
+  )
+
+  expect_s3_class(fit, "multiblock_biprojector")
+  expect_true(all(is.finite(fit$s)))
+  expect_equal(ncol(fit$s), 2L)
+  expect_equal(nrow(fit$v), ncol(X1) + ncol(X2))
+
+  pred1 <- oos_predict(fit, X1[1:3, , drop = FALSE], side = 1L)
+  pred2 <- oos_predict(fit, X2[1:3, , drop = FALSE], side = 2L)
+  expect_equal(dim(pred1), c(3L, 2L))
+  expect_equal(dim(pred2), c(3L, 2L))
+  expect_true(all(is.finite(pred1)))
+  expect_true(all(is.finite(pred2)))
+})

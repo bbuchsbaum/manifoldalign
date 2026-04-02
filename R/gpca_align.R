@@ -447,7 +447,9 @@ gpca_align.hyperdesign <- function(
   pdata <- data
   proclist <- vector("list", nb)
 
-  broadcast <- is.function(preproc) || inherits(preproc, "prepper")
+  broadcast <- is.function(preproc) ||
+    inherits(preproc, "prepper") ||
+    inherits(preproc, "pre_processor")
   if (broadcast) {
     if (verbose) {
       message("Applying the same preprocessor to all ", nb, " domains.")
@@ -459,10 +461,24 @@ gpca_align.hyperdesign <- function(
 
   for (i in seq_len(nb)) {
     if (!is.null(preproc) && !is.null(preproc[[i]])) {
-      templ <- multivarious::prep(preproc[[i]])
-      Xi_tf <- multivarious::init_transform(templ, data[[i]]$x)
-      pdata[[i]]$x <- Xi_tf
-      proclist[[i]] <- attr(Xi_tf, "preproc") %||% templ
+      pre_i <- preproc[[i]]
+      if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
+        pre_i <- unserialize(serialize(pre_i, connection = NULL))
+      }
+
+      if (is.function(pre_i)) {
+        pdata[[i]]$x <- pre_i(data[[i]]$x)
+        proclist[[i]] <- pre_i
+      } else if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
+        ft <- multivarious::fit_transform(pre_i, data[[i]]$x)
+        pdata[[i]]$x <- ft$transformed
+        proclist[[i]] <- ft$preproc
+      } else {
+        templ <- multivarious::prep(pre_i)
+        Xi_tf <- multivarious::init_transform(templ, data[[i]]$x)
+        pdata[[i]]$x <- Xi_tf
+        proclist[[i]] <- attr(Xi_tf, "preproc") %||% templ
+      }
     } else {
       pdata[[i]]$x <- data[[i]]$x
       proclist[[i]] <- NULL
@@ -470,16 +486,12 @@ gpca_align.hyperdesign <- function(
   }
   names(proclist) <- names(data)
 
-  sample_block_idx <- block_indices(pdata)
-  sample_blocks_list <- split(sample_block_idx, row(sample_block_idx))
-  names(sample_blocks_list) <- names(pdata)
-  proc <- multivarious::concat_pre_processors(proclist, sample_blocks_list)
-
   feat_per_block <- vapply(pdata, function(b) ncol(b$x), integer(1))
   end_idx   <- cumsum(feat_per_block)
   start_idx <- c(1L, head(end_idx, -1L) + 1L)
   feature_block_idx <- lapply(seq_along(feat_per_block), function(i) start_idx[i]:end_idx[i])
   names(feature_block_idx) <- names(pdata)
+  proc <- multivarious::concat_pre_processors(proclist, feature_block_idx)
 
   ## -------------------------- assemble X (block-diagonal) --------------------------
   X_block <- Matrix::bdiag(lapply(pdata, function(b) {
