@@ -27,83 +27,34 @@ is_ci <- function() !is.na(Sys.getenv("CI", NA))
 
 # ============= FAST DATASET GENERATORS (REDUCED SIZES) =============
 
-rand_rotation <- function(d, seed=NULL) {
-  if(!is.null(seed)) set.seed(seed)
-  Q <- qr.Q(qr(matrix(rnorm(d^2), d)))
-  if (det(Q) < 0) Q[,1] <- -Q[,1]
-  Q
-}
-
-# Reduced from n=60 to n=20
 gen_linear_triplet_fast <- function(n = 20, noise = 0.01, seed = 1) {
-  set.seed(seed)
-
-  n1 <- floor(n/2)
-  n2 <- n - n1
-
-  latent_c1 <- matrix(rnorm(n1*2, mean=c(-0.5, -0.5), sd=0.3), n1, 2)
-  latent_c2 <- matrix(rnorm(n2*2, mean=c(0.5, 0.5), sd=0.3), n2, 2)
-  latent <- rbind(latent_c1, latent_c2)
-  colnames(latent) <- c("u1","u2")
-
-  true_labels <- factor(c(rep("class1", n1), rep("class2", n2)))
-
-  R1 <- rand_rotation(2, seed+1);  b1 <- c(0.2,-0.4)
-  R2 <- rand_rotation(2, seed+2);  b2 <- c(-0.7, 0.6)
-  R3 <- rand_rotation(2, seed+3);  b3 <- c( 0.1, 0.8)
-
-  X1 <- latent %*% diag(c(1.0, 0.7)) %*% R1  + matrix(b1, n, 2, TRUE) + rnorm(n*2,0,noise)
-  X2 <- latent %*% diag(c(0.5, 1.2)) %*% R2  + matrix(b2, n, 2, TRUE) + rnorm(n*2,0,noise)
-  X3 <- latent %*% diag(c(1.5, 0.4)) %*% R3  + matrix(b3, n, 2, TRUE) + rnorm(n*2,0,noise)
-
-  list(latent = latent, view1 = X1, view2 = X2, view3 = X3,
-       true_labels = true_labels)
+  manifoldalign:::synthetic_alignment_scenario(
+    "linear_affine",
+    profile = "fast",
+    seed = seed,
+    n = n,
+    noise = noise
+  )
 }
 
-# Reduced from n=50 to n=25
 gen_isometric_triplet_fast <- function(n = 25, noise = 0.02, seed = 2) {
-  set.seed(seed)
-  t <- sort(runif(n, 0, 2*pi))
-
-  class_boundary <- pi
-  true_labels <- factor(ifelse(t < class_boundary, "early", "late"))
-
-  v1 <- cbind(t, 0)
-  v2 <- cbind(cos(t), sin(t))
-  v3 <- cbind(cos(t), sin(t), t/(2*pi))
-
-  v1 <- v1 + matrix(rnorm(n*2,0,noise), n,2)
-  v2 <- v2 + matrix(rnorm(n*2,0,noise), n,2)
-  v3 <- v3 + matrix(rnorm(n*3,0,noise), n,3)
-
-  list(latent = t, view1 = v1, view2 = v2, view3 = v3,
-       true_labels = true_labels)
+  manifoldalign:::synthetic_alignment_scenario(
+    "isometric_curve",
+    profile = "fast",
+    seed = seed,
+    n = n,
+    noise = noise
+  )
 }
 
-# Reduced from 10x10 (100 samples) to 5x5 (25 samples)
 gen_hard_triplet_fast <- function(n_side = 5, noise = 0.03, seed = 3) {
-  set.seed(seed)
-  u <- seq(-1, 1, length.out = n_side)
-  grid <- as.matrix(expand.grid(u, u))
-
-  true_labels <- factor(ifelse(grid[,1] < 0, "left", "right"))
-
-  v1 <- grid + matrix(rnorm(nrow(grid)*2, 0, noise), ncol = 2)
-
-  theta <- (grid[,1] + 1) * 2 * pi
-  height <- grid[,2]
-  v2 <- cbind(theta * cos(theta),
-              height,
-              theta * sin(theta)) + matrix(rnorm(nrow(grid)*3, 0, noise), ncol=3)
-
-  A <- matrix(c(2, 0.5, 0, 0.2), 2, 2)
-  v3 <- grid %*% A
-  idx_hard <- which(grid[,1] < 0 & grid[,2] < 0)
-  v3[idx_hard,] <- v3[idx_hard,] + matrix(rnorm(length(idx_hard)*2, 0, 0.2), ncol=2)
-  v3 <- v3 + matrix(rnorm(nrow(grid)*2, 0, noise), ncol=2)
-
-  list(latent = grid, view1 = v1, view2 = v2, view3 = v3,
-       hard_indices = idx_hard, true_labels = true_labels)
+  manifoldalign:::synthetic_alignment_scenario(
+    "hard_nonisometric",
+    profile = "fast",
+    seed = seed,
+    n_side = n_side,
+    noise = noise
+  )
 }
 
 # ============= VALIDATION HELPERS =============
@@ -156,30 +107,16 @@ toy_to_hyperdesign <- function(toy_data, use_true_labels = TRUE) {
     skip_if_not_installed("tibble")
   }
 
-  view_names <- names(toy_data)[!names(toy_data) %in% c("latent", "hard_indices", "true_labels", "class_centers", "parameter_boundary")]
-
-  if (use_true_labels && "true_labels" %in% names(toy_data)) {
-    labels <- toy_data$true_labels
-  } else {
-    stop("toy_to_hyperdesign requires meaningful labels")
+  if (!use_true_labels) {
+    stop("toy_to_hyperdesign requires meaningful labels", call. = FALSE)
   }
 
-  domain_list <- list()
-  for (i in seq_along(view_names)) {
-    view_name <- view_names[i]
-    X <- as.matrix(toy_data[[view_name]])
-
-    design_df <- data.frame(
-      sample_id = seq_len(nrow(X)),
-      label = labels,
-      stringsAsFactors = FALSE
-    )
-
-    domain_list[[view_name]] <- list(x = X, design = design_df)
-  }
-
-  class(domain_list) <- c("hyperdesign", "list")
-  domain_list
+  manifoldalign:::synthetic_alignment_to_hyperdesign(
+    toy_data,
+    label = toy_data$true_labels,
+    label_col = "label",
+    id_col = "sample_id"
+  )
 }
 
 # ============= FAST SMOKE TESTS =============
