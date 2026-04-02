@@ -275,11 +275,15 @@ oos_predict.multiblock_biprojector <- function(fit_or_transform, newX, side = c(
   # Apply preprocessing for this block if available
   pre <- fit_or_transform$preproc
   if (!is.null(pre)) {
-    if (is.list(pre) && length(pre) >= side_idx) pre <- pre[[side_idx]]
-    if (inherits(pre, "prepper") || inherits(pre, "pre_processor")) {
-      X <- multivarious::init_transform(pre, X)
-    } else if (is.function(pre)) {
-      X <- pre(X)
+    if (inherits(pre, "concat_pre_processor")) {
+      X <- multivarious::transform(pre, X, colind = feat_idx)
+    } else {
+      if (is.list(pre) && length(pre) >= side_idx) pre <- pre[[side_idx]]
+      if (inherits(pre, "prepper") || inherits(pre, "pre_processor")) {
+        X <- multivarious::init_transform(pre, X)
+      } else if (is.function(pre)) {
+        X <- pre(X)
+      }
     }
   }
 
