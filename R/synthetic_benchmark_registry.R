@@ -282,6 +282,117 @@ synthetic_alignment_to_hyperdesign <- function(scenario,
   }))
 }
 
+.normalize_benchmark_method_meta <- function(meta, method_name) {
+  if (is.null(meta)) {
+    return(list())
+  }
+  if (!is.list(meta) || is.null(names(meta)) || any(!nzchar(names(meta)))) {
+    stop("Benchmark method metadata for `", method_name, "` must be a named list.", call. = FALSE)
+  }
+
+  bad <- names(meta)[vapply(meta, function(x) {
+    is.null(x) || length(x) != 1L || (is.list(x) && !is.atomic(x))
+  }, logical(1))]
+  if (length(bad)) {
+    stop(
+      "Benchmark method metadata entries must be scalar atomic values. Invalid entries for `",
+      method_name, "`: ", paste(bad, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  meta
+}
+
+.normalize_benchmark_method_entry <- function(entry, method_name) {
+  if (is.function(entry)) {
+    return(list(fit = entry, meta = list()))
+  }
+
+  if (!is.list(entry)) {
+    stop("Benchmark method `", method_name, "` must be a function or a list with `$fit`.", call. = FALSE)
+  }
+
+  fit <- .bench_or(entry$fit, .bench_or(entry$fn, entry$method))
+  if (!is.function(fit)) {
+    stop("Benchmark method `", method_name, "` must provide a callable `$fit`.", call. = FALSE)
+  }
+
+  meta <- .bench_or(entry$meta, .bench_or(entry$metadata, list()))
+  list(fit = fit, meta = .normalize_benchmark_method_meta(meta, method_name))
+}
+
+.normalize_benchmark_methods <- function(methods) {
+  if (is.function(methods)) {
+    methods <- list(method = methods)
+  }
+  if (!is.list(methods) || !length(methods)) {
+    stop("`methods` must be a non-empty named list of functions or method specs.", call. = FALSE)
+  }
+  if (is.null(names(methods)) || any(!nzchar(names(methods)))) {
+    stop("`methods` must be named.", call. = FALSE)
+  }
+
+  stats::setNames(
+    lapply(names(methods), function(method_name) {
+      .normalize_benchmark_method_entry(methods[[method_name]], method_name)
+    }),
+    names(methods)
+  )
+}
+
+.benchmark_seed_from_parts <- function(...) {
+  txt <- paste(..., collapse = "::")
+  ints <- utf8ToInt(txt)
+  if (!length(ints)) return(1L)
+  acc <- sum(as.numeric(ints) * seq_along(ints))
+  as.integer(1L + (acc %% (.Machine$integer.max - 1)))
+}
+
+.as_numeric_column <- function(x) {
+  if (is.factor(x)) {
+    return(as.numeric(as.character(x)))
+  }
+  as.numeric(x)
+}
+
+.aggregate_stat_matrix <- function(x, stat_names) {
+  if (is.null(dim(x))) {
+    x <- matrix(x, ncol = length(stat_names), byrow = TRUE)
+  } else {
+    x <- as.matrix(x)
+  }
+  colnames(x) <- stat_names
+  x
+}
+
+.benchmark_group_key <- function(df, group_cols) {
+  parts <- lapply(group_cols, function(col) {
+    x <- df[[col]]
+    if (is.factor(x)) {
+      x <- as.character(x)
+    }
+    if (is.logical(x)) {
+      x <- ifelse(is.na(x), "__NA__", ifelse(x, "__TRUE__", "__FALSE__"))
+    } else {
+      x <- ifelse(is.na(x), "__NA__", as.character(x))
+    }
+    x
+  })
+  do.call(paste, c(parts, sep = "||"))
+}
+
+synthetic_benchmark_method_catalog <- function(methods) {
+  method_specs <- .normalize_benchmark_methods(methods)
+  rows <- lapply(names(method_specs), function(method_name) {
+    c(
+      list(method = method_name),
+      method_specs[[method_name]]$meta
+    )
+  })
+  .combine_benchmark_rows(rows)
+}
+
 run_synthetic_alignment_benchmark <- function(methods,
                                               scenarios = NULL,
                                               profile = c("full", "fast"),
@@ -290,18 +401,7 @@ run_synthetic_alignment_benchmark <- function(methods,
                                               verbose = FALSE) {
   profile <- match.arg(profile)
 
-  if (is.function(methods)) {
-    methods <- list(method = methods)
-  }
-  if (!is.list(methods) || !length(methods)) {
-    stop("`methods` must be a non-empty named list of functions.", call. = FALSE)
-  }
-  if (is.null(names(methods)) || any(!nzchar(names(methods)))) {
-    stop("`methods` must be named.", call. = FALSE)
-  }
-  if (!all(vapply(methods, is.function, logical(1)))) {
-    stop("All entries in `methods` must be functions.", call. = FALSE)
-  }
+  method_specs <- .normalize_benchmark_methods(methods)
 
   if (is.null(scenarios)) {
     scenario_names <- synthetic_alignment_scenarios(profile)$scenario
@@ -321,7 +421,16 @@ run_synthetic_alignment_benchmark <- function(methods,
   for (scenario_name in scenario_names) {
     for (seed in seeds) {
       scenario <- synthetic_alignment_scenario(scenario_name, profile = profile, seed = seed)
-      for (method_name in names(methods)) {
+      scenario_meta <- .bench_or(scenario$benchmark_meta, list())
+      scenario_cols <- list(
+        scenario_family = .bench_or(scenario_meta$family, NA_character_),
+        scenario_latent_relation = .bench_or(scenario_meta$latent_relation, NA_character_),
+        scenario_supervision = .bench_or(scenario_meta$supervision, NA_character_),
+        scenario_side_information = .bench_or(scenario_meta$side_information, NA_character_),
+        scenario_difficulty = .bench_or(scenario_meta$difficulty, NA_character_)
+      )
+
+      for (method_name in names(method_specs)) {
         if (isTRUE(verbose)) {
           message(
             "run_synthetic_alignment_benchmark: scenario=", scenario_name,
@@ -332,9 +441,12 @@ run_synthetic_alignment_benchmark <- function(methods,
 
         fit <- NULL
         error_msg <- NA_character_
+        method_seed <- .benchmark_seed_from_parts(profile, scenario_name, seed, method_name)
+        method_spec <- method_specs[[method_name]]
         runtime_sec <- system.time({
+          set.seed(method_seed)
           fit <- tryCatch(
-            methods[[method_name]](scenario),
+            method_spec$fit(scenario),
             error = function(e) {
               error_msg <<- conditionMessage(e)
               NULL
@@ -362,6 +474,8 @@ run_synthetic_alignment_benchmark <- function(methods,
             runtime_sec = as.numeric(runtime_sec),
             error = error_msg
           ),
+          scenario_cols,
+          method_spec$meta,
           metrics
         )
         row_idx <- row_idx + 1L
@@ -387,24 +501,120 @@ summarize_synthetic_alignment_benchmark <- function(results,
     metric_cols <- setdiff(metric_cols, "seed")
   }
   metric_cols <- intersect(metric_cols, names(results))
-  if (!length(metric_cols)) {
-    base <- unique(results[group_cols])
-    rownames(base) <- NULL
-    return(base)
-  }
-
   out <- unique(results[group_cols])
   rownames(out) <- NULL
+  out$.group_key <- .benchmark_group_key(out, group_cols)
+  result_keys <- .benchmark_group_key(results, group_cols)
+
+  n_runs <- stats::aggregate(
+    rep(1L, nrow(results)),
+    by = list(.group_key = result_keys),
+    FUN = sum
+  )
+  out$n_runs <- as.integer(.as_numeric_column(n_runs$x[match(out$.group_key, n_runs$.group_key)]))
+
+  if ("error" %in% names(results)) {
+    n_success <- stats::aggregate(
+      as.integer(is.na(results$error)),
+      by = list(.group_key = result_keys),
+      FUN = sum
+    )
+    out$n_success <- as.integer(.as_numeric_column(n_success$x[match(out$.group_key, n_success$.group_key)]))
+    out$n_errors <- out$n_runs - out$n_success
+    out$error_rate <- ifelse(out$n_runs > 0, out$n_errors / out$n_runs, NA_real_)
+  } else {
+    out$n_success <- out$n_runs
+    out$n_errors <- 0L
+    out$error_rate <- 0
+  }
+
+  if (!length(metric_cols)) {
+    out$.group_key <- NULL
+    return(out)
+  }
 
   for (metric in metric_cols) {
     agg <- stats::aggregate(
       results[[metric]],
-      by = results[group_cols],
+      by = list(.group_key = result_keys),
       FUN = function(x) c(mean = mean(x, na.rm = TRUE), sd = stats::sd(x, na.rm = TRUE))
     )
-    out[[paste0(metric, "_mean")]] <- agg$x[, "mean"]
-    out[[paste0(metric, "_sd")]] <- agg$x[, "sd"]
+    stats_mat <- .aggregate_stat_matrix(agg$x, c("mean", "sd"))
+    idx <- match(out$.group_key, agg$.group_key)
+    out[[paste0(metric, "_mean")]] <- stats_mat[idx, "mean"]
+    out[[paste0(metric, "_sd")]] <- stats_mat[idx, "sd"]
   }
 
+  out$.group_key <- NULL
+  out
+}
+
+summarize_synthetic_alignment_seed_robustness <- function(results,
+                                                          metric_cols = NULL,
+                                                          group_cols = c("method", "scenario", "profile")) {
+  if (!is.data.frame(results)) {
+    stop("`results` must be a data.frame.", call. = FALSE)
+  }
+  if (!all(group_cols %in% names(results))) {
+    stop("Missing grouping columns in `results`.", call. = FALSE)
+  }
+
+  if (is.null(metric_cols)) {
+    metric_cols <- names(results)[vapply(results, is.numeric, logical(1))]
+    metric_cols <- setdiff(metric_cols, "seed")
+  }
+  metric_cols <- intersect(metric_cols, names(results))
+
+  out <- summarize_synthetic_alignment_benchmark(
+    results = results,
+    metric_cols = character(0),
+    group_cols = group_cols
+  )
+  out$.group_key <- .benchmark_group_key(out, group_cols)
+  result_keys <- .benchmark_group_key(results, group_cols)
+
+  for (metric in metric_cols) {
+    agg <- stats::aggregate(
+      results[[metric]],
+      by = list(.group_key = result_keys),
+      FUN = function(x) {
+        x <- x[is.finite(x)]
+        if (!length(x)) {
+          return(c(
+            mean = NA_real_,
+            sd = NA_real_,
+            median = NA_real_,
+            iqr = NA_real_,
+            min = NA_real_,
+            max = NA_real_,
+            cv = NA_real_
+          ))
+        }
+
+        mean_x <- mean(x)
+        sd_x <- stats::sd(x)
+        c(
+          mean = mean_x,
+          sd = sd_x,
+          median = stats::median(x),
+          iqr = stats::IQR(x),
+          min = min(x),
+          max = max(x),
+          cv = if (isTRUE(all.equal(mean_x, 0))) NA_real_ else sd_x / abs(mean_x)
+        )
+      }
+    )
+    stats_mat <- .aggregate_stat_matrix(
+      agg$x,
+      c("mean", "sd", "median", "iqr", "min", "max", "cv")
+    )
+    colnames(stats_mat) <- paste0(metric, "_", colnames(stats_mat))
+    idx <- match(out$.group_key, agg$.group_key)
+    for (j in seq_len(ncol(stats_mat))) {
+      out[[colnames(stats_mat)[j]]] <- stats_mat[idx, j]
+    }
+  }
+
+  out$.group_key <- NULL
   out
 }

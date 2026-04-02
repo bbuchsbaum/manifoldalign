@@ -89,4 +89,124 @@ test_that("synthetic benchmark runner and summary return a unified result schema
   expect_true(is.data.frame(summary_df))
   expect_equal(nrow(summary_df), 2)
   expect_true(all(c("runtime_sec_mean", "n_rows_mean", "n_cols_mean", "latent_dim_mean") %in% names(summary_df)))
+  expect_true(all(c("n_runs", "n_success", "n_errors", "error_rate") %in% names(summary_df)))
+})
+
+test_that("synthetic benchmark runner is invariant to method order for stochastic methods", {
+  stochastic_methods_1 <- list(
+    alpha = function(scenario) matrix(stats::rnorm(6), 3, 2),
+    beta = function(scenario) matrix(stats::rnorm(6), 3, 2)
+  )
+  stochastic_methods_2 <- rev(stochastic_methods_1)
+
+  score_fn <- function(fit, scenario, method) {
+    c(sum_fit = sum(fit), mean_fit = mean(fit))
+  }
+
+  res1 <- manifoldalign:::run_synthetic_alignment_benchmark(
+    methods = stochastic_methods_1,
+    scenarios = "linear_affine",
+    profile = "fast",
+    seeds = 7L,
+    score_fn = score_fn
+  )
+  res2 <- manifoldalign:::run_synthetic_alignment_benchmark(
+    methods = stochastic_methods_2,
+    scenarios = "linear_affine",
+    profile = "fast",
+    seeds = 7L,
+    score_fn = score_fn
+  )
+
+  res1 <- res1[order(res1$method), c("method", "sum_fit", "mean_fit")]
+  res2 <- res2[order(res2$method), c("method", "sum_fit", "mean_fit")]
+  rownames(res1) <- NULL
+  rownames(res2) <- NULL
+
+  expect_equal(res1, res2)
+})
+
+test_that("synthetic benchmark runner propagates method and scenario metadata", {
+  methods <- list(
+    tagged = list(
+      fit = function(scenario) matrix(1, 3, 2),
+      meta = list(
+        method_family = "toy_family",
+        supervision_regime = "toy_supervision",
+        tuned = FALSE
+      )
+    )
+  )
+
+  res <- manifoldalign:::run_synthetic_alignment_benchmark(
+    methods = methods,
+    scenarios = "linear_affine",
+    profile = "fast",
+    seeds = 9L,
+    score_fn = function(fit, scenario, method) c(n_rows = nrow(scenario$view1))
+  )
+
+  expect_equal(res$method_family, "toy_family")
+  expect_equal(res$supervision_regime, "toy_supervision")
+  expect_false(res$tuned)
+  expect_equal(res$scenario_family, "feature")
+  expect_equal(res$scenario_latent_relation, "linear")
+  expect_equal(res$scenario_difficulty, "easy")
+
+  catalog <- manifoldalign:::synthetic_benchmark_method_catalog(methods)
+  expect_equal(catalog$method, "tagged")
+  expect_equal(catalog$method_family, "toy_family")
+})
+
+test_that("synthetic benchmark summary aligns aggregates by group keys", {
+  results <- data.frame(
+    method = c("beta", "alpha", "beta", "alpha"),
+    scenario = c("s2", "s1", "s2", "s1"),
+    profile = "fast",
+    seed = c(1L, 1L, 2L, 2L),
+    runtime_sec = c(1, 10, 3, 14),
+    error = NA_character_,
+    stringsAsFactors = FALSE
+  )
+
+  summary_df <- manifoldalign:::summarize_synthetic_alignment_benchmark(
+    results,
+    metric_cols = "runtime_sec"
+  )
+
+  expect_equal(summary_df$method, c("beta", "alpha"))
+  expect_equal(summary_df$scenario, c("s2", "s1"))
+  expect_equal(summary_df$runtime_sec_mean, c(2, 12))
+  expect_equal(round(summary_df$runtime_sec_sd, 8), c(round(sqrt(2), 8), round(sqrt(8), 8)))
+  expect_equal(summary_df$n_runs, c(2L, 2L))
+  expect_equal(summary_df$n_success, c(2L, 2L))
+  expect_equal(summary_df$error_rate, c(0, 0))
+})
+
+test_that("synthetic benchmark seed robustness summary reports spread and failures", {
+  results <- data.frame(
+    method = c("alpha", "alpha", "alpha", "beta"),
+    scenario = c("s1", "s1", "s1", "s1"),
+    profile = "fast",
+    seed = 1:4,
+    runtime_sec = c(1, 2, 3, 4),
+    centroid_acc = c(0.8, 0.9, NA, 0.5),
+    error = c(NA, NA, "fit failed", NA),
+    stringsAsFactors = FALSE
+  )
+
+  robust <- manifoldalign:::summarize_synthetic_alignment_seed_robustness(
+    results,
+    metric_cols = c("runtime_sec", "centroid_acc")
+  )
+
+  alpha <- robust[robust$method == "alpha", , drop = FALSE]
+  expect_equal(alpha$n_runs, 3L)
+  expect_equal(alpha$n_success, 2L)
+  expect_equal(alpha$n_errors, 1L)
+  expect_equal(alpha$error_rate, 1 / 3)
+  expect_equal(alpha$centroid_acc_mean, 0.85)
+  expect_equal(alpha$centroid_acc_median, 0.85)
+  expect_equal(alpha$centroid_acc_iqr, 0.05)
+  expect_true(is.finite(alpha$centroid_acc_cv))
 })
