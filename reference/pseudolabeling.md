@@ -73,6 +73,6 @@ result <- assign_pseudolabels(sim_matrix, min_clusters = 5)
 table(result$labels, useNA = "always")
 #> 
 #> anchor_001       <NA> 
-#>         97          3 
+#>         98          2 
 # }
 ```

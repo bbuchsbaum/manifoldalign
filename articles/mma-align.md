@@ -89,7 +89,7 @@ str(mma_ref, max.level = 1)
 #> List of 15
 #>  $ v              : num [1:12, 1:8] -44.57 -54.31 -42.32 -34.32 6.87 ...
 #>  $ s              : num [1:240, 1:8] -0.736 -0.711 -0.936 -0.656 -0.74 ...
-#>  $ sdev           : num [1:8] 0.515 0.511 0.245 0.337 0.305 ...
+#>  $ sdev           : num [1:8] 0.544 0.518 0.292 0.253 0.295 ...
 #>  $ preproc        : NULL
 #>  $ block_indices  :List of 3
 #>  $ rotations      :List of 3
@@ -114,14 +114,14 @@ tibble::as_tibble(quality_ref$per_domain)
 #>    <int> <int>  <dbl>    <dbl>   <int>    <dbl>           <dbl> <lgl>    
 #> 1      1    80 NA     NA            NA       NA          NA     TRUE     
 #> 2      2    80  0.265  0.0117       80        1           0.486 FALSE    
-#> 3      3    80  0.196  0.00270      80        1           0.517 FALSE    
+#> 3      3    80  0.201  0.00869      80        1           0.517 FALSE    
 #> # ℹ 1 more variable: iterations <int>
 
 tibble::as_tibble(quality_ref$global)
 #> # A tibble: 1 × 6
 #>   mse_weighted mse_soft_weighted     K ref_idx mean_confidence all_converged
 #>          <dbl>             <dbl> <int>   <dbl>           <dbl> <lgl>        
-#> 1        0.230           0.00481     8       1           0.501 FALSE
+#> 1        0.233           0.00681     8       1           0.501 FALSE
 ```
 
 The per-domain diagnostics expose EM convergence, average eigensignature
@@ -151,7 +151,7 @@ accuracy_tbl
 #>   domain  class_accuracy hard_match_coverage
 #>   <chr>            <dbl>               <dbl>
 #> 1 domain2          0.225                   1
-#> 2 domain3          0.225                   1
+#> 2 domain3          0.275                   1
 ```
 
 The aligned embeddings combine all domains row-wise. Visual inspection

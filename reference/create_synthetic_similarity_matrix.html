@@ -122,31 +122,31 @@ Used for testing and demonstrating the pseudolabeling functions.</p>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Apply pseudolabeling</span></span></span>
 <span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="assign_pseudolabels.html">assign_pseudolabels</a></span><span class="op">(</span><span class="va">synthetic</span><span class="op">$</span><span class="va">sim_matrix</span>, verbose <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Processing 500 samples with 9288 non-zero similarities</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Adaptive threshold: 0.8659 ( 0.8 quantile of 9288 similarities)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Processing 500 samples with 9290 non-zero similarities</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Adaptive threshold: 0.8682 ( 0.8 quantile of 9290 similarities)</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> 'as(&lt;dsCMatrix&gt;, "dgCMatrix")' is deprecated.</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Use 'as(., "generalMatrix")' instead.</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> See help("Deprecated") and help("Matrix-deprecated").</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> After thresholding: 1858 connections remain</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Found 18 initial clusters</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Found 17 initial clusters</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Found 10 valid clusters after size filtering</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Final result: 10 clusters, 492 samples assigned</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Final result: 10 clusters, 493 samples assigned</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Compare with true labels</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">result</span><span class="op">$</span><span class="va">labels</span>, <span class="va">synthetic</span><span class="op">$</span><span class="va">true_labels</span>, useNA <span class="op">=</span> <span class="st">"always"</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>             </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>              cluster_1 cluster_10 cluster_2 cluster_3 cluster_4 cluster_5</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_001        48          0         0         0         0         0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_002         0          0        50         0         0         0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_001        49          0         0         0         0         0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_002         0          0        49         0         0         0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_003         0          0         0        50         0         0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_004         0          0         0         0        49         0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_005         0          0         0         0         0        50</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_004         0          0         0         0        50         0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_005         0          0         0         0         0        48</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_006         0          0         0         0         0         0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_007         0          0         0         0         0         0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_008         0          0         0         0         0         0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_009         0          0         0         0         0         0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_010         0         48         0         0         0         0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   &lt;NA&gt;               2          2         0         0         1         0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_010         0         49         0         0         0         0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   &lt;NA&gt;               1          1         1         0         0         2</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>             </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>              cluster_6 cluster_7 cluster_8 cluster_9 &lt;NA&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_001         0         0         0         0    0</span>
@@ -154,12 +154,12 @@ Used for testing and demonstrating the pseudolabeling functions.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_003         0         0         0         0    0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_004         0         0         0         0    0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_005         0         0         0         0    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_006        48         0         0         0    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_007         0        49         0         0    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_006        50         0         0         0    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_007         0        50         0         0    0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_008         0         0        50         0    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_009         0         0         0        50    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_009         0         0         0        48    0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   anchor_010         0         0         0         0    0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   &lt;NA&gt;               2         1         0         0    0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   &lt;NA&gt;               0         0         0         2    0</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>

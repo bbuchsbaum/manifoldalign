@@ -56,7 +56,7 @@ list(
 #> [1] 200
 #> 
 #> $final_cost
-#> [1] 0.04915779
+#> [1] 0.04429202
 ```
 
 ### Coupled Basis Diagnostics
@@ -92,9 +92,9 @@ similarity_tbl
 #> # A tibble: 3 × 3
 #>   domain_i domain_j hs_similarity
 #>   <chr>    <chr>            <dbl>
-#> 1 domain1  domain2           2.08
-#> 2 domain1  domain3           2.07
-#> 3 domain2  domain3           2.01
+#> 1 domain1  domain2           2.09
+#> 2 domain1  domain3           2.09
+#> 3 domain2  domain3           2.03
 ```
 
 ### Visualising Coupled Components

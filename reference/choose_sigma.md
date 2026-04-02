@@ -30,5 +30,5 @@ Suggested sigma value
 X <- matrix(rnorm(100), 20, 5)
 sigma <- choose_sigma(X)
 sigma
-#> [1] 1.845579
+#> [1] 2.401595
 ```

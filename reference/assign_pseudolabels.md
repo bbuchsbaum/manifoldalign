@@ -134,9 +134,9 @@ Matrix::diag(sim_matrix) <- 1  # Self-similarity = 1
 
 # Find pseudolabels
 result <- assign_pseudolabels(sim_matrix, min_clusters = 20, verbose = TRUE)
-#> Processing 1000 samples with 97302 non-zero similarities
-#> Adaptive threshold: 0.4069 ( 0.8 quantile of 97302 similarities)
-#> After thresholding: 19462 connections remain
+#> Processing 1000 samples with 97248 non-zero similarities
+#> Adaptive threshold: 0.4069 ( 0.8 quantile of 97248 similarities)
+#> After thresholding: 19450 connections remain
 #> Found 1 initial clusters
 #> Found 1 valid clusters after size filtering
 #> Warning: Final number of representatives (1) is below min_clusters (20). Consider lowering sim_threshold or min_cluster_size.

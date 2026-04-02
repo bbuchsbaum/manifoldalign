@@ -69,31 +69,31 @@ synthetic <- create_synthetic_similarity_matrix(n_samples = 500,
 
 # Apply pseudolabeling
 result <- assign_pseudolabels(synthetic$sim_matrix, verbose = TRUE)
-#> Processing 500 samples with 9288 non-zero similarities
-#> Adaptive threshold: 0.8659 ( 0.8 quantile of 9288 similarities)
+#> Processing 500 samples with 9290 non-zero similarities
+#> Adaptive threshold: 0.8682 ( 0.8 quantile of 9290 similarities)
 #> 'as(<dsCMatrix>, "dgCMatrix")' is deprecated.
 #> Use 'as(., "generalMatrix")' instead.
 #> See help("Deprecated") and help("Matrix-deprecated").
 #> After thresholding: 1858 connections remain
-#> Found 18 initial clusters
+#> Found 17 initial clusters
 #> Found 10 valid clusters after size filtering
-#> Final result: 10 clusters, 492 samples assigned
+#> Final result: 10 clusters, 493 samples assigned
 
 # Compare with true labels
 table(result$labels, synthetic$true_labels, useNA = "always")
 #>             
 #>              cluster_1 cluster_10 cluster_2 cluster_3 cluster_4 cluster_5
-#>   anchor_001        48          0         0         0         0         0
-#>   anchor_002         0          0        50         0         0         0
+#>   anchor_001        49          0         0         0         0         0
+#>   anchor_002         0          0        49         0         0         0
 #>   anchor_003         0          0         0        50         0         0
-#>   anchor_004         0          0         0         0        49         0
-#>   anchor_005         0          0         0         0         0        50
+#>   anchor_004         0          0         0         0        50         0
+#>   anchor_005         0          0         0         0         0        48
 #>   anchor_006         0          0         0         0         0         0
 #>   anchor_007         0          0         0         0         0         0
 #>   anchor_008         0          0         0         0         0         0
 #>   anchor_009         0          0         0         0         0         0
-#>   anchor_010         0         48         0         0         0         0
-#>   <NA>               2          2         0         0         1         0
+#>   anchor_010         0         49         0         0         0         0
+#>   <NA>               1          1         1         0         0         2
 #>             
 #>              cluster_6 cluster_7 cluster_8 cluster_9 <NA>
 #>   anchor_001         0         0         0         0    0
@@ -101,11 +101,11 @@ table(result$labels, synthetic$true_labels, useNA = "always")
 #>   anchor_003         0         0         0         0    0
 #>   anchor_004         0         0         0         0    0
 #>   anchor_005         0         0         0         0    0
-#>   anchor_006        48         0         0         0    0
-#>   anchor_007         0        49         0         0    0
+#>   anchor_006        50         0         0         0    0
+#>   anchor_007         0        50         0         0    0
 #>   anchor_008         0         0        50         0    0
-#>   anchor_009         0         0         0        50    0
+#>   anchor_009         0         0         0        48    0
 #>   anchor_010         0         0         0         0    0
-#>   <NA>               2         1         0         0    0
+#>   <NA>               0         0         0         2    0
 # }
 ```

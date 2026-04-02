@@ -47,10 +47,10 @@ List with two networks and ground truth alignment
 vdata <- generate_parrot_validation_data(n_nodes = 20, n_anchors = 5)
 str(vdata$ground_truth)
 #> List of 3
-#>  $ permutation   : int [1:20] 1 2 3 4 5 6 7 8 20 10 ...
-#>  $ inverse_perm  : int [1:20] 1 2 3 4 5 6 7 8 20 10 ...
+#>  $ permutation   : int [1:20] 1 2 3 4 5 6 7 8 10 11 ...
+#>  $ inverse_perm  : int [1:20] 1 2 3 4 5 6 7 8 11 9 ...
 #>  $ anchor_indices:List of 2
-#>   ..$ net1: int [1:5] 10 12 13 14 18
-#>   ..$ net2: int [1:5] 10 12 13 14 18
+#>   ..$ net1: int [1:5] 3 6 8 16 20
+#>   ..$ net2: int [1:5] 3 6 8 16 20
 # }
 ```

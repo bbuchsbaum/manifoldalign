@@ -77,7 +77,7 @@ str(reg_fit, max.level = 1)
 #>  $ s            :Formal class 'dgeMatrix' [package "Matrix"] with 4 slots
 #>  $ sdev         : num [1:2] 0.0126 0.2044
 #>  $ block_indices:List of 3
-#>  $ alpha        : num [1:240, 1:2] 0.03815 0.15544 -0.0875 0.21601 -0.00167 ...
+#>  $ alpha        : num [1:240, 1:2] 0.03815 0.15544 -0.08751 0.21601 -0.00162 ...
 #>  $ Ks           :List of 3
 #>  $ sample_frac  : num 1
 #>  $ dweight      : num 0.1
@@ -87,7 +87,7 @@ str(reg_fit, max.level = 1)
 #>  $ eigenvalues  :List of 3
 #>  $ retry_info   :List of 3
 #>  - attr(*, "class")= chr [1:5] "kema" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...
-#>  - attr(*, ".cache")=<environment: 0x5650d4366218>
+#>  - attr(*, ".cache")=<environment: 0x559fd8ec0458>
 ```
 
 ``` r
@@ -205,7 +205,7 @@ solution.
 
 ``` r
 subspace_similarity(exact_fit$s[, 1:2], rekema_fit$s[, 1:2])
-#> [1] 0.8987104 0.8294390
+#> [1] 0.8987107 0.8294381
 ```
 
 ## Scalable Mode (Operator-Based)

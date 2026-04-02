@@ -208,11 +208,11 @@ on Computer Vision (pp. 268-284).</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Auto-selecting sigma_P using histogram-spread heuristic...</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   sigma=1.00e-05, spread=0.0000</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   sigma=3.16e-03, spread=0.0000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   sigma=1.00e+00, spread=0.0369</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   sigma=1.00e+00, spread=0.0352</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Early stopping: spread decreasing</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Selected sigma_P = 10.000000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> it=0001  obj=2.400115e-02  Js=2.6668e-02  Jp=1.0750e-31</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Optimization stalled at iteration 16 (objective unchanged for 5 iterations). This often indicates poorly scaled input. Check similarity matrix scaling.</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> it=0001  obj=2.333943e-02  Js=2.5933e-02  Jp=4.4495e-31</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Optimization stalled at iteration 15 (objective unchanged for 5 iterations). This often indicates poorly scaled input. Check similarity matrix scaling.</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Use predict method for new data</span></span></span>
 <span class="r-in"><span><span class="va">X_new</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">20</span> <span class="op">*</span> <span class="fl">10</span><span class="op">)</span>, <span class="fl">20</span>, <span class="fl">10</span><span class="op">)</span></span></span>
@@ -234,11 +234,10 @@ on Computer Vision (pp. 268-284).</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Auto-selecting sigma_P using histogram-spread heuristic...</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   sigma=1.00e-05, spread=0.0000</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   sigma=3.16e-03, spread=0.0000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   sigma=1.00e+00, spread=0.2060</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   sigma=1.00e+00, spread=0.1979</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Early stopping: spread decreasing</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Selected sigma_P = 3.162278</span>
 <span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>When called from R, the RNG seed has to be set at the R level via set.seed()</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>C++ optimization (L-BFGS-B) did not converge. Message: ERROR: ABNORMAL_TERMINATION_IN_LNSRCH</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>

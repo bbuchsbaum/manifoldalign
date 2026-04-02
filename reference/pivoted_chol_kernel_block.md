@@ -49,8 +49,8 @@ kernel <- kernlab::rbfdot(sigma = 0.1)
 result <- pivoted_chol_kernel_block(X, kernel, tol = 1e-4, max_rank = 5)
 str(result)
 #> List of 2
-#>  $ indices: int [1:5] 1 7 4 8 5
-#>  $ W      : num [1:10, 1:5] 1 0.623 0.586 0.238 0.548 ...
+#>  $ indices: int [1:5] 1 6 10 8 9
+#>  $ W      : num [1:10, 1:5] 1 0.513 0.5 0.788 0.449 ...
 #>   ..- attr(*, "dimnames")=List of 2
 #>   .. ..$ : NULL
 #>   .. ..$ : chr [1:5] "new_col" "new_col" "new_col" "new_col" ...

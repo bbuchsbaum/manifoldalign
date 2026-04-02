@@ -81,6 +81,8 @@
   : Create a similarity function from a label similarity matrix
 - [`create_synthetic_similarity_matrix()`](https://bbuchsbaum.github.io/manifoldalign/reference/create_synthetic_similarity_matrix.md)
   : Create synthetic similarity matrix for testing pseudolabeling
+- [`cv_alignment_rows()`](https://bbuchsbaum.github.io/manifoldalign/reference/cv_alignment_rows.md)
+  : Cross-Validated Row-Wise Alignment Scoring
 - [`evaluate_parrot_accuracy()`](https://bbuchsbaum.github.io/manifoldalign/reference/evaluate_parrot_accuracy.md)
   : Evaluate PARROT Alignment Accuracy
 - [`evaluate_pseudolabeling()`](https://bbuchsbaum.github.io/manifoldalign/reference/evaluate_pseudolabeling.md)

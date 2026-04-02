@@ -167,7 +167,7 @@ result <- generalized_procrustes(
 
 # Check results
 print(result$converged)
-#> [1] TRUE
+#> [1] FALSE
 print(dim(result$A_est))  # Should be 3x5
 #> [1] 3 5
 # }

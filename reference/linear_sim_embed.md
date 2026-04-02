@@ -161,11 +161,11 @@ result <- linear_sim_embed(X, ncomp = 3, verbose = TRUE)
 #> Auto-selecting sigma_P using histogram-spread heuristic...
 #>   sigma=1.00e-05, spread=0.0000
 #>   sigma=3.16e-03, spread=0.0000
-#>   sigma=1.00e+00, spread=0.0369
+#>   sigma=1.00e+00, spread=0.0352
 #>   Early stopping: spread decreasing
 #> Selected sigma_P = 10.000000
-#> it=0001  obj=2.400115e-02  Js=2.6668e-02  Jp=1.0750e-31
-#> Warning: Optimization stalled at iteration 16 (objective unchanged for 5 iterations). This often indicates poorly scaled input. Check similarity matrix scaling.
+#> it=0001  obj=2.333943e-02  Js=2.5933e-02  Jp=4.4495e-31
+#> Warning: Optimization stalled at iteration 15 (objective unchanged for 5 iterations). This often indicates poorly scaled input. Check similarity matrix scaling.
 
 # Use predict method for new data
 X_new <- matrix(rnorm(20 * 10), 20, 10)
@@ -187,10 +187,9 @@ result_cpp <- linear_sim_embed(X, use_cpp = TRUE, verbose = TRUE)
 #> Auto-selecting sigma_P using histogram-spread heuristic...
 #>   sigma=1.00e-05, spread=0.0000
 #>   sigma=3.16e-03, spread=0.0000
-#>   sigma=1.00e+00, spread=0.2060
+#>   sigma=1.00e+00, spread=0.1979
 #>   Early stopping: spread decreasing
 #> Selected sigma_P = 3.162278
 #> Warning: When called from R, the RNG seed has to be set at the R level via set.seed()
-#> Warning: C++ optimization (L-BFGS-B) did not converge. Message: ERROR: ABNORMAL_TERMINATION_IN_LNSRCH
 # }
 ```
