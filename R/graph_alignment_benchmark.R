@@ -9,8 +9,8 @@
 #' @param sizes Integer vector of node counts to benchmark.
 #' @param d Integer feature dimension for synthetic node features.
 #' @param noise_sd Numeric noise standard deviation added to target features.
-#' @param structure Synthetic geometry for base node coordinates:
-#'   `"ring"`, `"grid"`, `"random"`, or `"community"`.
+#' @param structure Character vector of synthetic geometries for base node
+#'   coordinates: `"ring"`, `"grid"`, `"random"`, or `"community"`.
 #' @param permute_fraction Fraction of nodes to permute (in `(0,1]`).
 #' @param n_anchors Integer number of anchor correspondences to add (0 allowed).
 #' @param methods Character vector of methods to run. Options include:
@@ -93,7 +93,7 @@ benchmark_graph_alignment_methods <- function(
   seed = 1L,
   verbose = FALSE
 ) {
-  structure <- match.arg(structure)
+  structure <- match.arg(structure, c("ring", "grid", "random", "community"), several.ok = TRUE)
   decode_mode <- match.arg(decode_mode)
   coarsen_method <- match.arg(coarsen_method)
   token_mode <- match.arg(token_mode)
@@ -154,51 +154,6 @@ benchmark_graph_alignment_methods <- function(
   allowed_methods <- c("token_ot_graph", "fpgw", "cone_align", "grasp", "parrot", "ssma", "lra", "gpca")
   bad <- setdiff(methods, allowed_methods)
   if (length(bad)) stop("Unknown method(s): ", paste(bad, collapse = ", "), call. = FALSE)
-
-  # Helper to generate base coordinates
-  make_base <- function(n, d, structure) {
-    if (structure == "ring") {
-      angles <- 2 * pi * (seq_len(n)) / n
-      X <- cbind(cos(angles), sin(angles))
-      if (d > 2L) {
-        X <- cbind(X, matrix(stats::runif(n * (d - 2L), -0.1, 0.1), n, d - 2L))
-      } else if (d == 1L) {
-        X <- matrix(cos(angles), n, 1L)
-      }
-      return(X)
-    }
-    if (structure == "grid") {
-      grid_size <- ceiling(sqrt(n))
-      grid_coords <- expand.grid(
-        x = seq_len(grid_size) / grid_size,
-        y = seq_len(grid_size) / grid_size
-      )[seq_len(n), ]
-      X <- cbind(grid_coords$x, grid_coords$y)
-      if (d > 2L) {
-        X <- cbind(X, matrix(stats::runif(n * (d - 2L), -0.1, 0.1), n, d - 2L))
-      } else if (d == 1L) {
-        X <- matrix(grid_coords$x, n, 1L)
-      }
-      return(as.matrix(X))
-    }
-    if (structure == "community") {
-      k <- 4L
-      X <- matrix(0, n, max(2L, d))
-      n_per <- ceiling(n / k)
-      for (g in seq_len(k)) {
-        idx <- seq.int((g - 1L) * n_per + 1L, min(g * n_per, n))
-        center <- c(cos(2 * pi * g / k), sin(2 * pi * g / k))
-        X[idx, 1:2] <- matrix(stats::rnorm(length(idx) * 2, sd = 0.2), length(idx), 2) +
-          matrix(center, length(idx), 2, byrow = TRUE)
-      }
-      if (d > 2L) {
-        X[, 3:d] <- matrix(stats::runif(n * (d - 2L), -0.1, 0.1), n, d - 2L)
-      }
-      return(X[, seq_len(d), drop = FALSE])
-    }
-    # random
-    matrix(stats::rnorm(n * d), n, d)
-  }
 
   # Helper to extract top-1 predictions from a transport plan
   top1_from_plan <- function(W) {
@@ -343,52 +298,68 @@ benchmark_graph_alignment_methods <- function(
 
   rows <- list()
   ptr <- 0L
+  specs <- synthetic_graph_alignment_registry(
+    sizes = sizes,
+    structures = structure,
+    d = as.integer(d),
+    noise_sd = noise_sd,
+    permute_fraction = permute_fraction,
+    n_anchors = as.integer(n_anchors),
+    n_reps = as.integer(n_reps),
+    seed = as.integer(seed)
+  )
 
-  for (s in seq_along(sizes)) {
-    n <- sizes[[s]]
-    for (r in seq_len(as.integer(n_reps))) {
-      set.seed(as.integer(seed) + s * 1009L + r * 17L)
+  make_result_row <- function(method, spec, runtime_sec, top1_accuracy = NA_real_, coverage = 0, error = NA_character_) {
+    data.frame(
+      method = method,
+      scenario_family = spec$scenario_family[[1L]],
+      scenario = spec$scenario[[1L]],
+      structure = spec$structure[[1L]],
+      n = spec$n[[1L]],
+      d = spec$d[[1L]],
+      noise_sd = spec$noise_sd[[1L]],
+      permute_fraction = spec$permute_fraction[[1L]],
+      n_anchors = spec$n_anchors[[1L]],
+      rep = spec$rep[[1L]],
+      generation_seed = spec$generation_seed[[1L]],
+      decode_mode = decode_mode,
+      runtime_sec = runtime_sec,
+      top1_accuracy = top1_accuracy,
+      coverage = coverage,
+      error = error,
+      stringsAsFactors = FALSE
+    )
+  }
 
-      X1 <- make_base(n, as.integer(d), structure = structure)
+  for (row_id in seq_len(nrow(specs))) {
+    spec <- specs[row_id, , drop = FALSE]
+    n <- spec$n[[1L]]
+    r <- spec$rep[[1L]]
 
-      # Permute a subset of nodes; default permutes all nodes.
-      n_permute <- floor(n * as.numeric(permute_fraction))
-      perm_idx <- if (n_permute >= 2L) sort(sample.int(n, n_permute)) else integer(0)
-      perm21 <- seq_len(n)
-      if (length(perm_idx)) {
-        perm21[perm_idx] <- perm_idx[sample.int(length(perm_idx))]
-      }
+    case <- synthetic_graph_alignment_case(
+      n = n,
+      d = spec$d[[1L]],
+      structure = spec$structure[[1L]],
+      noise_sd = spec$noise_sd[[1L]],
+      permute_fraction = spec$permute_fraction[[1L]],
+      n_anchors = spec$n_anchors[[1L]],
+      seed = spec$generation_seed[[1L]]
+    )
 
-      X2 <- X1[perm21, , drop = FALSE] + matrix(stats::rnorm(n * as.integer(d), sd = noise_sd), n, as.integer(d))
-      map12 <- match(seq_len(n), perm21)
+    X1 <- case$X1
+    X2 <- case$X2
+    map12 <- case$map12
+    anchor_idx <- case$anchor_idx
+    hd <- case$hd
+    anchors <- case$anchors_name
 
-      # Embedding dimensions for graph-based aligners should depend on graph size,
-      # not the raw feature dimension used to generate coordinates.
-      ncomp_align <- min(10L, as.integer(n) - 2L)
+    # Embedding dimensions for graph-based aligners should depend on graph size,
+    # not the raw feature dimension used to generate coordinates.
+    ncomp_align <- min(10L, as.integer(n) - 2L)
 
-      # Anchors (optional)
-      a1 <- rep(NA_integer_, n)
-      a2 <- rep(NA_integer_, n)
-      anchor_idx <- integer(0)
-      if (as.integer(n_anchors) > 0L) {
-        # Prefer anchors outside permuted set (if possible)
-        available <- setdiff(seq_len(n), perm_idx)
-        if (length(available) < as.integer(n_anchors)) available <- seq_len(n)
-        anchor_idx <- sort(sample(available, min(as.integer(n_anchors), length(available))))
-        a1[anchor_idx] <- seq_along(anchor_idx)
-        a2[map12[anchor_idx]] <- seq_along(anchor_idx)
-      }
-
-      hd <- as_hyperdesign(
-        X_list = list(domain1 = X1, domain2 = X2),
-        labels = list(a1, a2),
-        label_name = "anchors"
-      )
-      anchors <- "anchors"
-
-      if (isTRUE(verbose)) {
-        message("benchmark_graph_alignment_methods: n=", n, " rep=", r)
-      }
+    if (isTRUE(verbose)) {
+      message("benchmark_graph_alignment_methods: structure=", spec$structure[[1L]], " n=", n, " rep=", r)
+    }
 
       # Token-OT Graph Align
       if ("token_ot_graph" %in% methods) {
@@ -411,16 +382,7 @@ benchmark_graph_alignment_methods <- function(
 
         if (inherits(res, "error")) {
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "token_ot_graph_align",
-            n = n,
-            rep = r,
-            runtime_sec = runtime,
-            top1_accuracy = NA_real_,
-            coverage = 0,
-            error = as.character(res$message),
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("token_ot_graph_align", spec, runtime, coverage = 0, error = as.character(res$message))
         } else {
           pred_native <- as.integer(res$assignment)
           if (all(is.na(pred_native)) && !is.null(res$transport_plan)) {
@@ -433,16 +395,7 @@ benchmark_graph_alignment_methods <- function(
           }
           ev <- eval_top1(pred, map12)
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "token_ot_graph_align",
-            n = n,
-            rep = r,
-            runtime_sec = runtime,
-            top1_accuracy = ev$top1,
-            coverage = ev$coverage,
-            error = NA_character_,
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("token_ot_graph_align", spec, runtime, ev$top1, ev$coverage)
         }
       }
 
@@ -467,16 +420,7 @@ benchmark_graph_alignment_methods <- function(
 
         if (inherits(res, "error")) {
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "fpgw",
-            n = n,
-            rep = r,
-            runtime_sec = runtime,
-            top1_accuracy = NA_real_,
-            coverage = 0,
-            error = as.character(res$message),
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("fpgw", spec, runtime, coverage = 0, error = as.character(res$message))
         } else {
           plan <- NULL
           if (!is.null(res$transport_plans) && length(res$transport_plans) >= 1L) {
@@ -484,16 +428,7 @@ benchmark_graph_alignment_methods <- function(
           }
           if (is.null(plan)) {
             ptr <- ptr + 1L
-            rows[[ptr]] <- data.frame(
-              method = "fpgw",
-              n = n,
-              rep = r,
-              runtime_sec = runtime,
-              top1_accuracy = NA_real_,
-              coverage = 0,
-              error = "Missing transport plan from fpgw() result",
-              stringsAsFactors = FALSE
-            )
+            rows[[ptr]] <- make_result_row("fpgw", spec, runtime, coverage = 0, error = "Missing transport plan from fpgw() result")
           } else {
             pred_native <- top1_from_plan(plan)
             pred <- pred_native
@@ -503,16 +438,7 @@ benchmark_graph_alignment_methods <- function(
             }
             ev <- eval_top1(pred, map12)
             ptr <- ptr + 1L
-            rows[[ptr]] <- data.frame(
-              method = "fpgw",
-              n = n,
-              rep = r,
-              runtime_sec = runtime,
-              top1_accuracy = ev$top1,
-              coverage = ev$coverage,
-              error = NA_character_,
-              stringsAsFactors = FALSE
-            )
+            rows[[ptr]] <- make_result_row("fpgw", spec, runtime, ev$top1, ev$coverage)
           }
         }
       }
@@ -521,15 +447,9 @@ benchmark_graph_alignment_methods <- function(
       if ("ssma" %in% methods) {
         ssma_corr <- NULL
         if (length(anchor_idx)) {
-          ssma_corr <- data.frame(
-            domain_i = rep(1L, length(anchor_idx)),
-            index_i = anchor_idx,
-            domain_j = rep(2L, length(anchor_idx)),
-            index_j = map12[anchor_idx],
-            weight = rep(1, length(anchor_idx)),
-            source = rep("anchor", length(anchor_idx)),
-            stringsAsFactors = FALSE
-          )
+          ssma_corr <- case$correspondences
+          ssma_corr$weight <- rep(1, nrow(ssma_corr))
+          ssma_corr$source <- rep("anchor", nrow(ssma_corr))
         }
 
         ssma_serial_index <- if (isTRUE(ssma_use_serial)) list(seq_len(n), seq_len(n)) else NULL
@@ -564,30 +484,12 @@ benchmark_graph_alignment_methods <- function(
 
         if (inherits(res, "error")) {
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "ssma_align",
-            n = n,
-            rep = r,
-            runtime_sec = runtime,
-            top1_accuracy = NA_real_,
-            coverage = 0,
-            error = as.character(res$message),
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("ssma_align", spec, runtime, coverage = 0, error = as.character(res$message))
         } else {
           pred_native <- decode_from_scores_mode(res$s, n = n, mode = "common_nn", anchor_idx = anchor_idx, map12 = map12)
           if (is.null(pred_native)) {
             ptr <- ptr + 1L
-            rows[[ptr]] <- data.frame(
-              method = "ssma_align",
-              n = n,
-              rep = r,
-              runtime_sec = runtime,
-              top1_accuracy = NA_real_,
-              coverage = 0,
-              error = "Missing or malformed score matrix from ssma_align()",
-              stringsAsFactors = FALSE
-            )
+            rows[[ptr]] <- make_result_row("ssma_align", spec, runtime, coverage = 0, error = "Missing or malformed score matrix from ssma_align()")
           } else {
             pred <- pred_native
             if (!identical(decode_mode, "native")) {
@@ -600,16 +502,7 @@ benchmark_graph_alignment_methods <- function(
             }
             ev <- eval_top1(pred, map12)
             ptr <- ptr + 1L
-            rows[[ptr]] <- data.frame(
-              method = "ssma_align",
-              n = n,
-              rep = r,
-              runtime_sec = runtime,
-              top1_accuracy = ev$top1,
-              coverage = ev$coverage,
-              error = NA_character_,
-              stringsAsFactors = FALSE
-            )
+            rows[[ptr]] <- make_result_row("ssma_align", spec, runtime, ev$top1, ev$coverage)
           }
         }
       }
@@ -618,16 +511,7 @@ benchmark_graph_alignment_methods <- function(
       if ("lra" %in% methods) {
         if (as.integer(n_anchors) <= 0L) {
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "lowrank_align",
-            n = n,
-            rep = r,
-            runtime_sec = NA_real_,
-            top1_accuracy = NA_real_,
-            coverage = 0,
-            error = "LRA benchmark requires n_anchors > 0",
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("lowrank_align", spec, NA_real_, coverage = 0, error = "LRA benchmark requires n_anchors > 0")
         } else {
           t0 <- proc.time()[[3]]
           res <- tryCatch(
@@ -651,30 +535,12 @@ benchmark_graph_alignment_methods <- function(
 
           if (inherits(res, "error")) {
             ptr <- ptr + 1L
-            rows[[ptr]] <- data.frame(
-              method = "lowrank_align",
-              n = n,
-              rep = r,
-              runtime_sec = runtime,
-              top1_accuracy = NA_real_,
-              coverage = 0,
-              error = as.character(res$message),
-              stringsAsFactors = FALSE
-            )
+            rows[[ptr]] <- make_result_row("lowrank_align", spec, runtime, coverage = 0, error = as.character(res$message))
           } else {
             scores <- if (!is.null(res$s)) as.matrix(res$s) else NULL
             if (is.null(scores) || nrow(scores) < 2L * n) {
               ptr <- ptr + 1L
-              rows[[ptr]] <- data.frame(
-                method = "lowrank_align",
-                n = n,
-                rep = r,
-                runtime_sec = runtime,
-                top1_accuracy = NA_real_,
-                coverage = 0,
-                error = "Missing or malformed score matrix from lowrank_align()",
-                stringsAsFactors = FALSE
-              )
+              rows[[ptr]] <- make_result_row("lowrank_align", spec, runtime, coverage = 0, error = "Missing or malformed score matrix from lowrank_align()")
             } else {
               pred_native <- decode_from_scores_mode(scores, n = n, mode = "common_nn", anchor_idx = anchor_idx, map12 = map12)
               pred <- pred_native
@@ -684,16 +550,7 @@ benchmark_graph_alignment_methods <- function(
               }
               ev <- eval_top1(pred, map12)
               ptr <- ptr + 1L
-              rows[[ptr]] <- data.frame(
-                method = "lowrank_align",
-                n = n,
-                rep = r,
-                runtime_sec = runtime,
-                top1_accuracy = ev$top1,
-                coverage = ev$coverage,
-                error = NA_character_,
-                stringsAsFactors = FALSE
-              )
+              rows[[ptr]] <- make_result_row("lowrank_align", spec, runtime, ev$top1, ev$coverage)
             }
           }
         }
@@ -703,16 +560,7 @@ benchmark_graph_alignment_methods <- function(
       if ("gpca" %in% methods) {
         if (as.integer(n_anchors) <= 0L) {
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "gpca_align",
-            n = n,
-            rep = r,
-            runtime_sec = NA_real_,
-            top1_accuracy = NA_real_,
-            coverage = 0,
-            error = "GPCA benchmark requires n_anchors > 0",
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("gpca_align", spec, NA_real_, coverage = 0, error = "GPCA benchmark requires n_anchors > 0")
         } else {
           t0 <- proc.time()[[3]]
           res <- tryCatch(
@@ -735,30 +583,12 @@ benchmark_graph_alignment_methods <- function(
 
           if (inherits(res, "error")) {
             ptr <- ptr + 1L
-            rows[[ptr]] <- data.frame(
-              method = "gpca_align",
-              n = n,
-              rep = r,
-              runtime_sec = runtime,
-              top1_accuracy = NA_real_,
-              coverage = 0,
-              error = as.character(res$message),
-              stringsAsFactors = FALSE
-            )
+            rows[[ptr]] <- make_result_row("gpca_align", spec, runtime, coverage = 0, error = as.character(res$message))
           } else {
             scores <- if (!is.null(res$s)) as.matrix(res$s) else NULL
             if (is.null(scores) || nrow(scores) < 2L * n) {
               ptr <- ptr + 1L
-              rows[[ptr]] <- data.frame(
-                method = "gpca_align",
-                n = n,
-                rep = r,
-                runtime_sec = runtime,
-                top1_accuracy = NA_real_,
-                coverage = 0,
-                error = "Missing or malformed score matrix from gpca_align()",
-                stringsAsFactors = FALSE
-              )
+              rows[[ptr]] <- make_result_row("gpca_align", spec, runtime, coverage = 0, error = "Missing or malformed score matrix from gpca_align()")
             } else {
               pred_native <- decode_from_scores_mode(scores, n = n, mode = "common_nn", anchor_idx = anchor_idx, map12 = map12)
               pred <- pred_native
@@ -768,16 +598,7 @@ benchmark_graph_alignment_methods <- function(
               }
               ev <- eval_top1(pred, map12)
               ptr <- ptr + 1L
-              rows[[ptr]] <- data.frame(
-                method = "gpca_align",
-                n = n,
-                rep = r,
-                runtime_sec = runtime,
-                top1_accuracy = ev$top1,
-                coverage = ev$coverage,
-                error = NA_character_,
-                stringsAsFactors = FALSE
-              )
+              rows[[ptr]] <- make_result_row("gpca_align", spec, runtime, ev$top1, ev$coverage)
             }
           }
         }
@@ -794,16 +615,7 @@ benchmark_graph_alignment_methods <- function(
 
         if (inherits(res, "error")) {
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "cone_align",
-            n = n,
-            rep = r,
-            runtime_sec = runtime,
-            top1_accuracy = NA_real_,
-            coverage = 0,
-            error = as.character(res$message),
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("cone_align", spec, runtime, coverage = 0, error = as.character(res$message))
         } else {
           pred_native <- as.integer(res$assignment)
           pred <- pred_native
@@ -813,16 +625,7 @@ benchmark_graph_alignment_methods <- function(
           }
           ev <- eval_top1(pred, map12)
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "cone_align",
-            n = n,
-            rep = r,
-            runtime_sec = runtime,
-            top1_accuracy = ev$top1,
-            coverage = ev$coverage,
-            error = NA_character_,
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("cone_align", spec, runtime, ev$top1, ev$coverage)
         }
       }
 
@@ -837,16 +640,7 @@ benchmark_graph_alignment_methods <- function(
 
         if (inherits(res, "error")) {
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "grasp",
-            n = n,
-            rep = r,
-            runtime_sec = runtime,
-            top1_accuracy = NA_real_,
-            coverage = 0,
-            error = as.character(res$message),
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("grasp", spec, runtime, coverage = 0, error = as.character(res$message))
         } else {
           pred_native <- as.integer(res$assignment)
           pred <- pred_native
@@ -856,16 +650,7 @@ benchmark_graph_alignment_methods <- function(
           }
           ev <- eval_top1(pred, map12)
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "grasp",
-            n = n,
-            rep = r,
-            runtime_sec = runtime,
-            top1_accuracy = ev$top1,
-            coverage = ev$coverage,
-            error = NA_character_,
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("grasp", spec, runtime, ev$top1, ev$coverage)
         }
       }
 
@@ -873,16 +658,7 @@ benchmark_graph_alignment_methods <- function(
       if ("parrot" %in% methods) {
         if (as.integer(n_anchors) <= 0L) {
           ptr <- ptr + 1L
-          rows[[ptr]] <- data.frame(
-            method = "parrot",
-            n = n,
-            rep = r,
-            runtime_sec = NA_real_,
-            top1_accuracy = NA_real_,
-            coverage = 0,
-            error = "PARROT requires n_anchors > 0",
-            stringsAsFactors = FALSE
-          )
+          rows[[ptr]] <- make_result_row("parrot", spec, NA_real_, coverage = 0, error = "PARROT requires n_anchors > 0")
         } else {
           t0 <- proc.time()[[3]]
           res <- tryCatch(
@@ -893,16 +669,7 @@ benchmark_graph_alignment_methods <- function(
 
           if (inherits(res, "error")) {
             ptr <- ptr + 1L
-            rows[[ptr]] <- data.frame(
-              method = "parrot",
-              n = n,
-              rep = r,
-              runtime_sec = runtime,
-              top1_accuracy = NA_real_,
-              coverage = 0,
-              error = as.character(res$message),
-              stringsAsFactors = FALSE
-            )
+            rows[[ptr]] <- make_result_row("parrot", spec, runtime, coverage = 0, error = as.character(res$message))
           } else {
             pred_native <- top1_from_plan(res$transport_plan)
             pred <- pred_native
@@ -912,20 +679,10 @@ benchmark_graph_alignment_methods <- function(
             }
             ev <- eval_top1(pred, map12)
             ptr <- ptr + 1L
-            rows[[ptr]] <- data.frame(
-              method = "parrot",
-              n = n,
-              rep = r,
-              runtime_sec = runtime,
-              top1_accuracy = ev$top1,
-              coverage = ev$coverage,
-              error = NA_character_,
-              stringsAsFactors = FALSE
-            )
+            rows[[ptr]] <- make_result_row("parrot", spec, runtime, ev$top1, ev$coverage)
           }
         }
       }
-    }
   }
 
   do.call(rbind, rows[seq_len(ptr)])

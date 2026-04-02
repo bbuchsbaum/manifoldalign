@@ -49,8 +49,8 @@ benchmark_graph_alignment_methods(
 
 \item{noise_sd}{Numeric noise standard deviation added to target features.}
 
-\item{structure}{Synthetic geometry for base node coordinates:
-`"ring"`, `"grid"`, `"random"`, or `"community"`.}
+\item{structure}{Character vector of synthetic geometries for base node
+coordinates: `"ring"`, `"grid"`, `"random"`, or `"community"`.}
 
 \item{permute_fraction}{Fraction of nodes to permute (in `(0,1]`).}
 

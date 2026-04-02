@@ -35,12 +35,13 @@ summarize_results <- function(res) {
   if (!nrow(res)) return(res)
 
   agg <- aggregate(
-    cbind(top1_accuracy, runtime_sec) ~ method + n,
+    cbind(top1_accuracy, runtime_sec) ~ method + structure + n,
     data = res,
     FUN = function(x) c(mean = mean(x, na.rm = TRUE), sd = stats::sd(x, na.rm = TRUE))
   )
   data.frame(
     method = agg$method,
+    structure = agg$structure,
     n = agg$n,
     top1_mean = agg$top1_accuracy[, "mean"],
     top1_sd = agg$top1_accuracy[, "sd"],
@@ -55,8 +56,10 @@ main <- function() {
   out_results <- file.path(here, "graph_aligners_benchmark_results.csv")
   out_summary <- file.path(here, "graph_aligners_benchmark_summary.csv")
 
-  # Tuned to be small/fast but representative.
+  # Tuned to be representative across canonical graph families without turning
+  # this script into a full nightly benchmark sweep.
   sizes <- c(50L, 100L, 200L)
+  structures <- c("ring", "grid", "community")
   n_reps <- 3L
   n_anchors <- 10L
 
@@ -72,6 +75,7 @@ main <- function() {
   cat("Graph aligner benchmark\n")
   cat("-----------------------\n")
   cat("sizes: ", paste(sizes, collapse = ","), "\n", sep = "")
+  cat("structures: ", paste(structures, collapse = ","), "\n", sep = "")
   cat("n_reps: ", n_reps, "\n", sep = "")
   cat("n_anchors: ", n_anchors, "\n", sep = "")
   cat("token_ot settings: ", paste(names(ctrl), unlist(ctrl), sep = "=", collapse = ", "), "\n\n", sep = "")
@@ -80,7 +84,7 @@ main <- function() {
     sizes = sizes,
     d = 3L,
     noise_sd = 0.01,
-    structure = "ring",
+    structure = structures,
     permute_fraction = 1,
     n_anchors = n_anchors,
     methods = c("token_ot_graph", "fpgw", "parrot", "cone_align", "grasp"),
