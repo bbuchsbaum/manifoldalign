@@ -37,6 +37,7 @@
 <li><a class="dropdown-item" href="../articles/cone-align-multiple.html">Multi-Domain Graph Alignment with cone_align_multiple</a></li>
     <li><a class="dropdown-item" href="../articles/cone-align.html">Pairwise Graph Alignment with cone_align</a></li>
     <li><a class="dropdown-item" href="../articles/coupled-diagonalization.html">Coupled Diagonalization across Modalities</a></li>
+    <li><a class="dropdown-item" href="../articles/features-and-predictive-performance.html">Features, Correspondences, and Predictive Performance</a></li>
     <li><a class="dropdown-item" href="../articles/fpgw_tutorial.html">Fused-Partial Gromov-Wasserstein for Domain Alignment</a></li>
     <li><a class="dropdown-item" href="../articles/gpca-align.html">Generalized PCA Alignment with gpca_align</a></li>
     <li><a class="dropdown-item" href="../articles/grasp-align.html">Spectral Graph Alignment with grasp</a></li>
@@ -151,7 +152,7 @@ classes and moderate domain-specific transformations.</p>
 <span><span class="co">#&gt;  $ block_indices:List of 3</span></span>
 <span><span class="co">#&gt;  $ labels       : Factor w/ 2 levels "class_A","class_B": 1 1 1 1 1 1 1 1 1 1 ...</span></span>
 <span><span class="co">#&gt;  - attr(*, "class")= chr [1:5] "gpca_align" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...</span></span>
-<span><span class="co">#&gt;  - attr(*, ".cache")=&lt;environment: 0x565166dbdd38&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt;  - attr(*, ".cache")=&lt;environment: 0x560097945b98&gt;</span></span></code></pre></div>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">rms_alignment</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">gpca_fit</span><span class="op">$</span><span class="va">s</span><span class="op">)</span>, <span class="va">domain_sizes</span>, <span class="va">domain_names</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>

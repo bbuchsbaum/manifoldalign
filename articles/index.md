@@ -8,6 +8,8 @@
   cone_align](https://bbuchsbaum.github.io/manifoldalign/articles/cone-align.md):
 - [Coupled Diagonalization across
   Modalities](https://bbuchsbaum.github.io/manifoldalign/articles/coupled-diagonalization.md):
+- [Features, Correspondences, and Predictive
+  Performance](https://bbuchsbaum.github.io/manifoldalign/articles/features-and-predictive-performance.md):
 - [Fused-Partial Gromov-Wasserstein for Domain
   Alignment](https://bbuchsbaum.github.io/manifoldalign/articles/fpgw_tutorial.md):
 - [Generalized PCA Alignment with

@@ -5,6 +5,7 @@ articles:
   cone-align-multiple: cone-align-multiple.html
   cone-align: cone-align.html
   coupled-diagonalization: coupled-diagonalization.html
+  features-and-predictive-performance: features-and-predictive-performance.html
   fpgw_tutorial: fpgw_tutorial.html
   gpca-align: gpca-align.html
   grasp-align: grasp-align.html
@@ -14,7 +15,7 @@ articles:
   parrot-align: parrot-align.html
   performance-overview: performance-overview.html
   quickstart-hyperdesign: quickstart-hyperdesign.html
-last_built: 2026-04-02T15:51Z
+last_built: 2026-04-02T16:37Z
 urls:
   reference: https://bbuchsbaum.github.io/manifoldalign/reference
   article: https://bbuchsbaum.github.io/manifoldalign/articles

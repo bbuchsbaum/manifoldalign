@@ -37,6 +37,7 @@
 <li><a class="dropdown-item" href="../articles/cone-align-multiple.html">Multi-Domain Graph Alignment with cone_align_multiple</a></li>
     <li><a class="dropdown-item" href="../articles/cone-align.html">Pairwise Graph Alignment with cone_align</a></li>
     <li><a class="dropdown-item" href="../articles/coupled-diagonalization.html">Coupled Diagonalization across Modalities</a></li>
+    <li><a class="dropdown-item" href="../articles/features-and-predictive-performance.html">Features, Correspondences, and Predictive Performance</a></li>
     <li><a class="dropdown-item" href="../articles/fpgw_tutorial.html">Fused-Partial Gromov-Wasserstein for Domain Alignment</a></li>
     <li><a class="dropdown-item" href="../articles/gpca-align.html">Generalized PCA Alignment with gpca_align</a></li>
     <li><a class="dropdown-item" href="../articles/grasp-align.html">Spectral Graph Alignment with grasp</a></li>
@@ -151,13 +152,13 @@ shapes.</p>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="va">reg_fit</span>, max.level <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="co">#&gt; List of 13</span></span>
-<span><span class="co">#&gt;  $ v            : num [1:12, 1:2] -0.1363 -0.3086 -0.4057 0.6629 -0.0448 ...</span></span>
+<span><span class="co">#&gt;  $ v            : num [1:12, 1:2] 0.1363 0.3086 0.4057 -0.6629 0.0448 ...</span></span>
 <span><span class="co">#&gt;  $ preproc      :List of 2</span></span>
 <span><span class="co">#&gt;   ..- attr(*, "class")= chr [1:2] "concat_pre_processor" "pre_processor"</span></span>
 <span><span class="co">#&gt;  $ s            :Formal class 'dgeMatrix' [package "Matrix"] with 4 slots</span></span>
 <span><span class="co">#&gt;  $ sdev         : num [1:2] 0.0126 0.2044</span></span>
 <span><span class="co">#&gt;  $ block_indices:List of 3</span></span>
-<span><span class="co">#&gt;  $ alpha        : num [1:240, 1:2] 0.03815 0.15544 -0.08751 0.21601 -0.00162 ...</span></span>
+<span><span class="co">#&gt;  $ alpha        : num [1:240, 1:2] -0.03815 -0.15544 0.08751 -0.21601 0.00165 ...</span></span>
 <span><span class="co">#&gt;  $ Ks           :List of 3</span></span>
 <span><span class="co">#&gt;  $ sample_frac  : num 1</span></span>
 <span><span class="co">#&gt;  $ dweight      : num 0.1</span></span>
@@ -167,7 +168,7 @@ shapes.</p>
 <span><span class="co">#&gt;  $ eigenvalues  :List of 3</span></span>
 <span><span class="co">#&gt;  $ retry_info   :List of 3</span></span>
 <span><span class="co">#&gt;  - attr(*, "class")= chr [1:5] "kema" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...</span></span>
-<span><span class="co">#&gt;  - attr(*, ".cache")=&lt;environment: 0x559fd8ec0458&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt;  - attr(*, ".cache")=&lt;environment: 0x55eb50fddac0&gt;</span></span></code></pre></div>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">rms_alignment</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">reg_fit</span><span class="op">$</span><span class="va">s</span><span class="op">)</span>, <span class="va">domain_sizes</span>, <span class="va">domain_names</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
@@ -267,7 +268,7 @@ solver on the reduced system.</p>
 solution.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://bbuchsbaum.github.io/multivarious/reference/subspace_similarity.html" class="external-link">subspace_similarity</a></span><span class="op">(</span><span class="va">exact_fit</span><span class="op">$</span><span class="va">s</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span>, <span class="va">rekema_fit</span><span class="op">$</span><span class="va">s</span><span class="op">[</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0.8987107 0.8294381</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 0.8987106 0.8294382</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="scalable-mode-operator-based">Scalable Mode (Operator-Based)<a class="anchor" aria-label="anchor" href="#scalable-mode-operator-based"></a>

@@ -164,7 +164,7 @@ result <- linear_sim_embed(X, ncomp = 3, verbose = TRUE)
 #>   sigma=1.00e+00, spread=0.0352
 #>   Early stopping: spread decreasing
 #> Selected sigma_P = 10.000000
-#> it=0001  obj=2.333943e-02  Js=2.5933e-02  Jp=4.4495e-31
+#> it=0001  obj=2.333943e-02  Js=2.5933e-02  Jp=2.6390e-32
 #> Warning: Optimization stalled at iteration 15 (objective unchanged for 5 iterations). This often indicates poorly scaled input. Check similarity matrix scaling.
 
 # Use predict method for new data
