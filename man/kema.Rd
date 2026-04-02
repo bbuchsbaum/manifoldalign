@@ -22,6 +22,8 @@ kema(data, y, ...)
   sample_frac = 1,
   use_laplacian = TRUE,
   solver = "regression",
+  backend = "auto",
+  backend_control = NULL,
   dweight = 0.1,
   rweight = 0,
   simfun = neighborweights::binary_label_matrix,
@@ -43,6 +45,8 @@ kema(data, y, ...)
   sample_frac = 1,
   use_laplacian = TRUE,
   solver = "regression",
+  backend = "auto",
+  backend_control = NULL,
   dweight = 0.1,
   rweight = 0,
   simfun = neighborweights::binary_label_matrix,
@@ -81,25 +85,30 @@ center())}
 \item{sample_frac}{Fraction of samples to use for kernel approximation 
 (default: 1)}
 
-\item{use_laplacian}{Whether to use Laplacian normalization (default: TRUE)}
+\item{use_laplacian}{Deprecated compatibility argument; ignored.}
 
-\item{solver}{Solver method: "regression" for fast approximation (default) 
-or "exact" for precise solution}
+\item{solver}{Deprecated compatibility argument; accepted values are
+`"regression"` and `"exact"`, but both currently route to the original
+KEMA solver.}
 
-\item{dweight}{Weight for dissimilarity/repulsion terms (default: 0.1)}
+\item{backend}{Backend for the original eigensolver. One of `"auto"`,
+`"full_exact"`, `"reduced_exact"`, or `"operator_exact"`.}
 
-\item{rweight}{Weight for repulsion graph (default: 0)}
+\item{backend_control}{Optional list controlling auto backend thresholds and
+fidelity checks (passed through to `kema_orig()`).}
 
-\item{simfun}{Function to compute similarity between labels}
+\item{dweight}{Deprecated compatibility argument; ignored.}
 
-\item{disfun}{Function to compute dissimilarity between labels (optional)}
+\item{rweight}{Deprecated compatibility argument; ignored.}
+
+\item{simfun}{Deprecated compatibility argument; ignored.}
+
+\item{disfun}{Deprecated compatibility argument; ignored.}
 
 \item{lambda}{Regularization parameter for matrix conditioning 
 (default: 0.0001)}
 
-\item{centre_kernel}{Whether to center kernel matrices (default: FALSE). 
-**[EXTENSION]** The original paper uses uncentered kernels. Set TRUE for 
-centered variant.}
+\item{centre_kernel}{Deprecated compatibility argument; ignored.}
 }
 \value{
 A \code{multiblock_biprojector} object containing:
@@ -133,68 +142,21 @@ representation that preserves both the intrinsic geometry of each domain and
 the class structure across domains. It supports semi-supervised learning 
 with missing labels (NA values).
 
-The algorithm offers two solver methods:
-- "regression": Fast approximation using spectral regression (default). This 
-  method first solves the eigenvalue problem on graph Laplacians, then uses 
-  ridge regression to find kernel coefficients. It's much faster but may be 
-  less accurate for non-linear kernels.
-- "exact": Precise solution using the correct generalized eigenvalue 
-  formulation. This method solves the mathematically correct KEMA 
-  optimization problem but is more computationally intensive, especially for 
-  large datasets.
+Current behavior routes `kema()` to a paper-faithful implementation
+(`kema_orig`) of the original Tuia & Camps-Valls generalized eigenproblems.
+Legacy extension arguments are still accepted for compatibility.
 
 
-KEMA solves the following optimization problem:
-\deqn{\max_{\alpha} \frac{\alpha^T K A K^T \alpha}{\alpha^T K B K^T \alpha}}
+KEMA solves the original paper objective:
+\deqn{K(L+\mu L_s)K\Lambda = \lambda K L_d K\Lambda}
+and its reduced-rank REKEMA counterpart when `sample_frac < 1`.
 
-where:
-\itemize{
-  \item \code{A = u*L + (1-u)*Ls} captures manifold structure (L) and 
-    same-class alignment (Ls)
-  \item \code{B = rweight*Lr + dweight*Ld + lambda*I} captures class 
-    separation and regularization
-  \item \code{K} is the block-diagonal kernel matrix across domains
-}
+`kema()` now delegates to the paper-faithful `kema_orig()` backend and solves
+the original generalized eigenproblems from Tuia & Camps-Valls (2016),
+including the reduced-rank REKEMA form when `sample_frac < 1`.
 
-The trade-off parameter \code{u} controls the balance between preserving 
-manifold geometry and enforcing class alignment. The solver parameter 
-determines the computational approach:
-\itemize{
-  \item "regression": Fast two-step approximation (eigendecomposition + 
-    ridge regression)
-  \item "exact": Direct solution of the generalized eigenvalue problem
-}
-
-For large datasets, use \code{sample_frac < 1} to enable REKEMA, which uses 
-landmark points to reduce computational complexity from O(n^2) to O(r^2) where 
-r is the number of landmarks.
-
-This implementation follows the Tuia & Camps-Valls (2016) paper with 
-extensions:
-
-**Core KEMA (from paper):**
-- Generalized eigenvalue problem: Phi(L+mu*Ls)Phi^T*v = lambda * Phi*Ld*Phi^T*v (Eq. 4)
-- Kernelization: K(L+mu*Ls)K*Lambda = lambda * K*Ld*K * Lambda (Eq. 6)  
-- Reduced-rank KEMA (REKEMA) for computational efficiency
-- Matrix-free eigensolver with Jacobi preconditioning
-
-**Extensions (not in original paper):**
-- \code{solver="regression"}: Fast spectral regression approximation 
-  (default)
-- \code{rweight}: Additional repulsion graph Lr for within-domain 
-  separation
-- Semi-supervised support: Handles NA labels for unlabeled samples
-- Enhanced numerical stability and error handling
-
-The algorithm offers two solver methods:
-- "regression": **[EXTENSION]** Fast approximation using spectral 
-  regression (default). This method first solves the eigenvalue problem on 
-  graph Laplacians, then uses ridge regression to find kernel coefficients. 
-  Much faster but may be less accurate for non-linear kernels.
-- "exact": Precise solution using the correct generalized eigenvalue 
-  formulation from the paper. This method solves the mathematically correct 
-  KEMA optimization problem but is more computationally intensive, 
-  especially for large datasets.
+Legacy extension arguments remain in the API for backward compatibility but
+are ignored by the current implementation.
 }
 \examples{
 \donttest{

@@ -8,15 +8,9 @@
 #' the class structure across domains. It supports semi-supervised learning 
 #' with missing labels (NA values).
 #'
-#' The algorithm offers two solver methods:
-#' - "regression": Fast approximation using spectral regression (default). This 
-#'   method first solves the eigenvalue problem on graph Laplacians, then uses 
-#'   ridge regression to find kernel coefficients. It's much faster but may be 
-#'   less accurate for non-linear kernels.
-#' - "exact": Precise solution using the correct generalized eigenvalue 
-#'   formulation. This method solves the mathematically correct KEMA 
-#'   optimization problem but is more computationally intensive, especially for 
-#'   large datasets.
+#' Current behavior routes `kema()` to a paper-faithful implementation
+#' (`kema_orig`) of the original Tuia & Camps-Valls generalized eigenproblems.
+#' Legacy extension arguments are still accepted for compatibility.
 #'
 #' @param data Input data object. Can be a hyperdesign object (for 
 #'   \code{kema.hyperdesign}) or a multidesign object (for 
@@ -32,30 +26,9 @@
 #'   \code{kema.multidesign} the additional \code{subject} parameter
 #'
 #' @details
-#' KEMA solves the following optimization problem:
-#' \deqn{\max_{\alpha} \frac{\alpha^T K A K^T \alpha}{\alpha^T K B K^T \alpha}}
-#' 
-#' where:
-#' \itemize{
-#'   \item \code{A = u*L + (1-u)*Ls} captures manifold structure (L) and 
-#'     same-class alignment (Ls)
-#'   \item \code{B = rweight*Lr + dweight*Ld + lambda*I} captures class 
-#'     separation and regularization
-#'   \item \code{K} is the block-diagonal kernel matrix across domains
-#' }
-#'
-#' The trade-off parameter \code{u} controls the balance between preserving 
-#' manifold geometry and enforcing class alignment. The solver parameter 
-#' determines the computational approach:
-#' \itemize{
-#'   \item "regression": Fast two-step approximation (eigendecomposition + 
-#'     ridge regression)
-#'   \item "exact": Direct solution of the generalized eigenvalue problem
-#' }
-#'
-#' For large datasets, use \code{sample_frac < 1} to enable REKEMA, which uses 
-#' landmark points to reduce computational complexity from O(n^2) to O(r^2) where 
-#' r is the number of landmarks.
+#' KEMA solves the original paper objective:
+#' \deqn{K(L+\mu L_s)K\Lambda = \lambda K L_d K\Lambda}
+#' and its reduced-rank REKEMA counterpart when `sample_frac < 1`.
 #'
 #' @return A \code{multiblock_biprojector} object containing:
 #' \itemize{

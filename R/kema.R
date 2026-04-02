@@ -1,18 +1,13 @@
 
 
 #' @importFrom Matrix bdiag Diagonal rowSums sparseMatrix
-#' @importFrom PRIMME eigs_sym
-#' @importFrom glmnet glmnet cv.glmnet
 #' @importFrom kernlab kernelMatrix
 #' @importFrom cluster pam
 #' @importFrom chk chk_number chk_range chk_logical chk_true
 #' @importFrom rlang enquo !!
 #' @importFrom purrr map
-#' @importFrom dplyr select pull
 #' @importFrom coop cosine
 #' @importFrom neighborweights graph_weights class_graph repulsion_graph binary_label_matrix adjacency
-#' @importFrom RANN nn2
-#' @importFrom multivarious concat_pre_processors prep init_transform
 #' @importFrom methods new is as
 #' @import Matrix
 #' @keywords internal
@@ -632,18 +627,21 @@ sanitize_labels_for_similarity <- function(labels) {
 #' @param kernel Kernel function to use (default: coskern())
 #' @param sample_frac Fraction of samples to use for kernel approximation 
 #'   (default: 1)
-#' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
-#' @param solver Solver method: "regression" for fast approximation (default) 
-#'   or "exact" for precise solution
-#' @param dweight Weight for dissimilarity/repulsion terms (default: 0.1)
-#' @param rweight Weight for repulsion graph (default: 0)
-#' @param simfun Function to compute similarity between labels
-#' @param disfun Function to compute dissimilarity between labels (optional)
+#' @param use_laplacian Deprecated compatibility argument; ignored by current
+#'   implementation.
+#' @param solver Deprecated compatibility argument; currently accepted values are
+#'   "regression" and "exact", but both route to the same original KEMA solver.
+#' @param backend Backend for the original eigensolver. One of `"auto"`,
+#'   `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`.
+#' @param backend_control Optional list controlling auto backend thresholds and
+#'   fidelity checks (passed through to `kema_orig()`).
+#' @param dweight Deprecated compatibility argument; ignored.
+#' @param rweight Deprecated compatibility argument; ignored.
+#' @param simfun Deprecated compatibility argument; ignored.
+#' @param disfun Deprecated compatibility argument; ignored.
 #' @param lambda Regularization parameter for matrix conditioning 
 #'   (default: 0.0001)
-#' @param centre_kernel Whether to center kernel matrices (default: FALSE). 
-#'   **[EXTENSION]** The original paper uses uncentered kernels. Set TRUE for 
-#'   centered variant.
+#' @param centre_kernel Deprecated compatibility argument; ignored.
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return A multiblock_biprojector object containing the KEMA alignment
@@ -692,6 +690,8 @@ kema.multidesign <- function(data, y,
                              sample_frac=1,
                              use_laplacian=TRUE, 
                              solver="regression",
+                             backend="auto",
+                             backend_control=NULL,
                              dweight=.1,
                              rweight=0,
                              simfun=neighborweights::binary_label_matrix,
@@ -702,11 +702,53 @@ kema.multidesign <- function(data, y,
   
   subject <- rlang::enquo(subject)
   y <- rlang::enquo(y)
-  
-  strata <- multidesign::hyperdesign(split(data, subject))
-  kema.hyperdesign(strata, !!y, preproc, ncomp, knn, sigma, u, kernel,
-                   sample_frac, use_laplacian, solver, dweight, rweight,
-                   simfun, disfun, lambda, centre_kernel)
+
+  if (!solver %in% c("regression", "exact")) {
+    stop("solver must be either 'regression' or 'exact'", call. = FALSE)
+  }
+
+  if (is.null(kernel)) {
+    if (is.null(sigma)) {
+      sigma <- 0.73
+    }
+    if (requireNamespace("kernlab", quietly = TRUE)) {
+      kernel <- kernlab::rbfdot(sigma = sigma)
+    } else {
+      kernel <- coskern()
+    }
+  } else if (is.null(sigma)) {
+    sigma <- 0.73
+  }
+
+  result <- kema_orig.multidesign(
+    data = data,
+    y = !!y,
+    subject = !!subject,
+    preproc = preproc,
+    ncomp = ncomp,
+    knn = knn,
+    sigma = sigma,
+    mu = u,
+    kernel = kernel,
+    sample_frac = sample_frac,
+    lambda = lambda,
+    backend = backend,
+    backend_control = backend_control
+  )
+
+  # Preserve legacy class tag for downstream code using `kema()`.
+  result$classes <- "kema"
+  if (is.numeric(result$eigenvalues)) {
+    legacy_solver <- if (identical(solver, "regression")) "exact_via_kema_orig" else "exact"
+    result$eigenvalues <- list(
+      values = as.numeric(result$eigenvalues),
+      all_values = as.numeric(result$eigenvalues),
+      solver = legacy_solver
+    )
+  }
+  result$regression_quality <- NULL
+  result$retry_info <- NULL
+  result
 }
 
 #' Kernel Manifold Alignment (KEMA) for Hyperdesign Data
@@ -728,18 +770,17 @@ kema.multidesign <- function(data, y,
 #' @param kernel Kernel function to use (default: coskern())
 #' @param sample_frac Fraction of samples to use for kernel approximation 
 #'   (default: 1)
-#' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
-#' @param solver Solver method: "regression" for fast approximation (default) 
-#'   or "exact" for precise solution
-#' @param dweight Weight for dissimilarity/repulsion terms (default: 0.1)
-#' @param rweight Weight for repulsion graph (default: 0)
-#' @param simfun Function to compute similarity between labels
-#' @param disfun Function to compute dissimilarity between labels (optional)
+#' @param use_laplacian Deprecated compatibility argument; ignored.
+#' @param solver Deprecated compatibility argument; accepted values are
+#'   `"regression"` and `"exact"`, but both currently route to the original
+#'   KEMA solver.
+#' @param dweight Deprecated compatibility argument; ignored.
+#' @param rweight Deprecated compatibility argument; ignored.
+#' @param simfun Deprecated compatibility argument; ignored.
+#' @param disfun Deprecated compatibility argument; ignored.
 #' @param lambda Regularization parameter for matrix conditioning 
 #'   (default: 0.0001)
-#' @param centre_kernel Whether to center kernel matrices (default: FALSE). 
-#'   **[EXTENSION]** The original paper uses uncentered kernels. Set TRUE for 
-#'   centered variant.
+#' @param centre_kernel Deprecated compatibility argument; ignored.
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return A multiblock_biprojector object containing the KEMA alignment
@@ -775,32 +816,12 @@ kema.multidesign <- function(data, y,
 #' }
 #'
 #' @details
-#' This implementation follows the Tuia & Camps-Valls (2016) paper with 
-#' extensions:
-#' 
-#' **Core KEMA (from paper):**
-#' - Generalized eigenvalue problem: Phi(L+mu*Ls)Phi^T*v = lambda * Phi*Ld*Phi^T*v (Eq. 4)
-#' - Kernelization: K(L+mu*Ls)K*Lambda = lambda * K*Ld*K * Lambda (Eq. 6)  
-#' - Reduced-rank KEMA (REKEMA) for computational efficiency
-#' - Matrix-free eigensolver with Jacobi preconditioning
-#' 
-#' **Extensions (not in original paper):**
-#' - \code{solver="regression"}: Fast spectral regression approximation 
-#'   (default)
-#' - \code{rweight}: Additional repulsion graph Lr for within-domain 
-#'   separation
-#' - Semi-supervised support: Handles NA labels for unlabeled samples
-#' - Enhanced numerical stability and error handling
+#' `kema()` now delegates to the paper-faithful `kema_orig()` backend and solves
+#' the original generalized eigenproblems from Tuia & Camps-Valls (2016),
+#' including the reduced-rank REKEMA form when `sample_frac < 1`.
 #'
-#' The algorithm offers two solver methods:
-#' - "regression": **[EXTENSION]** Fast approximation using spectral 
-#'   regression (default). This method first solves the eigenvalue problem on 
-#'   graph Laplacians, then uses ridge regression to find kernel coefficients. 
-#'   Much faster but may be less accurate for non-linear kernels.
-#' - "exact": Precise solution using the correct generalized eigenvalue 
-#'   formulation from the paper. This method solves the mathematically correct 
-#'   KEMA optimization problem but is more computationally intensive, 
-#'   especially for large datasets.
+#' Legacy extension arguments remain in the API for backward compatibility but
+#' are ignored by the current implementation.
 #'
 #' @references
 #' Tuia, D., & Camps-Valls, G. (2016). Kernel manifold alignment for domain 
@@ -809,7 +830,6 @@ kema.multidesign <- function(data, y,
 #' @rdname kema
 #' @method kema hyperdesign
 #' @export
-#' @importFrom multivarious init_transform
 kema.hyperdesign <- function(data, y,
                              preproc=center(), 
                              ncomp=2, 
@@ -820,6 +840,8 @@ kema.hyperdesign <- function(data, y,
                              sample_frac=1,
                              use_laplacian=TRUE, 
                              solver="regression",
+                             backend="auto",
+                             backend_control=NULL,
                              dweight=.1,
                              rweight=0,
                              simfun=neighborweights::binary_label_matrix,
@@ -828,1049 +850,63 @@ kema.hyperdesign <- function(data, y,
                              centre_kernel=FALSE,
                              ...) {
   
-  # Input validation
+  y <- rlang::enquo(y)
+
   chk::chk_number(ncomp)
   chk::chk_true(ncomp > 0)
   chk::chk_range(sample_frac, c(0,1))
-  # Validate solver parameter
-  if (!solver %in% c("regression", "exact")) {
-    stop("solver must be either 'regression' or 'exact'", call. = FALSE)
-  }
-  chk::chk_logical(use_laplacian)
-  chk::chk_number(dweight)
-  chk::chk_true(dweight >= 0)
-  chk::chk_number(rweight)
-  chk::chk_true(rweight >= 0)
   chk::chk_number(knn)
   chk::chk_true(knn > 0)
   chk::chk_range(u, c(0,1))
-  if (!is.null(sigma)) {
-    chk::chk_number(sigma)
-    chk::chk_true(sigma > 0)
-  }
-  chk::chk_number(lambda)
-  chk::chk_true(lambda > 0)
-  chk::chk_logical(centre_kernel)
-  
-  # Validate input data
-  if (!is.list(data) || length(data) == 0) {
-    stop("data must be a non-empty list of hyperdesign objects", call. = FALSE)
-  }
-  
-  y <- rlang::enquo(y)
-  
-  # Extract labels, accounting for quosure, and preserving NA for semi-supervised
-  y_char <- rlang::as_name(y)
-  
-  # Manually apply preprocessing to each domain
-  pdata <- data
-  proclist <- vector("list", length(data))
-
-  is_stateful_preproc <- inherits(preproc, "prepper") || inherits(preproc, "pre_processor")
-  if (is_stateful_preproc) {
-    preproc_list <- replicate(
-      length(data),
-      unserialize(serialize(preproc, connection = NULL)),
-      simplify = FALSE
-    )
-  } else {
-    preproc_list <- rep(list(preproc), length(data))
-  }
-
-  for (i in seq_along(data)) {
-    pre_i <- preproc_list[[i]]
-    if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
-      pre_i <- unserialize(serialize(pre_i, connection = NULL))
-    }
-    proc_template <- multivarious::prep(pre_i)
-    transformed_x <- multivarious::init_transform(proc_template, data[[i]]$x)
-    pdata[[i]]$x <- transformed_x
-    # Store the processor - use the attribute if available, otherwise use the template
-    proc_attr <- attr(transformed_x, "preproc")
-    proclist[[i]] <- if (is.null(proc_attr)) proc_template else proc_attr
-  }
-  names(proclist) <- names(data)
-  
-  # Extract labels AFTER preprocessing to ensure data/label alignment
-  labels <- unlist(purrr::map(pdata, function(x) {
-    if (!"design" %in% names(x)) {
-      stop("Each domain in the hyperdesign must have a 'design' component.", call. = FALSE)
-    }
-    
-    if (!y_char %in% names(x$design)) {
-      stop("Label column '", y_char, "' not found in domain design frame. ",
-           "Available columns: ", paste(names(x$design), collapse = ", "), 
-           call. = FALSE)
-    }
-    
-    # Use base R extraction for robustness
-    x$design[[y_char]]
-  }))
-  
-  # Handle case where all labels are NA
-  if (all(is.na(labels))) {
-    stop("No non-missing labels found. Semi-supervised learning requires at least some labeled samples.")
-  }
-  
-  # Check labeled samples only for validation
-  non_missing_mask <- !is.na(labels)
-  labeled_samples <- labels[non_missing_mask]
-  
-  if (length(labeled_samples) == 0) {
-    stop("No labeled samples found. Semi-supervised learning requires at least some labeled observations.", 
-         call. = FALSE)
-  }
-  
-  # Get unique non-missing labels for validation
-  label_set <- levels(factor(labeled_samples))  # Re-factor to remove NA level for counting
-  if (length(label_set) < 2) {
-    stop("Need at least 2 different class labels among labeled samples for alignment. Found: ", 
-         length(label_set), " unique non-missing labels.", call. = FALSE)
-  }
-  
-  # Report semi-supervised statistics
-  n_labeled <- sum(non_missing_mask)
-  n_unlabeled <- sum(!non_missing_mask)
-  message("Semi-supervised KEMA: ", n_labeled, " labeled samples, ", n_unlabeled, " unlabeled samples")
-  
-  ninstances <- length(labels)
-  nsets <- length(data)
-  
-  # Validate ncomp against data size
-  if (ncomp >= ninstances) {
-    stop("ncomp (", ncomp, ") must be less than the number of samples (", ninstances, ")", 
-         call. = FALSE)
-  }
-  
-  # Validate knn against data size
-  min_samples_per_block <- min(sapply(data, function(x) nrow(x$x)))
-  if (knn >= min_samples_per_block) {
-    stop("knn (", knn, ") must be less than the minimum number of samples per block (", 
-         min_samples_per_block, ")", call. = FALSE)
-  }
-  
-  # Validate preprocessed data (preprocessing was already done above)
-  if (any(sapply(pdata, function(x) any(!is.finite(x$x))))) {
-    stop("Preprocessed data contains non-finite values (NaN/Inf). ",
-         "Check input data quality and preprocessing parameters.", call. = FALSE)
-  }
-  
-  block_indices <- block_indices(pdata)
-  
-  # Convert block_indices matrix to list format for multivarious::concat_pre_processors
-  # The function expects a list with one entry per block, not a matrix
-  block_indices_list <- split(block_indices, row(block_indices))
-  
-  proc <- multivarious::concat_pre_processors(proclist, block_indices_list)
-  names(block_indices) <- names(pdata)
-  
-  # Auto-tune kernel and sigma if not provided
-  if (is.null(kernel)) {
-    # Concatenate all data for sigma estimation
-    all_data <- do.call(rbind, lapply(pdata, function(x) x$x))
-    
-    if (is.null(sigma)) {
-      sigma <- choose_sigma(all_data)
-      message("Auto-selected sigma = ", round(sigma, 4), " using median distance heuristic")
-    }
-    
-    # Use RBF kernel as default (better than cosine for most continuous data)
-    if (requireNamespace("kernlab", quietly = TRUE)) {
-      kernel <- kernlab::rbfdot(sigma = sigma)
-      message("Using RBF kernel with auto-tuned sigma")
-    } else {
-      warning("kernlab not available, falling back to cosine kernel")
-      kernel <- coskern()
-    }
-  } else if (is.null(sigma)) {
-    # Kernel provided but sigma not specified - warn user
-    message("Kernel provided but sigma not specified. Using default sigma = 0.73")
-    sigma <- 0.73
-  }
-  
-  kema_fit(pdata, proc, ncomp, knn, sigma, u, !!y, labels, kernel, sample_frac,
-           solver, dweight, rweight, block_indices, simfun, disfun, lambda,
-           use_laplacian, centre_kernel)
-  
-}
-
-
-#' @importFrom stats coef cor sd setNames
-#' @keywords internal
-#' @noRd
-kema_fit <- function(strata, proc, ncomp, knn, sigma, u, y, labels, kernel, sample_frac, 
-                     solver, dweight, rweight, block_indices, simfun, disfun, lambda,
-                     use_laplacian, centre_kernel) {
-  chk::chk_number(ncomp)
-  chk::chk_range(sample_frac, c(0,1))
-  # Validate solver parameter
   if (!solver %in% c("regression", "exact")) {
     stop("solver must be either 'regression' or 'exact'", call. = FALSE)
   }
-  chk::chk_number(dweight)
-  chk::chk_range(u, c(0,1))
-  
-  y <- rlang::enquo(y)
-  
-  
-  ## data similarity
-  Sl <- compute_local_similarity(strata, !!y, knn, 
-                                 weight_mode="normalized", 
-                                 type="normal",  
-                                 sigma=sigma,
-                                 repulsion=rweight>0)
-  
-  
-  ## class pull
-  # Sanitize labels so simfun never receives NA (avoid sparseMatrix NA indices)
-  labels_for_sim <- sanitize_labels_for_similarity(labels)
-  Ws <- safe_compute(
-    simfun(labels_for_sim),
-    "Failed to compute class similarity matrix. This may indicate issues with the similarity function or label structure. For semi-supervised learning, ensure simfun can handle NA values"
+
+  # Legacy compatibility: keep old arguments in signature but route to original KEMA.
+  if (is.null(kernel)) {
+    if (is.null(sigma)) {
+      sigma <- 0.73
+    }
+    if (requireNamespace("kernlab", quietly = TRUE)) {
+      kernel <- kernlab::rbfdot(sigma = sigma)
+    } else {
+      kernel <- coskern()
+    }
+  } else if (is.null(sigma)) {
+    sigma <- 0.73
+  }
+
+  result <- kema_orig.hyperdesign(
+    data = data,
+    y = !!y,
+    preproc = preproc,
+    ncomp = ncomp,
+    knn = knn,
+    sigma = sigma,
+    mu = u,
+    kernel = kernel,
+    sample_frac = sample_frac,
+    lambda = lambda,
+    backend = backend,
+    backend_control = backend_control
   )
-  
-  # Validate that Ws is a proper similarity matrix
-  if (!methods::is(Ws, "Matrix") && !is.matrix(Ws)) {
-    stop("simfun must return a matrix or Matrix object", call. = FALSE)
-  }
-  
-  if (!all(dim(Ws) == c(length(labels), length(labels)))) {
-    stop("simfun returned matrix with incorrect dimensions: ", 
-         paste(dim(Ws), collapse = " x "), 
-         ", expected: ", length(labels), " x ", length(labels), call. = FALSE)
-  }
-  
-  ## class push
-  if (dweight > 0) {
-    Wd <- compute_between_graph(strata, !!y, disfun)
-  } else {
-    # Create empty sparse matrix
-    Wd <- Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0),
-                               dims = c(length(labels), length(labels)))
-  }
-  
-  ## reweight graphs
-  G <- normalize_graphs(Sl, Ws, Wd)
-  
-  ## compute full or subsampled kernels
-  Ks <- compute_kernels(strata, kernel, sample_frac, centre_kernel)
-  kernel_indices <- get_block_indices(Ks, byrow=TRUE)
-  
-  # Convert to sparse format to prevent memory explosion in bdiag()
-  Ks_sparse <- lapply(Ks, function(k) {
-    if (!methods::is(k, "sparseMatrix")) {
-      Matrix::Matrix(k, sparse = TRUE)
-    } else {
-      k
-    }
-  })
-  
-  Z <- Matrix::bdiag(Ks_sparse)
-  
-  ## compute laplacians
-  Lap <- compute_laplacians(G$Ws,G$Wr,G$W,G$Wd, use_laplacian)
-  
-  # Use appropriate solver based on sample_frac
-  if (sample_frac == 1) {
-    kemfit <- kema_full_solver(strata, Z, Ks, Lap, kernel_indices, solver, ncomp, u,
-                               dweight, rweight, lambda)
-  } else {
-    kemfit <- kema_landmark_solver(strata, Z, Ks, Lap, kernel_indices, solver, ncomp, u,
-                                   dweight, rweight, sample_frac, lambda)
-  }
-  
-  # FAIL-SOFT GUARD: Automatic retry with exact solver if regression quality is poor
-  if (solver == "regression" && !is.null(kemfit$regression_quality) && kemfit$regression_quality$is_poor) {
-    original_solver <- solver
-    warning("Regression solver produced poor results (subspace angle: ", 
-            round(kemfit$regression_quality$angle_deg, 1), " deg, best match: ",
-            round(kemfit$regression_quality$best_match, 3), "). ",
-            "Automatically retrying with solver='exact' for higher fidelity.", 
-            call. = FALSE)
-    
-    # Retry with exact solver
-    if (sample_frac == 1) {
-      kemfit_exact <- kema_full_solver(strata, Z, Ks, Lap, kernel_indices, "exact", ncomp, u, 
-                                       dweight, rweight, lambda)
-    } else {
-      kemfit_exact <- kema_landmark_solver(strata, Z, Ks, Lap, kernel_indices, "exact", ncomp, u, 
-                                           dweight, rweight, sample_frac, lambda)
-    }
-    
-    # Store original quality info before overwriting
-    original_quality <- kemfit$regression_quality
-    
-    # Use exact results but preserve information about the retry
-    kemfit <- kemfit_exact
-    kemfit$retry_info <- list(
-      original_solver = original_solver,
-      original_quality = original_quality,
-      retried_with = "exact"
+
+  # Preserve legacy class tag for downstream code using `kema()`.
+  result$classes <- "kema"
+  if (is.numeric(result$eigenvalues)) {
+    legacy_solver <- if (identical(solver, "regression")) "exact_via_kema_orig" else "exact"
+    result$eigenvalues <- list(
+      values = as.numeric(result$eigenvalues),
+      all_values = as.numeric(result$eigenvalues),
+      solver = legacy_solver
     )
-    
-    message("Retry with exact solver completed successfully.")
   }
-
-  # Compute feature block indices for multiblock_biprojector
-  feat_per_block <- vapply(strata, function(b) ncol(b$x), integer(1))
-  end_idx   <- cumsum(feat_per_block)
-  start_idx <- c(1L, head(end_idx, -1) + 1L)
-  
-  feature_block_idx <- lapply(seq_along(feat_per_block), function(i) {
-    start_idx[i]:end_idx[i]
-  })
-  names(feature_block_idx) <- paste0("block_", seq_along(feature_block_idx))
-
-  result <- multivarious::multiblock_biprojector(
-    v=kemfit$coef,
-    s=kemfit$scores,
-    sdev=apply(kemfit$scores,2,sd),
-    preproc=proc,
-    alpha=kemfit$vectors,
-    block_indices=feature_block_idx,
-    Ks=Ks,
-    sample_frac=sample_frac,
-    dweight=dweight,
-    rweight=rweight,
-    labels=labels,
-    classes="kema"
-  )
-  
-  # Add KEMA-specific information to the result
-  result$eigenvalues <- kemfit$eigenvalues
-  result$regression_quality <- kemfit$regression_quality
-  if (!is.null(kemfit$retry_info)) {
-    result$retry_info <- kemfit$retry_info
-  }
-  
+  result$regression_quality <- NULL
+  result$retry_info <- NULL
   result
+  
 }
 
-
-# Old kema_solve function removed - replaced by kema_full_solver and kema_landmark_solver
-
-#' @keywords internal
-#' Spectral Regression Helper for KEMA
-#' 
-#' Implements the mathematically correct spectral regression approximation for KEMA.
-#' This approach splits the KEMA trace-ratio objective across two steps:
-#' 1. Find target embedding Y based on "pull" forces (geometry, same-class)
-#' 2. Use regularized regression with "push" forces as penalty term
-#'
-#' @param Z Kernel matrix (n x r for REKEMA, n x n for full KEMA)
-#' @param Lap List of Laplacian matrices
-#' Spectral Regression KEMA Solver
-#'
-#' Internal helper function that implements the spectral regression approach for 
-#' KEMA. This is a two-step approximation method that first computes target 
-#' embeddings from graph Laplacians, then uses regularized regression to find 
-#' kernel coefficients.
-#'
-#' @param Z Block diagonal kernel matrix (sparse dgCMatrix)
-#' @param Lap List of Laplacian matrices (L, Ls, Lr, Ld)
-#' @param ncomp Number of components to extract
-#' @param u Trade-off parameter between manifold and class terms
-#' @param dweight Weight for dissimilarity terms
-#' @param rweight Weight for repulsion terms
-#' @param lambda Regularization parameter
-#' @return List with vectors (coefficients) and Y (target embedding)
-#' @noRd
-spectral_regression_kema <- function(Z, Lap, ncomp, u, dweight, rweight, lambda) {
-  # Ensure valid lambda
-  if (is.null(lambda)) {
-    lambda <- 0.0001
-  } else if (lambda < 0) {
-    stop("lambda must be non-negative, got: ", lambda, call. = FALSE)
-  }
-  
-  # Prevent singular systems
-  if (dweight == 0 && rweight == 0 && lambda < 1e-6) {
-    lambda <- 1e-6
-    message("Increased lambda to ", lambda, " to prevent singular system")
-  }
-  
-  # Step 1: Compute target embedding Y from pull forces
-  A_pull <- u * Lap$L + (1 - u) * Lap$Ls
-  
-  decomp <- safe_compute(
-    PRIMME::eigs_sym(A_pull, NEig = ncomp + 1, which = "SA"),
-    "Eigenvalue computation for pull-graph failed in regression solver"
-  )
-  
-  # CORRECTNESS FIX: Numerical guard rails
-  if (!all(is.finite(decomp$values))) {
-    stop("Non-finite eigenvalues detected in spectral regression. ",
-         "Try increasing lambda regularization or checking data quality.", call. = FALSE)
-  }
-  
-  # Validate eigenvalue results
-  if (is.null(decomp$vectors) || ncol(decomp$vectors) < ncomp) {
-    stop("Insufficient eigenvectors computed (got ", ncol(decomp$vectors), 
-         ", needed ", ncomp, "). Try reducing ncomp or checking matrix conditioning.", 
-         call. = FALSE)
-  }
-  
-  # Discard the first eigenvector (trivial constant vector)
-  # Select the next ncomp eigenvectors corresponding to smallest non-zero eigenvalues
-  eigenvals <- decomp$values
-  eigenvecs <- decomp$vectors
-  
-  if (abs(eigenvals[1]) < 1e-10 && ncomp + 1 <= length(eigenvals)) {
-    Y <- eigenvecs[, 2:(ncomp+1), drop=FALSE]
-  } else {
-    Y <- eigenvecs[, 1:ncomp, drop=FALSE]
-  }
-  
-  # Step 2: Solve for kernel coefficients using regularized regression
-  # Objective: min ||Y - ZV||^2 + V^T(Z^T*P_push*Z + lambda*I)V
-# Solution: (Z^T*Z + Z^T*P_push*Z + lambda*I)V = Z^T*Y
-  
-  Z <- as(Z, "dgCMatrix")
-  P_push <- rweight * Lap$Lr + dweight * Lap$Ld  # n x n sparse matrix
-  
-  # Construct the Left-Hand Side (LHS) of the linear system
-  # This will be an r x r matrix (much smaller than n x n)
-  XtX <- Matrix::crossprod(Z)  # Z^T * Z (r x r)
-  
-  # Add penalty term: Z^T * P_push * Z (r x r)
-  if (rweight > 0 || dweight > 0) {
-    Penalty_term <- Matrix::crossprod(Z, P_push %*% Z)  # Z^T * P_push * Z
-  } else {
-    # If no push forces, penalty term is zero
-    Penalty_term <- Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0),
-                                         dims = c(ncol(Z), ncol(Z)))
-  }
-  
-  # Complete LHS: Z^T*Z + Z^T*P_push*Z + lambda*I
-  LHS <- XtX + Penalty_term + lambda * Matrix::Diagonal(ncol(Z))
-  
-  # Construct the Right-Hand Side (RHS)
-  RHS <- Matrix::crossprod(Z, Y)  # Z^T * Y (r x ncomp)
-  
-  # Check conditioning
-  rcond_val <- safe_compute(
-    suppressWarnings(Matrix::rcond(LHS)),
-    "Failed to compute condition number",
-    warning_fn = function(w) {} # Suppress warnings
-  )
-  
-  if (!is.null(rcond_val) && rcond_val < 1e-10) {
-    warning("Regression system is ill-conditioned (rcond = ", 
-            format(rcond_val, scientific = TRUE), "). ",
-            "Consider increasing lambda.", call. = FALSE)
-  }
-  
-  # Solve the linear system
-  vectors <- tryCatch({
-    # Make LHS symmetric and add jitter for stability
-    LHS_sym <- Matrix::forceSymmetric(LHS)
-    jitter <- max(1e-12, 1e-10 * mean(Matrix::diag(LHS_sym)))
-    Matrix::diag(LHS_sym) <- Matrix::diag(LHS_sym) + jitter
-    
-    # Ensure consistent matrix types
-    RHS_dgC <- as(Matrix::Matrix(RHS, sparse = TRUE), "dgCMatrix")
-    
-    # Try Cholesky first
-    chol_decomp <- Matrix::Cholesky(LHS_sym)
-    Matrix::solve(chol_decomp, RHS_dgC)
-  }, error = function(e) {
-    # Fallback to general solver
-    warning("Using general sparse solver instead of Cholesky", call. = FALSE)
-    safe_compute({
-      RHS_dgC <- as(Matrix::Matrix(RHS, sparse = TRUE), "dgCMatrix")
-      Matrix::solve(LHS_sym, RHS_dgC, sparse = TRUE)
-    }, "Linear system solve failed. Try increasing lambda")
-  })
-  
-  # Store eigenvalues from regression solver  
-  eigenvalue_info <- list(
-    values = if (abs(eigenvals[1]) < 1e-10 && ncomp + 1 <= length(eigenvals)) {
-               eigenvals[2:(ncomp+1)]
-             } else {
-               eigenvals[1:ncomp]
-             },
-    all_values = eigenvals,
-    solver = "regression"
-  )
-  
-  return(list(vectors = vectors, Y = Y, eigenvalues = eigenvalue_info))
-}
-
-#' @keywords internal
-validate_matrix <- function(mat, name = "matrix", check_finite = TRUE, check_symmetric = FALSE) {
-  if (is.null(mat)) {
-    stop(name, " is NULL", call. = FALSE)
-  }
-  
-  if (!is.matrix(mat) && !methods::is(mat, "Matrix")) {
-    stop(name, " must be a matrix or Matrix object", call. = FALSE)
-  }
-  
-  if (any(dim(mat) == 0)) {
-    stop(name, " has zero dimensions: ", paste(dim(mat), collapse = " x "), call. = FALSE)
-  }
-  
-  if (check_finite && any(!is.finite(mat))) {
-    stop(name, " contains non-finite values (NaN/Inf)", call. = FALSE)
-  }
-  
-  if (check_symmetric && nrow(mat) == ncol(mat)) {
-    # Check symmetry for square matrices
-    if (!isSymmetric(mat, tol = 1e-10)) {
-      warning(name, " is not symmetric within tolerance", call. = FALSE)
-    }
-  }
-  
-  invisible(TRUE)
-}
-
-#' Full KEMA Solver (sample_frac == 1)
-#' 
-#' Implements the full KEMA algorithm for complete kernel matrices.
-#' This solver handles the n x n generalized eigenvalue problem.
-#'
-#' @param strata List of data strata
-#' @param Z Block diagonal kernel matrix (n x n)
-#' @param Ks List of individual kernel matrices
-#' @param Lap List of Laplacian matrices
-#' @param kernel_indices Block indices for kernels
-#' @param solver Solver method: "regression" for fast approximation or "exact" for precise solution
-#' @param ncomp Number of components to extract
-#' @param u Trade-off parameter between manifold and class terms
-#' @param dweight Weight for dissimilarity terms
-#' @param rweight Weight for repulsion terms
-#' @param lambda Regularization parameter
-#' @return List with coef, scores, and vectors
-#' @keywords internal
-kema_full_solver <- function(strata, Z, Ks, Lap, kernel_indices, solver, ncomp, u, 
-                             dweight, rweight, lambda) {
-  
-  # Honor user-supplied lambda value (remove override)
-  if (is.null(lambda)) {
-    lambda <- 0.0001  # Match main function default
-  }
-  
-  if (solver == "regression") {
-    # SPECTRAL REGRESSION PATH: Mathematically correct and robust approximation
-    
-    # Check for legacy mode (for backward compatibility)
-    if (getOption("kema.legacy_specreg", FALSE)) {
-      # Legacy implementation (flawed but preserved for reproducibility)
-      warning("Using legacy spectral regression implementation. ",
-              "This method has known mathematical issues. ",
-              "Set options(kema.legacy_specreg = FALSE) to use the improved method.",
-              call. = FALSE)
-      
-      A <- Lap$Ls - (rweight*Lap$Lr + dweight*Lap$Ld)
-      decomp <- PRIMME::eigs_sym(u*Lap$L + (1-u)*A, NEig=ncomp+1, which="SA")
-      Y <- decomp$vectors[, 2:(ncomp+1), drop=FALSE]
-      Z <- as(Z, "dgCMatrix")
-      
-      if (is.null(lambda)) {
-        cvfit <- cv.glmnet(Z, Y, family = "mgaussian", alpha=0, intercept=FALSE)
-        lambda_glmnet <- cvfit$lambda.min
-      } else {
-        lambda_glmnet <- lambda
-      }
-      
-      rfit <- glmnet(Z, Y, family = "mgaussian", alpha=0, lambda=lambda_glmnet, intercept=FALSE)
-      cfs <- coef(rfit)
-      vectors <- do.call(cbind, cfs)[-1,,drop=FALSE]
-      
-      # For legacy mode, create basic eigenvalue info from decomp
-      eigenvalue_info <- list(
-        values = if (abs(decomp$values[1]) < 1e-10 && ncomp + 1 <= length(decomp$values)) {
-                   decomp$values[2:(ncomp+1)]
-                 } else {
-                   decomp$values[1:ncomp]
-                 },
-        all_values = decomp$values,
-        solver = "regression_legacy"
-      )
-      
-    } else {
-      # New, mathematically correct implementation
-      result <- spectral_regression_kema(Z, Lap, ncomp, u, dweight, rweight, lambda)
-      vectors <- result$vectors
-      Y <- result$Y
-      eigenvalue_info <- result$eigenvalues
-    }
-    
-    # Enhanced quality check using rotation-invariant subspace metric
-    Z <- as(Z, "dgCMatrix")
-    Y_hat <- Z %*% vectors
-    
-    # Convert to base matrices for analysis
-    Y_mat <- as.matrix(Y)
-    Y_hat_mat <- as.matrix(Y_hat)
-    
-    # Rotation-invariant subspace comparison using principal angles
-    subspace_quality <- tryCatch({
-      # Helper function for principal angle distance
-      qa <- qr.Q(qr(Y_mat))
-      qb <- qr.Q(qr(Y_hat_mat))
-      sv <- svd(t(qa) %*% qb, nu = 0, nv = 0)$d
-      max_angle <- acos(min(sv))  # Largest principal angle
-      subspace_distance <- sin(max_angle)  # Distance in [0,1]
-      
-      # Also compute best-matching correlation for backwards compatibility
-      corr_matrix <- abs(cor(Y_mat, Y_hat_mat, use = "pairwise.complete.obs"))
-      best_match <- sum(apply(corr_matrix, 1, max)) / ncol(corr_matrix)
-      
-      list(distance = subspace_distance, best_match = best_match, 
-           angle_deg = max_angle * 180 / pi)
-    }, error = function(e) {
-      warning("Could not compute regression approximation quality: ", e$message, call. = FALSE)
-      list(distance = 0, best_match = 1.0, angle_deg = 0)
-    })
-    
-    # FAIL-SOFT GUARD: Assess regression quality and store for potential retry
-    quality <- assess_regression_quality(Y_mat, Y_hat_mat, "full KEMA regression")
-    
-    # Store quality metrics for main function decision
-    regression_quality <- list(
-      is_poor = quality$is_poor,
-      subspace_distance = quality$distance,
-      best_match = quality$best_match,
-      angle_deg = quality$angle_deg
-    )
-    
-  } else {
-    # EXACT KEMA PATH: Solve the correct generalized eigenvalue problem
-    
-    Z <- as(Z, "dgCMatrix")
-    n <- nrow(Z)
-    
-    # CORRECTED FORMULATION (Ticket 1):
-    # A = u*L + (1-u)*Ls  (pull towards manifold structure and same-class samples)
-    # B = rweight*Lr + dweight*Ld + lambda*I  (push away from different classes + regularization)
-    
-    # Full KEMA uses standard lambda (no scaling needed since sample_frac = 1)
-    A_laplacian <- u * Lap$L + (1-u) * Lap$Ls
-    B_laplacian <- rweight * Lap$Lr + dweight * Lap$Ld + lambda * Matrix::Diagonal(nrow(Lap$L))
-    
-    # Matrix-free operators for large datasets
-    matvec_A <- function(x) {
-      # CORRECTNESS FIX: Ensure x is always a numeric vector for PRIMME
-      x <- as.numeric(x)
-      temp1 <- Matrix::crossprod(Z, x)      # K^T * x
-      temp2 <- A_laplacian %*% temp1        # A_laplacian * (K^T * x)
-      result <- Z %*% temp2                 # K * (A_laplacian * (K^T * x))
-      as.numeric(result)                    # Ensure result is numeric vector
-    }
-    
-    matvec_B <- function(x) {
-      # CORRECTNESS FIX: Ensure x is always a numeric vector for PRIMME
-      x <- as.numeric(x)
-      temp1 <- Matrix::crossprod(Z, x)      # K^T * x
-      temp2 <- B_laplacian %*% temp1        # B_laplacian * (K^T * x)
-      result <- Z %*% temp2                 # K * (B_laplacian * (K^T * x))
-      as.numeric(result)                    # Ensure result is numeric vector
-    }
-    
-    # CORRECTNESS FIX: Improved Jacobi preconditioner
-    # Use rowSums as stabilizer when diagonal is near zero (e.g., cosine kernels)
-    diag_A_laplacian <- Matrix::diag(A_laplacian)
-    diag_K <- Matrix::diag(Z)
-    
-    # Use rowSums as fallback when diagonal is uninformative
-    row_sums_K <- Matrix::rowSums(abs(Z))
-    diag_A_approx <- diag_K * (diag_A_laplacian * diag_K)
-    
-    # Replace near-zero entries with rowSums-based approximation
-    near_zero_mask <- abs(diag_A_approx) < 1e-9
-    if (any(near_zero_mask)) {
-      diag_A_approx[near_zero_mask] <- row_sums_K[near_zero_mask] * mean(abs(diag_A_laplacian))
-    }
-    
-    # Final safety clipping
-    diag_A_approx[abs(diag_A_approx) < 1e-12] <- 1.0
-    
-    preconditioner <- function(x) {
-      x / diag_A_approx
-    }
-    
-    # Estimate matrix norms for PRIMME
-    A_laplacian_norm <- tryCatch({
-      Matrix::norm(A_laplacian, "I")
-    }, error = function(e) { 1.0 })
-    
-    K_norm <- tryCatch({
-      Matrix::norm(Z, "I")
-    }, error = function(e) { 1.0 })
-    
-    A_norm_estimate <- K_norm^2 * A_laplacian_norm
-    
-    # DEFAULT: Use explicit matrix construction (more stable)
-    # Matrix-free solver is experimental and can be enabled by setting use_matrix_free = TRUE
-    use_matrix_free <- FALSE  # Make matrix-free experimental for now
-    
-    if (use_matrix_free) {
-      # EXPERIMENTAL: Matrix-free solver (may have stability issues)
-      # PRIMME FIX: Build explicit B matrix to avoid hang with two matrix-free operators
-      B_explicit <- Z %*% B_laplacian %*% Matrix::t(Z)
-      # Regularize B matrix
-      B_explicit <- B_explicit + (1e-8 * Matrix::Diagonal(n))
-      
-      # Optimized PRIMME parameters
-      max_block_size <- min(2 * ncomp, 32)
-      max_basis_size <- min(8 * max_block_size, 256)
-      
-      # Try matrix-free approach first
-      decomp <- tryCatch({
-        PRIMME::eigs_sym(
-          A = matvec_A,
-          B = B_explicit,
-          n = n,
-          NEig = ncomp + 1,
-          which = "SA",
-          prec = preconditioner,
-          tol = 1e-5,
-          method = "PRIMME_DEFAULT_MIN_MATVECS",
-          maxBlockSize = max_block_size,
-          maxBasisSize = max_basis_size,
-          aNorm = A_norm_estimate,
-          printLevel = 0
-        )
-      }, error = function(e) {
-        # If matrix-free fails, fall back to explicit
-        message("Matrix-free solver failed, falling back to explicit matrices. Error: ", e$message)
-        NULL
-      })
-    } else {
-      decomp <- NULL  # Skip matrix-free, go directly to explicit
-    }
-    
-    # Default approach: Explicit matrix construction
-    if (is.null(decomp)) {
-      A_explicit <- Z %*% A_laplacian %*% Matrix::t(Z)
-      B_explicit <- Z %*% B_laplacian %*% Matrix::t(Z)
-      
-      # Regularize B matrix
-      B_explicit <- B_explicit + (1e-8 * Matrix::Diagonal(n))
-      
-      decomp <- tryCatch({
-        PRIMME::eigs_sym(A_explicit, NEig=ncomp+1, which="SA", B=B_explicit)
-      }, error = function(e) {
-        stop("Explicit matrix solver failed. ",
-             "This indicates severe numerical issues. ",
-             "Try reducing ncomp, increasing lambda regularization, or checking data quality. ",
-             "Error: ", e$message, call. = FALSE)
-      })
-    }
-    
-    # Check for non-finite eigenvalues
-    if (!all(is.finite(decomp$values))) {
-      stop("Non-finite eigenvalues detected in exact solver. ",
-           "Try increasing lambda regularization or checking data quality.", call. = FALSE)
-    }
-    
-    # Validate and select eigenvectors
-    if (is.null(decomp$vectors) || ncol(decomp$vectors) < ncomp) {
-      stop("Insufficient eigenvectors computed in generalized eigenvalue problem (got ", 
-           ncol(decomp$vectors), ", needed ", ncomp, "). ",
-           "Try reducing ncomp or increasing lambda regularization.", call. = FALSE)
-    }
-    
-    eigenvals <- decomp$values
-    eigenvecs <- decomp$vectors
-    
-    if (abs(eigenvals[1]) < 1e-10 && ncomp + 1 <= length(eigenvals)) {
-      vectors <- eigenvecs[, 2:(ncomp+1), drop=FALSE]
-      selected_eigenvals <- eigenvals[2:(ncomp+1)]
-    } else {
-      vectors <- eigenvecs[, 1:ncomp, drop=FALSE]
-      selected_eigenvals <- eigenvals[1:ncomp]
-    }
-    
-    # Store eigenvalues for exact solver
-    eigenvalue_info <- list(
-      values = selected_eigenvals,
-      all_values = eigenvals,
-      solver = "exact"
-    )
-    
-    regression_quality <- NULL  # No regression quality for exact solver
-  }
-  
-  # Compute scores and primal vectors
-  scores <- Z %*% vectors
-  
-  # Primal vector calculation for full KEMA
-  v <- do.call(rbind, lapply(1:length(strata), function(i) {
-    xi <- strata[[i]]$x  # xi is samples x features
-    kind <- seq(kernel_indices[i,1], kernel_indices[i,2])
-    alpha_i <- vectors[kind,,drop=FALSE]  # alpha_i is samples x components
-    
-    # crossprod(xi, alpha_i) = t(xi) %*% alpha_i gives features x components
-    v_i <- Matrix::crossprod(xi, alpha_i)
-    v_i
-  }))
-  
-  list(coef=v, scores=scores, vectors=vectors, eigenvalues=eigenvalue_info, regression_quality=regression_quality)
-}
-
-#' @keywords internal
-#' REKEMA Landmark Solver (sample_frac < 1)
-#' 
-#' Implements the Reduced-rank KEMA (REKEMA) algorithm using landmark points.
-#' This solver reduces computational complexity from O(n^2) to O(r^2) where r is 
-#' the number of landmarks.
-#'
-#' @param strata List of data strata
-#' @param Z Landmark kernel matrix (n x r)
-#' @param Ks List of individual kernel matrices
-#' @param Lap List of Laplacian matrices
-#' @param kernel_indices Block indices for kernels
-#' @param solver Solver method: "regression" for fast approximation or "exact" for precise solution
-#' @param ncomp Number of components to extract
-#' @param u Trade-off parameter between manifold and class terms
-#' @param dweight Weight for dissimilarity terms
-#' @param rweight Weight for repulsion terms
-#' @param sample_frac Fraction of samples used as landmarks
-#' @param lambda Regularization parameter
-#' @return List with coef, scores, and vectors
-#' @noRd
-kema_landmark_solver <- function(strata, Z, Ks, Lap, kernel_indices, solver, ncomp, u, 
-                                 dweight, rweight, sample_frac, lambda) {
-  
-  # Honor user-supplied lambda value (remove override)
-  if (is.null(lambda)) {
-    lambda <- 0.0001  # Match main function default
-  }
-  
-  if (solver == "regression") {
-    # SPECTRAL REGRESSION PATH for REKEMA: Mathematically correct approximation
-    
-    # Check for legacy mode (for backward compatibility)
-    if (getOption("kema.legacy_specreg", FALSE)) {
-      # Legacy implementation (flawed but preserved for reproducibility)
-      warning("Using legacy REKEMA spectral regression implementation. ",
-              "This method has known mathematical issues. ",
-              "Set options(kema.legacy_specreg = FALSE) to use the improved method.",
-              call. = FALSE)
-      
-      A <- Lap$Ls - (rweight*Lap$Lr + dweight*Lap$Ld)
-      decomp <- PRIMME::eigs_sym(u*Lap$L + (1-u)*A, NEig=ncomp+1, which="SA")
-      Y <- decomp$vectors[, 2:(ncomp+1), drop=FALSE]
-      Z <- as(Z, "dgCMatrix")
-      
-      if (is.null(lambda)) {
-        cvfit <- cv.glmnet(Z, Y, family = "mgaussian", alpha=0, intercept=FALSE)
-        lambda_glmnet <- cvfit$lambda.min
-      } else {
-        lambda_glmnet <- lambda
-      }
-      
-      rfit <- glmnet(Z, Y, family = "mgaussian", alpha=0, lambda=lambda_glmnet, intercept=FALSE)
-      cfs <- coef(rfit)
-      vectors <- do.call(cbind, cfs)[-1,,drop=FALSE]
-      
-      # For REKEMA legacy mode, create basic eigenvalue info from decomp
-      eigenvalue_info <- list(
-        values = if (abs(decomp$values[1]) < 1e-10 && ncomp + 1 <= length(decomp$values)) {
-                   decomp$values[2:(ncomp+1)]
-                 } else {
-                   decomp$values[1:ncomp]
-                 },
-        all_values = decomp$values,
-        solver = "rekema_regression_legacy"
-      )
-      
-    } else {
-      # New, mathematically correct implementation for REKEMA
-      result <- spectral_regression_kema(Z, Lap, ncomp, u, dweight, rweight, lambda)
-      vectors <- result$vectors
-      Y <- result$Y
-      eigenvalue_info <- result$eigenvalues
-    }
-    
-    # Enhanced quality check using rotation-invariant subspace metric for REKEMA
-    Z <- as(Z, "dgCMatrix")
-    Y_hat <- Z %*% vectors
-    
-    # Convert to base matrices for analysis
-    Y_mat <- as.matrix(Y)
-    Y_hat_mat <- as.matrix(Y_hat)
-    
-    # Check regression quality using principal angles
-    subspace_quality <- safe_compute({
-      qa <- qr.Q(qr(Y_mat))
-      qb <- qr.Q(qr(Y_hat_mat))
-      sv <- svd(t(qa) %*% qb, nu = 0, nv = 0)$d
-      max_angle <- acos(min(sv))
-      subspace_distance <- sin(max_angle)
-      
-      corr_matrix <- abs(cor(Y_mat, Y_hat_mat, use = "pairwise.complete.obs"))
-      best_match <- sum(apply(corr_matrix, 1, max)) / ncol(corr_matrix)
-      
-      list(distance = subspace_distance, best_match = best_match, 
-           angle_deg = max_angle * 180 / pi)
-    }, "Could not compute REKEMA regression quality", 
-    warning_fn = function(w) { list(distance = 0, best_match = 1.0, angle_deg = 0) })
-    
-    # FAIL-SOFT GUARD: Assess regression quality for REKEMA
-    quality <- assess_regression_quality(Y_mat, Y_hat_mat, "REKEMA regression")
-    regression_quality <- list(
-      is_poor = quality$is_poor,
-      subspace_distance = quality$distance,
-      best_match = quality$best_match,
-      angle_deg = quality$angle_deg
-    )
-    
-    if (is.finite(subspace_quality$distance) && subspace_quality$distance > 0.1) {
-      k_rank <- safe_compute(Matrix::rankMatrix(Z)[1], "rank computation failed", 
-                            warning_fn = function(w) { "unknown" })
-      
-      warning("REKEMA regression approximation fidelity is below target:\n",
-              "  Best component match: ", round(subspace_quality$best_match, 3), "\n",
-              "  Subspace angle (deg): ", round(subspace_quality$angle_deg, 1), "\n",
-              "  Samples: ", nrow(Z), ", Kernel rank: ", k_rank, "\n",
-              "Consider using solver='exact' or increasing sample_frac.",
-              call. = FALSE)
-    }
-    
-  } else {
-    # EXACT REKEMA PATH: Solve the reduced r x r generalized eigenvalue problem
-    # This is the key innovation of Ticket 2 - much more efficient than matrix-free n x n
-    
-    Z <- as(Z, "dgCMatrix")
-    n <- nrow(Z)  # Total number of samples
-    r <- ncol(Z)  # Total number of landmarks
-    
-    message("REKEMA: Solving reduced ", r, " x ", r, " eigenvalue problem instead of ", n, " x ", n)
-    
-    # CORRECTED FORMULATION (Ticket 1):
-    # A = u*L + (1-u)*Ls  (pull towards manifold structure and same-class samples)
-    # B = rweight*Lr + dweight*Ld + lambda*I  (push away from different classes + regularization)
-    
-    # LAMBDA SCALING FIX: Scale regularization for landmark size to maintain comparable energy
-    # Full KEMA uses lambda*I_n, REKEMA should use lambda_r = lambda * n/r to maintain
-    # comparable regularization energy across different sample fractions
-    lambda_scaled <- lambda * n / r
-    message("REKEMA: Scaling lambda from ", lambda, " to ", round(lambda_scaled, 6), 
-            " (factor: ", round(n/r, 2), ") to maintain regularization energy")
-    
-    A_laplacian <- u * Lap$L + (1-u) * Lap$Ls
-    B_laplacian <- rweight * Lap$Lr + dweight * Lap$Ld + lambda_scaled * Matrix::Diagonal(nrow(Lap$L))
-    
-    # PAPER'S REKEMA FORMULATION (Eq. 10): Direct projection without K_rr normalization
-    # Solves the r x r generalized eigenvalue problem:
-    # Krn(L + mu*Ls)Knr * Lambda = lambda * KrnLdKnr * Lambda
-    # where:
-    # - Krn is r x n (landmarks x all samples) = Z^T
-    # - Knr is n x r (all samples x landmarks) = Z
-    # - A_reduced = Krn * A_laplacian * Knr (r x r)
-    # - B_reduced = Krn * B_laplacian * Knr (r x r)
-    #
-    # This formulation is more robust as it doesn't require K_rr to be invertible
-    
-    # Construct reduced matrices
-    A_reduced <- safe_compute(
-      Matrix::crossprod(Z, A_laplacian %*% Z),
-      "Failed to construct reduced A matrix for REKEMA"
-    )
-    
-    B_reduced <- safe_compute(
-      Matrix::crossprod(Z, B_laplacian %*% Z),
-      "Failed to construct reduced B matrix for REKEMA"
-    )
-    
-    # Ensure B_reduced is well-conditioned
-    if (rweight == 0 && dweight == 0) {
-      min_reg <- max(lambda_scaled, 1e-8)
-      B_reduced <- B_reduced + min_reg * Matrix::Diagonal(r)
-      message("REKEMA: Added regularization (", min_reg, ") to reduced B matrix")
-    } else {
-      rcond_B <- safe_compute(Matrix::rcond(B_reduced), "rcond failed", 
-                              warning_fn = function(w) { 1.0 })
-      rcond_B <- suppressWarnings(as.numeric(rcond_B))
-      if (length(rcond_B) != 1L || !is.finite(rcond_B)) {
-        rcond_B <- 0
-      }
-      
-      if (rcond_B < 1e-12) {
-        reg_amount <- max(lambda_scaled, 1e-8)
-        B_reduced <- B_reduced + reg_amount * Matrix::Diagonal(r)
-        message("REKEMA: Added regularization to ill-conditioned B matrix")
-      }
-    }
-    
-    # Validate reduced matrices
-    if (!all(dim(A_reduced) == c(r, r)) || !all(dim(B_reduced) == c(r, r))) {
-      stop("Reduced matrices have incorrect dimensions. Expected ", r, " x ", r, 
-           ", got A: ", paste(dim(A_reduced), collapse=" x "), 
-           ", B: ", paste(dim(B_reduced), collapse=" x "), call. = FALSE)
-    }
-    
-    # Solve the r x r generalized eigenvalue problem
-    decomp <- safe_compute(
-      PRIMME::eigs_sym(A_reduced, NEig=min(ncomp+1, r-1), which="SA", B=B_reduced),
-      "REKEMA reduced eigenvalue problem failed"
-    )
-    
-    if (!all(is.finite(decomp$values))) {
-      stop("Non-finite eigenvalues detected in REKEMA solver", call. = FALSE)
-    }
-    
-    # Validate eigenvalue results
-    if (is.null(decomp$vectors) || ncol(decomp$vectors) < ncomp) {
-      stop("Insufficient eigenvectors computed in REKEMA (got ", ncol(decomp$vectors), 
-           ", needed ", ncomp, "). ",
-           "Try reducing ncomp or increasing lambda regularization.", call. = FALSE)
-    }
-    
-    # Select eigenvectors (these are r-dimensional, not n-dimensional!)
-    eigenvals <- decomp$values
-    eigenvecs <- decomp$vectors
-    
-    if (abs(eigenvals[1]) < 1e-10 && ncomp + 1 <= length(eigenvals)) {
-      vectors <- eigenvecs[, 2:(ncomp+1), drop=FALSE]  # r x ncomp
-      selected_eigenvals <- eigenvals[2:(ncomp+1)]
-    } else {
-      vectors <- eigenvecs[, 1:ncomp, drop=FALSE]      # r x ncomp
-      selected_eigenvals <- eigenvals[1:ncomp]
-    }
-    
-    # Store eigenvalues for REKEMA exact solver
-    eigenvalue_info <- list(
-      values = selected_eigenvals,
-      all_values = eigenvals,
-      solver = "rekema_exact"
-    )
-    
-    regression_quality <- NULL  # No regression quality for exact solver
-    
-    # Note: Eigenvectors from PRIMME should already be B-orthogonal as per standard
-  }
-  
-  # Compute scores: Z is n x r, vectors is r x ncomp, so scores is n x ncomp
-  scores <- Z %*% vectors
-  
-  # Primal vector calculation for REKEMA
-  # Map from landmark coefficients back to feature space
-  
-  # Compute landmark indices for each stratum
-  landmark_counts <- sapply(Ks, ncol)  # Number of landmarks per stratum
-  landmark_end_idx <- cumsum(landmark_counts)
-  landmark_start_idx <- c(1, landmark_end_idx[-length(landmark_end_idx)] + 1)
-  landmark_indices <- cbind(start = landmark_start_idx, end = landmark_end_idx)
-  
-  v <- do.call(rbind, lapply(1:length(strata), function(i) {
-    xi <- strata[[i]]$x  # xi is samples x features
-    kind <- seq(landmark_indices[i,1], landmark_indices[i,2])
-    
-    alpha_i <- vectors[kind,,drop=FALSE]  # alpha_i is landmarks x components
-    
-    Ki <- Ks[[i]]  # samples x landmarks
-    
-    # Compute primal vectors: t(xi) %*% (Ki %*% alpha_i) = features x components
-    v_i <- Matrix::crossprod(xi, Ki %*% alpha_i)
-    v_i
-  }))
-  
-  list(coef=v, scores=scores, vectors=vectors, eigenvalues=eigenvalue_info, regression_quality=regression_quality)
-}
 
 #' Choose optimal sigma for RBF kernel
 #' 
@@ -1926,36 +962,6 @@ choose_sigma <- function(X, sample_size = 1000) {
   }
   
   sigma
-}
-
-#' @keywords internal
-#' @noRd
-assess_regression_quality <- function(Y_mat, Y_hat_mat, method_name = "regression") {
-  # Comprehensive regression quality assessment using rotation-invariant metrics
-  
-  subspace_quality <- tryCatch({
-    # Principal angle analysis
-    qa <- qr.Q(qr(Y_mat))
-    qb <- qr.Q(qr(Y_hat_mat))
-    sv <- svd(t(qa) %*% qb, nu = 0, nv = 0)$d
-    max_angle <- acos(pmax(pmin(min(sv), 1), -1))  # Clamp for numerical stability
-    subspace_distance <- sin(max_angle)  # Distance in [0,1]
-    
-    # Component-wise correlation analysis
-    corr_matrix <- abs(cor(Y_mat, Y_hat_mat, use = "pairwise.complete.obs"))
-    best_match <- sum(apply(corr_matrix, 1, max)) / ncol(corr_matrix)
-    
-    list(
-      distance = subspace_distance, 
-      best_match = best_match, 
-      angle_deg = max_angle * 180 / pi,
-      is_poor = subspace_distance > 0.15 || best_match < 0.75  # Adaptive thresholds
-    )
-  }, error = function(e) {
-    list(distance = 0, best_match = 1.0, angle_deg = 0, is_poor = FALSE)
-  })
-  
-  subspace_quality
 }
 
 #' @rdname kema
