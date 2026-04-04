@@ -81,6 +81,7 @@ Detailed tutorials are available as package vignettes:
 
 - [Quickstart: Building a hyperdesign and running KEMA/GPA](https://bbuchsbaum.github.io/manifoldalign/articles/quickstart-hyperdesign.html)
 - [Features, Correspondences, and Predictive Performance](https://bbuchsbaum.github.io/manifoldalign/articles/features-and-predictive-performance.html)
+- [Benchmark Guidance by Problem Regime](https://bbuchsbaum.github.io/manifoldalign/articles/benchmark-guidance.html)
 - [Kernel Manifold Alignment with KEMA](https://bbuchsbaum.github.io/manifoldalign/articles/kema-overview.html)
 - [Generalized PCA Alignment](https://bbuchsbaum.github.io/manifoldalign/articles/gpca-align.html)
 - [Pairwise Graph Alignment with CONE](https://bbuchsbaum.github.io/manifoldalign/articles/cone-align.html)

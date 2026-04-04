@@ -7,6 +7,71 @@
   Q
 }
 
+.synthetic_bundle_views <- function(view_mats,
+                                    latent_by_view,
+                                    true_labels_by_view,
+                                    observed_labels_by_view = true_labels_by_view,
+                                    row_ids = NULL,
+                                    extras = list()) {
+  if (!is.list(view_mats) || !length(view_mats)) {
+    stop("`view_mats` must be a non-empty named list.", call. = FALSE)
+  }
+  if (is.null(names(view_mats)) || any(!nzchar(names(view_mats)))) {
+    names(view_mats) <- paste0("view", seq_along(view_mats))
+  }
+
+  view_names <- names(view_mats)
+  if (is.null(names(latent_by_view))) names(latent_by_view) <- view_names
+  if (is.null(names(true_labels_by_view))) names(true_labels_by_view) <- view_names
+  if (is.null(names(observed_labels_by_view))) names(observed_labels_by_view) <- view_names
+
+  if (is.null(row_ids)) {
+    row_ids <- stats::setNames(lapply(view_mats, function(X) seq_len(nrow(X))), view_names)
+  } else if (is.null(names(row_ids))) {
+    names(row_ids) <- view_names
+  }
+
+  primary_view <- view_names[[1L]]
+  out <- c(
+    list(
+      latent = latent_by_view[[primary_view]],
+      true_labels = true_labels_by_view[[primary_view]],
+      observed_labels = observed_labels_by_view[[primary_view]],
+      latent_by_view = latent_by_view,
+      true_labels_by_view = true_labels_by_view,
+      observed_labels_by_view = observed_labels_by_view,
+      row_ids = row_ids
+    ),
+    view_mats,
+    extras
+  )
+  out
+}
+
+.scenario_row_ids <- function(scenario, views = NULL) {
+  view_names <- .bench_or(views, .bench_or(scenario$view_names, grep("^view[0-9]+$", names(scenario), value = TRUE)))
+  row_ids <- scenario$row_ids
+  if (is.null(row_ids)) {
+    row_ids <- stats::setNames(lapply(view_names, function(view_name) seq_len(nrow(as.matrix(scenario[[view_name]])))), view_names)
+  }
+  row_ids[view_names]
+}
+
+.scenario_labels_by_view <- function(scenario, kind = c("observed", "true"), views = NULL) {
+  kind <- match.arg(kind)
+  view_names <- .bench_or(views, .bench_or(scenario$view_names, grep("^view[0-9]+$", names(scenario), value = TRUE)))
+  label_obj <- if (identical(kind, "observed")) {
+    .bench_or(scenario$observed_labels_by_view, .bench_or(scenario$observed_labels, .bench_or(scenario$true_labels_by_view, scenario$true_labels)))
+  } else {
+    .bench_or(scenario$true_labels_by_view, scenario$true_labels)
+  }
+
+  if (is.list(label_obj) && !is.null(names(label_obj))) {
+    return(label_obj[view_names])
+  }
+  stats::setNames(lapply(view_names, function(view_name) label_obj), view_names)
+}
+
 .synthetic_linear_triplet <- function(n = 60L, noise = 0.01, seed = 1L) {
   set.seed(seed)
 
@@ -34,13 +99,13 @@
   X3 <- latent %*% diag(c(1.5, 0.4)) %*% R3 +
     matrix(b3, n, 2, TRUE) + rnorm(n * 2, 0, noise)
 
-  list(
-    latent = latent,
-    view1 = X1,
-    view2 = X2,
-    view3 = X3,
-    true_labels = true_labels,
-    class_centers = list(c(-0.5, -0.5), c(0.5, 0.5))
+  .synthetic_bundle_views(
+    view_mats = list(view1 = X1, view2 = X2, view3 = X3),
+    latent_by_view = list(view1 = latent, view2 = latent, view3 = latent),
+    true_labels_by_view = list(view1 = true_labels, view2 = true_labels, view3 = true_labels),
+    extras = list(
+      class_centers = list(c(-0.5, -0.5), c(0.5, 0.5))
+    )
   )
 }
 
@@ -57,13 +122,11 @@
   v2 <- v2 + matrix(rnorm(n * 2, 0, noise), n, 2)
   v3 <- v3 + matrix(rnorm(n * 3, 0, noise), n, 3)
 
-  list(
-    latent = t,
-    view1 = v1,
-    view2 = v2,
-    view3 = v3,
-    true_labels = true_labels,
-    parameter_boundary = pi
+  .synthetic_bundle_views(
+    view_mats = list(view1 = v1, view2 = v2, view3 = v3),
+    latent_by_view = list(view1 = t, view2 = t, view3 = t),
+    true_labels_by_view = list(view1 = true_labels, view2 = true_labels, view3 = true_labels),
+    extras = list(parameter_boundary = pi)
   )
 }
 
@@ -87,13 +150,141 @@
     matrix(rnorm(length(idx_hard) * 2, 0, 0.2), ncol = 2)
   v3 <- v3 + matrix(rnorm(nrow(grid) * 2, 0, noise), ncol = 2)
 
-  list(
-    latent = grid,
-    view1 = v1,
-    view2 = v2,
-    view3 = v3,
-    hard_indices = idx_hard,
-    true_labels = true_labels
+  .synthetic_bundle_views(
+    view_mats = list(view1 = v1, view2 = v2, view3 = v3),
+    latent_by_view = list(view1 = grid, view2 = grid, view3 = grid),
+    true_labels_by_view = list(view1 = true_labels, view2 = true_labels, view3 = true_labels),
+    extras = list(hard_indices = idx_hard)
+  )
+}
+
+.synthetic_partial_overlap_triplet <- function(n_shared = 36L,
+                                               n_private = 12L,
+                                               noise = 0.02,
+                                               seed = 4L) {
+  set.seed(seed)
+
+  mk_latent <- function(n) matrix(rnorm(n * 2, sd = 0.6), ncol = 2)
+  shared <- mk_latent(n_shared)
+  private1 <- mk_latent(n_private)
+  private2 <- mk_latent(n_private)
+  private3 <- mk_latent(max(2L, floor(n_private / 2L)))
+
+  make_labels <- function(latent) factor(ifelse(latent[, 1] + 0.35 * latent[, 2] > 0, "shared_right", "shared_left"))
+
+  row_ids <- list(
+    view1 = c(sprintf("shared_%03d", seq_len(n_shared)), sprintf("view1_private_%03d", seq_len(n_private))),
+    view2 = c(sprintf("shared_%03d", seq_len(n_shared)), sprintf("view2_private_%03d", seq_len(n_private))),
+    view3 = c(sprintf("shared_%03d", seq_len(n_shared)), sprintf("view3_private_%03d", seq_len(length(private3))))
+  )
+
+  latent1 <- rbind(shared, private1)
+  latent2 <- rbind(shared, private2)
+  latent3 <- rbind(shared, private3)
+
+  R1 <- .rand_rotation_benchmark(2, seed + 11L)
+  R2 <- .rand_rotation_benchmark(2, seed + 12L)
+  R3 <- .rand_rotation_benchmark(2, seed + 13L)
+
+  view1 <- latent1 %*% diag(c(1.0, 0.6)) %*% R1 + matrix(rnorm(length(latent1), sd = noise), ncol = 2)
+  view2 <- latent2 %*% diag(c(0.8, 1.1)) %*% R2 + matrix(rnorm(length(latent2), sd = noise), ncol = 2)
+  view3 <- latent3 %*% diag(c(1.2, 0.7)) %*% R3 + matrix(rnorm(length(latent3), sd = noise), ncol = 2)
+
+  .synthetic_bundle_views(
+    view_mats = list(view1 = view1, view2 = view2, view3 = view3),
+    latent_by_view = list(view1 = latent1, view2 = latent2, view3 = latent3),
+    true_labels_by_view = list(
+      view1 = make_labels(latent1),
+      view2 = make_labels(latent2),
+      view3 = make_labels(latent3)
+    ),
+    row_ids = row_ids,
+    extras = list(
+      n_shared = n_shared,
+      n_private = n_private,
+      overlap_fraction = n_shared / max(length(row_ids$view1), length(row_ids$view2))
+    )
+  )
+}
+
+.synthetic_noisy_label_triplet <- function(n = 60L,
+                                           noise = 0.015,
+                                           label_noise = 0.2,
+                                           seed = 5L) {
+  base <- .synthetic_linear_triplet(n = n, noise = noise, seed = seed)
+  view_names <- c("view1", "view2", "view3")
+
+  corrupt <- function(labels, seed_offset) {
+    set.seed(seed + seed_offset)
+    labels_chr <- as.character(labels)
+    lv <- sort(unique(labels_chr))
+    n_flip <- max(1L, floor(length(labels_chr) * label_noise))
+    flip_idx <- sample(seq_along(labels_chr), n_flip, replace = FALSE)
+    labels_chr[flip_idx] <- ifelse(labels_chr[flip_idx] == lv[1L], lv[2L], lv[1L])
+    factor(labels_chr, levels = lv)
+  }
+
+  observed_labels_by_view <- list(
+    view1 = corrupt(base$true_labels_by_view$view1, 1L),
+    view2 = corrupt(base$true_labels_by_view$view2, 2L),
+    view3 = corrupt(base$true_labels_by_view$view3, 3L)
+  )
+
+  base$observed_labels <- observed_labels_by_view$view1
+  base$observed_labels_by_view <- observed_labels_by_view
+  base$label_noise_rate <- label_noise
+  base
+}
+
+.synthetic_many_domain_suite <- function(n = 54L,
+                                         noise = 0.02,
+                                         n_views = 4L,
+                                         seed = 6L) {
+  set.seed(seed)
+  latent <- matrix(rnorm(n * 2), ncol = 2)
+  labels <- factor(ifelse(latent[, 1] * latent[, 2] > 0, "diagonal", "off_diagonal"))
+
+  view_mats <- vector("list", n_views)
+  names(view_mats) <- paste0("view", seq_len(n_views))
+  for (i in seq_len(n_views)) {
+    Ri <- .rand_rotation_benchmark(2, seed + i)
+    scale_i <- diag(c(0.7 + 0.15 * i, 1.1 - 0.08 * (i - 1L)))
+    offset_i <- matrix(cos(i), n, 2) * matrix(c(0.15, -0.1), n, 2, byrow = TRUE)
+    warp_i <- latent
+    if (i %% 2L == 0L) {
+      warp_i[, 2] <- warp_i[, 2] + 0.2 * latent[, 1]^2
+    }
+    view_mats[[i]] <- warp_i %*% scale_i %*% Ri + offset_i + matrix(rnorm(n * 2, sd = noise), ncol = 2)
+  }
+
+  .synthetic_bundle_views(
+    view_mats = view_mats,
+    latent_by_view = stats::setNames(replicate(n_views, latent, simplify = FALSE), names(view_mats)),
+    true_labels_by_view = stats::setNames(replicate(n_views, labels, simplify = FALSE), names(view_mats)),
+    extras = list(n_domains = n_views)
+  )
+}
+
+.synthetic_highdim_triplet <- function(n = 48L,
+                                       dims = c(96L, 128L, 160L),
+                                       noise = 0.03,
+                                       seed = 7L) {
+  set.seed(seed)
+  latent <- matrix(rnorm(n * 3), ncol = 3)
+  labels <- factor(ifelse(latent[, 1] + latent[, 2] > 0, "high", "low"))
+
+  view_mats <- lapply(seq_along(dims), function(i) {
+    Wi <- matrix(rnorm(ncol(latent) * dims[i], sd = 0.6), nrow = ncol(latent))
+    Xi <- latent %*% Wi
+    Xi + matrix(rnorm(n * dims[i], sd = noise), nrow = n)
+  })
+  names(view_mats) <- paste0("view", seq_along(dims))
+
+  .synthetic_bundle_views(
+    view_mats = view_mats,
+    latent_by_view = stats::setNames(replicate(length(dims), latent, simplify = FALSE), names(view_mats)),
+    true_labels_by_view = stats::setNames(replicate(length(dims), labels, simplify = FALSE), names(view_mats)),
+    extras = list(feature_dims = dims)
   )
 }
 
@@ -108,6 +299,10 @@
       latent_relation = "linear",
       supervision = "labels",
       side_information = "class_labels",
+      side_information_quality = "clean",
+      overlap = "full",
+      n_views = 3L,
+      n_samples = 60L,
       difficulty = "easy",
       notes = "Affine multi-view Gaussian blobs with stable class structure."
     ),
@@ -118,6 +313,10 @@
       latent_relation = "nonlinear_isometric",
       supervision = "labels",
       side_information = "progression_labels",
+      side_information_quality = "clean",
+      overlap = "full",
+      n_views = 3L,
+      n_samples = 50L,
       difficulty = "medium",
       notes = "Shared 1D latent parameter rendered as line, circle, and helix."
     ),
@@ -128,15 +327,77 @@
       latent_relation = "nonlinear_nonisometric",
       supervision = "labels",
       side_information = "spatial_labels",
+      side_information_quality = "clean",
+      overlap = "full",
+      n_views = 3L,
+      n_samples = 100L,
       difficulty = "hard",
       notes = "Grid latent space with nonlinear distortion, density skew, and heteroscedastic corruption."
+    ),
+    partial_open_set = list(
+      generator = .synthetic_partial_overlap_triplet,
+      defaults = list(n_shared = 48L, n_private = 18L, noise = 0.02, seed = 4L),
+      family = "feature",
+      latent_relation = "linear",
+      supervision = "labels",
+      side_information = "class_labels",
+      side_information_quality = "clean",
+      overlap = "partial_open_set",
+      n_views = 3L,
+      n_samples = 66L,
+      difficulty = "hard",
+      notes = "Shared latent structure with private rows in each view and only partial row overlap."
+    ),
+    noisy_label_shift = list(
+      generator = .synthetic_noisy_label_triplet,
+      defaults = list(n = 60L, noise = 0.015, label_noise = 0.2, seed = 5L),
+      family = "feature",
+      latent_relation = "linear",
+      supervision = "labels",
+      side_information = "class_labels",
+      side_information_quality = "noisy",
+      overlap = "full",
+      n_views = 3L,
+      n_samples = 60L,
+      difficulty = "medium",
+      notes = "Linear shared structure with corrupted label supervision used during fitting."
+    ),
+    many_domain_consensus = list(
+      generator = .synthetic_many_domain_suite,
+      defaults = list(n = 54L, noise = 0.02, n_views = 4L, seed = 6L),
+      family = "feature",
+      latent_relation = "nonlinear_isometric",
+      supervision = "labels",
+      side_information = "class_labels",
+      side_information_quality = "clean",
+      overlap = "full",
+      n_views = 4L,
+      n_samples = 54L,
+      difficulty = "medium",
+      notes = "Four-domain consensus alignment problem with consistent row IDs across all views."
+    ),
+    highdim_stress = list(
+      generator = .synthetic_highdim_triplet,
+      defaults = list(n = 48L, dims = c(96L, 128L, 160L), noise = 0.03, seed = 7L),
+      family = "feature",
+      latent_relation = "linear",
+      supervision = "labels",
+      side_information = "class_labels",
+      side_information_quality = "clean",
+      overlap = "full",
+      n_views = 3L,
+      n_samples = 48L,
+      difficulty = "hard",
+      notes = "High-dimensional p >> n stress test with mixed feature dimensions across views."
     )
   )
 
   fast_specs <- list(
-    linear_affine = utils::modifyList(full_specs$linear_affine, list(defaults = list(n = 20L, noise = 0.01, seed = 1L))),
-    isometric_curve = utils::modifyList(full_specs$isometric_curve, list(defaults = list(n = 25L, noise = 0.02, seed = 2L))),
-    hard_nonisometric = utils::modifyList(full_specs$hard_nonisometric, list(defaults = list(n_side = 5L, noise = 0.03, seed = 3L)))
+    linear_affine = utils::modifyList(full_specs$linear_affine, list(defaults = list(n = 20L, noise = 0.01, seed = 1L), n_samples = 20L)),
+    isometric_curve = utils::modifyList(full_specs$isometric_curve, list(defaults = list(n = 25L, noise = 0.02, seed = 2L), n_samples = 25L)),
+    hard_nonisometric = utils::modifyList(full_specs$hard_nonisometric, list(defaults = list(n_side = 5L, noise = 0.03, seed = 3L), n_samples = 25L)),
+    partial_open_set = utils::modifyList(full_specs$partial_open_set, list(defaults = list(n_shared = 18L, n_private = 6L, noise = 0.02, seed = 4L), n_samples = 24L)),
+    noisy_label_shift = utils::modifyList(full_specs$noisy_label_shift, list(defaults = list(n = 24L, noise = 0.015, label_noise = 0.2, seed = 5L), n_samples = 24L))
   )
 
   if (identical(profile, "full")) full_specs else fast_specs
@@ -148,9 +409,6 @@ synthetic_alignment_scenarios <- function(profile = c("full", "fast")) {
 
   rows <- lapply(names(specs), function(name) {
     spec <- specs[[name]]
-    defaults <- spec$defaults
-    n_samples <- if (!is.null(defaults$n_side)) defaults$n_side^2 else defaults$n
-
     data.frame(
       scenario = name,
       profile = profile,
@@ -158,10 +416,12 @@ synthetic_alignment_scenarios <- function(profile = c("full", "fast")) {
       latent_relation = spec$latent_relation,
       supervision = spec$supervision,
       side_information = spec$side_information,
+      side_information_quality = spec$side_information_quality,
+      overlap = spec$overlap,
       difficulty = spec$difficulty,
-      n_views = 3L,
-      n_samples = as.integer(n_samples),
-      default_seed = as.integer(defaults$seed),
+      n_views = as.integer(spec$n_views),
+      n_samples = as.integer(spec$n_samples),
+      default_seed = as.integer(spec$defaults$seed),
       notes = spec$notes,
       stringsAsFactors = FALSE
     )
@@ -201,6 +461,10 @@ synthetic_alignment_scenario <- function(scenario_name, profile = c("full", "fas
     latent_relation = spec$latent_relation,
     supervision = spec$supervision,
     side_information = spec$side_information,
+    side_information_quality = spec$side_information_quality,
+    overlap = spec$overlap,
+    n_views = spec$n_views,
+    n_samples = spec$n_samples,
     difficulty = spec$difficulty,
     generator_args = args,
     notes = spec$notes
@@ -224,13 +488,24 @@ synthetic_alignment_to_hyperdesign <- function(scenario,
     stop("No valid views selected for synthetic scenario.", call. = FALSE)
   }
 
-  label_vec <- .bench_or(label, scenario$true_labels)
+  label_by_view <- if (is.null(label)) {
+    .scenario_labels_by_view(scenario, kind = "observed", views = views)
+  } else if (is.list(label) && !is.null(names(label))) {
+    label[views]
+  } else {
+    stats::setNames(lapply(views, function(view_name) label), views)
+  }
+  row_ids <- .scenario_row_ids(scenario, views = views)
   domains <- lapply(views, function(view_name) {
     X <- as.matrix(scenario[[view_name]])
-    design_df <- data.frame(sample_id = seq_len(nrow(X)), stringsAsFactors = FALSE)
+    design_df <- data.frame(sample_id = row_ids[[view_name]], stringsAsFactors = FALSE)
     names(design_df)[1] <- id_col
-    if (!is.null(label_vec)) {
-      design_df[[label_col]] <- label_vec
+    labels_i <- label_by_view[[view_name]]
+    if (!is.null(labels_i)) {
+      if (length(labels_i) != nrow(X)) {
+        stop("Label vector for `", view_name, "` has length ", length(labels_i), " but expected ", nrow(X), ".", call. = FALSE)
+      }
+      design_df[[label_col]] <- labels_i
     }
 
     if (requireNamespace("multidesign", quietly = TRUE)) {
@@ -427,6 +702,10 @@ run_synthetic_alignment_benchmark <- function(methods,
         scenario_latent_relation = .bench_or(scenario_meta$latent_relation, NA_character_),
         scenario_supervision = .bench_or(scenario_meta$supervision, NA_character_),
         scenario_side_information = .bench_or(scenario_meta$side_information, NA_character_),
+        scenario_side_information_quality = .bench_or(scenario_meta$side_information_quality, NA_character_),
+        scenario_overlap = .bench_or(scenario_meta$overlap, NA_character_),
+        scenario_n_views = .bench_or(scenario_meta$n_views, NA_integer_),
+        scenario_n_samples = .bench_or(scenario_meta$n_samples, NA_integer_),
         scenario_difficulty = .bench_or(scenario_meta$difficulty, NA_character_)
       )
 

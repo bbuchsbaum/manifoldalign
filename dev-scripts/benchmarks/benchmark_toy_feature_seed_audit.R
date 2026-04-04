@@ -62,13 +62,23 @@ main <- function() {
   out_regime_ranks <- file.path(here, "toy_feature_seed_audit_regime_ranks.csv")
 
   profile <- match.arg(Sys.getenv("MANIFOLDALIGN_TOY_PROFILE", "fast"), c("full", "fast"))
-  seed_txt <- Sys.getenv("MANIFOLDALIGN_SEED_AUDIT_SEEDS", paste(1:12, collapse = ","))
+  seed_txt <- Sys.getenv("MANIFOLDALIGN_SEED_AUDIT_SEEDS", paste(1:8, collapse = ","))
   seeds <- as.integer(strsplit(seed_txt, ",")[[1]])
   seeds <- seeds[is.finite(seeds)]
 
   methods <- build_toy_feature_methods(include_multiscale_ablations = TRUE)
   methods <- parse_method_filter(methods, Sys.getenv("MANIFOLDALIGN_SEED_AUDIT_METHODS", ""))
-  scenarios <- manifoldalign:::synthetic_alignment_scenarios(profile = profile)$scenario
+  scenario_txt <- Sys.getenv(
+    "MANIFOLDALIGN_SEED_AUDIT_SCENARIOS",
+    "linear_affine,isometric_curve,hard_nonisometric"
+  )
+  all_scenarios <- manifoldalign:::synthetic_alignment_scenarios(profile = profile)$scenario
+  scenarios <- trimws(strsplit(scenario_txt, ",")[[1]])
+  scenarios <- scenarios[nzchar(scenarios)]
+  missing <- setdiff(scenarios, all_scenarios)
+  if (length(missing)) {
+    stop("Unknown seed-audit scenario(s): ", paste(missing, collapse = ", "), call. = FALSE)
+  }
 
   if (!length(methods)) {
     stop("No seed-audit methods available after filtering.", call. = FALSE)
@@ -94,7 +104,9 @@ main <- function() {
     c(
       "method", "scenario", "profile",
       "scenario_family", "scenario_latent_relation", "scenario_supervision",
-      "scenario_side_information", "scenario_difficulty",
+      "scenario_side_information", "scenario_side_information_quality",
+      "scenario_overlap", "scenario_n_views", "scenario_n_samples",
+      "scenario_difficulty",
       "method_family", "supervision_regime", "side_information",
       "dimensionality_constraint", "variant_family", "variant", "backend",
       "tuned", "kernel", "landmarking", "scale_selection"

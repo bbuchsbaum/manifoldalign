@@ -45,7 +45,17 @@ main <- function() {
   profile <- match.arg(Sys.getenv("MANIFOLDALIGN_TOY_PROFILE", "fast"), c("full", "fast"))
   seeds <- as.integer(strsplit(Sys.getenv("MANIFOLDALIGN_TOY_SEEDS", "1,2,3"), ",")[[1]])
   seeds <- seeds[is.finite(seeds)]
+  scenario_txt <- Sys.getenv("MANIFOLDALIGN_TOY_SCENARIOS", "")
   scenarios <- manifoldalign:::synthetic_alignment_scenarios(profile = profile)$scenario
+  if (nzchar(scenario_txt)) {
+    wanted <- trimws(strsplit(scenario_txt, ",")[[1]])
+    wanted <- wanted[nzchar(wanted)]
+    missing <- setdiff(wanted, scenarios)
+    if (length(missing)) {
+      stop("Unknown benchmark scenario(s): ", paste(missing, collapse = ", "), call. = FALSE)
+    }
+    scenarios <- wanted
+  }
   methods <- build_toy_feature_methods(include_multiscale_ablations = TRUE)
 
   if (!length(methods)) {
@@ -74,7 +84,9 @@ main <- function() {
     c(
       "method", "scenario", "profile",
       "scenario_family", "scenario_latent_relation", "scenario_supervision",
-      "scenario_side_information", "scenario_difficulty",
+      "scenario_side_information", "scenario_side_information_quality",
+      "scenario_overlap", "scenario_n_views", "scenario_n_samples",
+      "scenario_difficulty",
       "method_family", "supervision_regime", "side_information",
       "dimensionality_constraint", "variant_family", "variant", "backend",
       "tuned", "kernel", "landmarking", "scale_selection"

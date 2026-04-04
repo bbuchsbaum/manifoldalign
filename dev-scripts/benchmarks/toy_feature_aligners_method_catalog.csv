@@ -6,9 +6,16 @@
 "multiscale_spectral_hybrid","multiscale","exact_correspondence","row_id_correspondence","unrestricted","multiscale","spectral_hybrid","spectral",FALSE,NA,NA,"hybrid"
 "multiscale_spectral_hybrid_tuned","multiscale","exact_correspondence","row_id_correspondence","unrestricted","multiscale","spectral_hybrid_tuned","spectral",TRUE,NA,NA,"hybrid"
 "multiscale_randomized_hybrid_tuned","multiscale","exact_correspondence","row_id_correspondence","unrestricted","multiscale","randomized_hybrid_tuned","randomized_dwt",TRUE,NA,NA,"hybrid"
+"global_geo_rowid_exact","global_geo","exact_correspondence","row_id_correspondence","unrestricted","global_geo","rowid_exact",NA,FALSE,NA,NA,NA
 "lowrank_label","lowrank","label_supervision","labels","unrestricted","lowrank","label",NA,FALSE,NA,NA,NA
+"coupled_diag_rowid_exact","coupled_diagonalization","exact_correspondence","row_id_correspondence","unrestricted","coupled_diagonalization","rowid_exact",NA,FALSE,NA,NA,NA
+"mma_consensus_unsupervised","mma","unsupervised_multiset","none","unrestricted","mma","consensus_unsupervised",NA,FALSE,NA,NA,NA
 "gpca_label","gpca","label_supervision","labels","unrestricted","gpca","label",NA,FALSE,NA,NA,NA
 "kema_linear_label","kema","label_supervision","labels","unrestricted","kema","linear_label",NA,FALSE,"linear","full",NA
 "kema_rbf_full_label","kema","label_supervision","labels","unrestricted","kema","rbf_full_label",NA,FALSE,"rbf","full",NA
 "kema_rbf_reduced_label","kema","label_supervision","labels","unrestricted","kema","rbf_reduced_label",NA,FALSE,"rbf","reduced",NA
+"multiset_uot_side_geometry","multiset_uot","transport_side_geometry","shared_geometry","shared_geometry_dim","multiset_uot","latent_geometry_template",NA,FALSE,NA,NA,NA
 "genproc_rowid_exact","generalized_procrustes","exact_correspondence","row_id_correspondence","equal_feature_dim","generalized_procrustes","rowid_exact",NA,FALSE,NA,NA,NA
+"cone_align_unsupervised","cone_align","unsupervised_pairwise","none","unrestricted","cone_align","unsupervised",NA,FALSE,NA,NA,NA
+"grasp_unsupervised","grasp","unsupervised_pairwise","none","unrestricted","grasp","unsupervised",NA,FALSE,NA,NA,NA
+"parrot_partial_anchor","parrot","partial_anchor","anchor_subset","unrestricted","parrot","partial_anchor",NA,FALSE,NA,NA,NA

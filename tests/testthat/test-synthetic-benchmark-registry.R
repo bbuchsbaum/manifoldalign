@@ -7,11 +7,29 @@ test_that("synthetic benchmark registry exposes stable scenario metadata", {
 
   expect_equal(
     reg_full$scenario,
-    c("linear_affine", "isometric_curve", "hard_nonisometric")
+    c(
+      "linear_affine", "isometric_curve", "hard_nonisometric",
+      "partial_open_set", "noisy_label_shift", "many_domain_consensus",
+      "highdim_stress"
+    )
   )
-  expect_equal(reg_fast$scenario, reg_full$scenario)
+  expect_equal(
+    reg_fast$scenario,
+    c(
+      "linear_affine", "isometric_curve", "hard_nonisometric",
+      "partial_open_set", "noisy_label_shift"
+    )
+  )
   expect_true(all(reg_full$family == "feature"))
-  expect_true(all(reg_fast$n_samples < reg_full$n_samples))
+  common <- merge(
+    reg_fast[, c("scenario", "n_samples")],
+    reg_full[, c("scenario", "n_samples")],
+    by = "scenario",
+    suffixes = c("_fast", "_full"),
+    sort = FALSE
+  )
+  expect_true(all(common$n_samples_fast < common$n_samples_full))
+  expect_true(all(c("overlap", "side_information_quality", "n_views") %in% names(reg_full)))
 })
 
 test_that("synthetic benchmark scenarios support parameter overrides and metadata", {
@@ -48,6 +66,47 @@ test_that("synthetic benchmark hyperdesign conversion preserves rows and labels"
   expect_equal(nrow(hd[[2]]$x), nrow(scen$view2))
   expect_true(all(c("row_id", "condition") %in% names(hd[[1]]$design)))
   expect_equal(as.character(hd[[1]]$design$condition), as.character(scen$true_labels))
+})
+
+test_that("partial-overlap scenarios preserve per-view row IDs and observed labels", {
+  skip_if_not_installed("multidesign")
+
+  scen <- manifoldalign:::synthetic_alignment_scenario("partial_open_set", profile = "fast", seed = 41)
+  expect_true(length(intersect(scen$row_ids$view1, scen$row_ids$view2)) < length(scen$row_ids$view1))
+  expect_true(any(!scen$row_ids$view1 %in% scen$row_ids$view2))
+
+  hd <- manifoldalign:::synthetic_alignment_to_hyperdesign(
+    scen,
+    views = c("view1", "view2"),
+    label_col = "condition",
+    id_col = "sample_id"
+  )
+
+  expect_equal(as.character(hd[[1]]$design$sample_id), as.character(scen$row_ids$view1))
+  expect_equal(as.character(hd[[2]]$design$sample_id), as.character(scen$row_ids$view2))
+  expect_equal(length(intersect(hd[[1]]$design$sample_id, hd[[2]]$design$sample_id)), scen$n_shared)
+})
+
+test_that("noisy-label scenarios separate observed and true labels", {
+  scen <- manifoldalign:::synthetic_alignment_scenario("noisy_label_shift", profile = "fast", seed = 17)
+
+  expect_true(any(as.character(scen$observed_labels) != as.character(scen$true_labels)))
+  expect_equal(length(scen$observed_labels_by_view), 3L)
+  expect_true(all(vapply(scen$observed_labels_by_view, length, integer(1)) == nrow(scen$view1)))
+  expect_equal(levels(scen$observed_labels), levels(scen$true_labels))
+})
+
+test_that("many-domain and high-dimensional scenarios expose expected structure", {
+  many <- manifoldalign:::synthetic_alignment_scenario("many_domain_consensus", profile = "full", seed = 11)
+  highdim <- manifoldalign:::synthetic_alignment_scenario("highdim_stress", profile = "full", seed = 12)
+
+  expect_equal(length(many$view_names), 4L)
+  expect_true(all(vapply(many$view_names, function(view) ncol(many[[view]]), integer(1)) == 2L))
+
+  hd_dims <- vapply(highdim$view_names, function(view) ncol(highdim[[view]]), integer(1))
+  hd_rows <- vapply(highdim$view_names, function(view) nrow(highdim[[view]]), integer(1))
+  expect_true(all(hd_dims > hd_rows))
+  expect_true(all(c("feature_dims", "row_ids", "true_labels_by_view") %in% names(highdim)))
 })
 
 test_that("synthetic benchmark runner and summary return a unified result schema", {

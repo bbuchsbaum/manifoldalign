@@ -159,8 +159,8 @@ test_that("Toy datasets are generated correctly with meaningful class structure"
   set.seed(42)  # Deterministic testing
   toy_sets <- generate_all_toy_sets()
   
-  expect_length(toy_sets, 3)
-  expect_named(toy_sets, c("linear_affine", "isometric_curve", "hard_nonisometric"))
+  expect_true(length(toy_sets) >= 3)
+  expect_true(all(c("linear_affine", "isometric_curve", "hard_nonisometric") %in% names(toy_sets)))
   
   # Test linear/affine dataset with class structure
   linear_data <- toy_sets$linear_affine
