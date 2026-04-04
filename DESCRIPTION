@@ -12,7 +12,7 @@ Imports:
     RSpectra,
     glmnet,
     multivarious,
-    neighborweights,
+    adjoin,
     cluster,
     kernlab,
     chk,
@@ -58,7 +58,7 @@ BugReports: https://github.com/bbuchsbaum/manifoldalign/issues
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Remotes:
-    neighborweights=bbuchsbaum/graphweights,
+    bbuchsbaum/adjoin,
     bbuchsbaum/genpca,
     bbuchsbaum/multidesign,
     bbuchsbaum/albersdown
