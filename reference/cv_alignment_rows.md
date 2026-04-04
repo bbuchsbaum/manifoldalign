@@ -2,9 +2,9 @@
 
 Runs explicit row-index cross-validation for multi-domain alignment
 models by delegating fold construction and execution to
-[`multidesign::cv_rows()`](https://rdrr.io/pkg/multidesign/man/cv_rows.html)
+[`multidesign::cv_rows()`](https://bbuchsbaum.github.io/multidesign/reference/cv_rows.html)
 and
-[`multidesign::cross_validate()`](https://rdrr.io/pkg/multidesign/man/cross_validate.html).
+[`multidesign::cross_validate()`](https://bbuchsbaum.github.io/multidesign/reference/cross_validate.html).
 Held-out rows are scored by how similar their cross-block neighbours are
 in an external feature space, using either latent
 [`oos_predict`](https://bbuchsbaum.github.io/manifoldalign/reference/oos_predict.md)
@@ -36,7 +36,7 @@ cv_alignment_rows(
 - rows:
 
   Explicit held-out row specification forwarded to
-  [`multidesign::cv_rows()`](https://rdrr.io/pkg/multidesign/man/cv_rows.html).
+  [`multidesign::cv_rows()`](https://bbuchsbaum.github.io/multidesign/reference/cv_rows.html).
   For hyperdesigns, each fold should be a named list mapping block names
   or positions to held-out row indices.
 

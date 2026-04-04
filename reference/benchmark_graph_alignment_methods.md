@@ -62,8 +62,8 @@ benchmark_graph_alignment_methods(
 
 - structure:
 
-  Synthetic geometry for base node coordinates: \`"ring"\`, \`"grid"\`,
-  \`"random"\`, or \`"community"\`.
+  Character vector of synthetic geometries for base node coordinates:
+  \`"ring"\`, \`"grid"\`, \`"random"\`, or \`"community"\`.
 
 - permute_fraction:
 

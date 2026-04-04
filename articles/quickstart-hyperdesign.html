@@ -89,7 +89,7 @@ under a minute.</p>
 </h2>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/manifoldalign/">manifoldalign</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/bbuchsbaum/multidesign" class="external-link">multidesign</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/multidesign/" class="external-link">multidesign</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
@@ -105,10 +105,10 @@ domain-specific transformations.</p>
 <code class="sourceCode R"><span><span class="va">bench</span> <span class="op">&lt;-</span> <span class="fu">manifoldalign</span><span class="fu">::</span><span class="va"><a href="../reference/alignment_benchmark.html">alignment_benchmark</a></span></span>
 <span></span>
 <span><span class="va">domain_list</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">bench</span><span class="op">$</span><span class="va">domains</span>, <span class="kw">function</span><span class="op">(</span><span class="va">dom</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/pkg/multidesign/man/multidesign.html" class="external-link">multidesign</a></span><span class="op">(</span><span class="va">dom</span><span class="op">$</span><span class="va">x</span>, <span class="va">dom</span><span class="op">$</span><span class="va">design</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://bbuchsbaum.github.io/multidesign/reference/multidesign.html" class="external-link">multidesign</a></span><span class="op">(</span><span class="va">dom</span><span class="op">$</span><span class="va">x</span>, <span class="va">dom</span><span class="op">$</span><span class="va">design</span><span class="op">)</span></span>
 <span><span class="op">}</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">hd</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/multidesign/man/hyperdesign.html" class="external-link">hyperdesign</a></span><span class="op">(</span><span class="va">domain_list</span><span class="op">)</span></span>
+<span><span class="va">hd</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/multidesign/reference/hyperdesign.html" class="external-link">hyperdesign</a></span><span class="op">(</span><span class="va">domain_list</span><span class="op">)</span></span>
 <span><span class="va">hd</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; === Hyperdesign Object ===</span></span></span>

@@ -61,8 +61,8 @@ predict(..., type = "weights") support when available.'></head><body>
 
     <div class="ref-description section level2">
     <p>Runs explicit row-index cross-validation for multi-domain alignment models by
-delegating fold construction and execution to <code><a href="https://rdrr.io/pkg/multidesign/man/cv_rows.html" class="external-link">multidesign::cv_rows()</a></code> and
-<code><a href="https://rdrr.io/pkg/multidesign/man/cross_validate.html" class="external-link">multidesign::cross_validate()</a></code>. Held-out rows are scored by how similar
+delegating fold construction and execution to <code><a href="https://bbuchsbaum.github.io/multidesign/reference/cv_rows.html" class="external-link">multidesign::cv_rows()</a></code> and
+<code><a href="https://bbuchsbaum.github.io/multidesign/reference/cross_validate.html" class="external-link">multidesign::cross_validate()</a></code>. Held-out rows are scored by how similar
 their cross-block neighbours are in an external feature space, using either
 latent <code><a href="oos_predict.html">oos_predict</a></code> projections or method-specific
 <code>predict(..., type = "weights")</code> support when available.</p>
@@ -93,7 +93,7 @@ already a <span class="pkg">multidesign</span> hyperdesign, it is coerced intern
 
 <dt id="arg-rows">rows<a class="anchor" aria-label="anchor" href="#arg-rows"></a></dt>
 <dd><p>Explicit held-out row specification forwarded to
-<code><a href="https://rdrr.io/pkg/multidesign/man/cv_rows.html" class="external-link">multidesign::cv_rows()</a></code>. For hyperdesigns, each fold should be a named
+<code><a href="https://bbuchsbaum.github.io/multidesign/reference/cv_rows.html" class="external-link">multidesign::cv_rows()</a></code>. For hyperdesigns, each fold should be a named
 list mapping block names or positions to held-out row indices.</p></dd>
 
 

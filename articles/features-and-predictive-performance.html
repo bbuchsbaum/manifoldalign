@@ -78,76 +78,130 @@
 
     
     
-<p>You have multiple data domains, and each row also has an external
-feature vector. Those features might come from text embeddings, anatomy,
-metadata, or another modality entirely. The alignment problem is:</p>
+<p>Suppose domain
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>
+has an observed matrix
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>X</mi><mi>d</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mrow><msub><mi>n</mi><mi>d</mi></msub><mo>×</mo><msub><mi>p</mi><mi>d</mi></msub></mrow></msup></mrow><annotation encoding="application/x-tex">X_d \in \mathbb{R}^{n_d \times p_d}</annotation></semantics></math>.
+Each <strong>row</strong> is a sample. Now suppose the same rows also
+have external feature vectors, collected in a second matrix
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>F</mi><mi>d</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mrow><msub><mi>n</mi><mi>d</mi></msub><mo>×</mo><mi>q</mi></mrow></msup></mrow><annotation encoding="application/x-tex">F_d \in \mathbb{R}^{n_d \times q}</annotation></semantics></math>.
+Those row-level features might come from text embeddings, anatomy,
+metadata, or another modality entirely.</p>
+<p>That distinction matters:</p>
 <ul>
-<li>use the observed matrices to learn a shared manifold,</li>
-<li>use feature similarity to define cross-domain supervision,</li>
-<li>use held-out feature agreement to define predictive
-performance.</li>
+<li>columns of <code>X_d</code> are the measured variables used to fit
+the alignment;</li>
+<li>rows of <code>F_d</code> are sample-level descriptors used to define
+semantic correspondences and held-out evaluation;</li>
+<li>a cross-domain feature correspondence matrix between domains
+<code>a</code> and <code>b</code> is therefore
+<code>nrow(a) x nrow(b)</code>, not <code>ncol(a) x ncol(b)</code>.</li>
 </ul>
-<p>The important point is that predictive performance is
-<strong>not</strong> “reconstruct the feature vector.” It is “does a
-held-out row land near rows in other domains whose features are
-similar?”</p>
+<p>In this vignette we will:</p>
+<ul>
+<li>build row-level feature correspondences for <strong>three</strong>
+domains;</li>
+<li>keep those correspondences sparse;</li>
+<li>fit SSMA on training rows only;</li>
+<li>project held-out rows with <code><a href="../reference/oos_predict.html">oos_predict()</a></code>;</li>
+<li>score predictive performance with
+<code><a href="../reference/cv_alignment_rows.html">cv_alignment_rows()</a></code>.</li>
+</ul>
+<p>The predictive target is not “reconstruct the feature vector.” It is:
+does a held-out row land near rows in other domains whose
+<strong>row-level features</strong> are similar?</p>
 <div class="section level2">
 <h2 id="setup">Setup<a class="anchor" aria-label="anchor" href="#setup"></a>
 </h2>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/manifoldalign/">manifoldalign</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/bbuchsbaum/multidesign" class="external-link">multidesign</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bbuchsbaum.github.io/multidesign/" class="external-link">multidesign</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://Matrix.R-forge.R-project.org" class="external-link">Matrix</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="simulate-two-aligned-domains">Simulate two aligned domains<a class="anchor" aria-label="anchor" href="#simulate-two-aligned-domains"></a>
+<h2 id="simulate-three-observed-domains-plus-row-level-features">Simulate three observed domains plus row-level features<a class="anchor" aria-label="anchor" href="#simulate-three-observed-domains-plus-row-level-features"></a>
 </h2>
-<p>We will generate two observed matrices from the same latent variables
-and keep separate feature vectors for scoring.</p>
+<p>We will simulate three observed domains from a shared latent state.
+Separately, we will generate an external feature matrix for each domain.
+Those feature vectors are attached to the <strong>rows</strong> of each
+dataset and are only used for correspondence construction and
+evaluation.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">20260420</span><span class="op">)</span></span>
-<span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fl">60</span></span>
+<span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fl">72</span></span>
 <span><span class="va">latent_dim</span> <span class="op">&lt;-</span> <span class="fl">3</span></span>
+<span><span class="va">feature_dim</span> <span class="op">&lt;-</span> <span class="fl">5</span></span>
 <span></span>
 <span><span class="va">Z</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="va">latent_dim</span><span class="op">)</span>, <span class="va">n</span>, <span class="va">latent_dim</span><span class="op">)</span></span>
+<span></span>
 <span><span class="va">A1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">latent_dim</span> <span class="op">*</span> <span class="fl">8</span><span class="op">)</span>, <span class="va">latent_dim</span>, <span class="fl">8</span><span class="op">)</span></span>
 <span><span class="va">A2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">latent_dim</span> <span class="op">*</span> <span class="fl">6</span><span class="op">)</span>, <span class="va">latent_dim</span>, <span class="fl">6</span><span class="op">)</span></span>
+<span><span class="va">A3</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">latent_dim</span> <span class="op">*</span> <span class="fl">9</span><span class="op">)</span>, <span class="va">latent_dim</span>, <span class="fl">9</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">X1</span> <span class="op">&lt;-</span> <span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">A1</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="fl">8</span>, sd <span class="op">=</span> <span class="fl">0.05</span><span class="op">)</span>, <span class="va">n</span>, <span class="fl">8</span><span class="op">)</span></span>
-<span><span class="va">X2</span> <span class="op">&lt;-</span> <span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">A2</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="fl">6</span>, sd <span class="op">=</span> <span class="fl">0.05</span><span class="op">)</span>, <span class="va">n</span>, <span class="fl">6</span><span class="op">)</span></span>
+<span><span class="va">observed</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  a <span class="op">=</span> <span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">A1</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="fl">8</span>, sd <span class="op">=</span> <span class="fl">0.08</span><span class="op">)</span>, <span class="va">n</span>, <span class="fl">8</span><span class="op">)</span>,</span>
+<span>  b <span class="op">=</span> <span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">A2</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="fl">6</span>, sd <span class="op">=</span> <span class="fl">0.08</span><span class="op">)</span>, <span class="va">n</span>, <span class="fl">6</span><span class="op">)</span>,</span>
+<span>  c <span class="op">=</span> <span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">A3</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="fl">9</span>, sd <span class="op">=</span> <span class="fl">0.08</span><span class="op">)</span>, <span class="va">n</span>, <span class="fl">9</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">feature_basis</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">latent_dim</span> <span class="op">*</span> <span class="va">feature_dim</span><span class="op">)</span>, <span class="va">latent_dim</span>, <span class="va">feature_dim</span><span class="op">)</span></span>
+<span><span class="va">feature_signal</span> <span class="op">&lt;-</span> <span class="va">Z</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">feature_basis</span></span>
 <span></span>
 <span><span class="va">features_true</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>  a <span class="op">=</span> <span class="va">Z</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="va">latent_dim</span>, sd <span class="op">=</span> <span class="fl">0.02</span><span class="op">)</span>, <span class="va">n</span>, <span class="va">latent_dim</span><span class="op">)</span>,</span>
-<span>  b <span class="op">=</span> <span class="va">Z</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="va">latent_dim</span>, sd <span class="op">=</span> <span class="fl">0.02</span><span class="op">)</span>, <span class="va">n</span>, <span class="va">latent_dim</span><span class="op">)</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<p>The observed data go into a <code>hyperdesign</code>. The feature
-matrices stay outside the fit and will be used for correspondences and
-held-out evaluation.</p>
+<span>  a <span class="op">=</span> <span class="va">feature_signal</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="va">feature_dim</span>, sd <span class="op">=</span> <span class="fl">0.04</span><span class="op">)</span>, <span class="va">n</span>, <span class="va">feature_dim</span><span class="op">)</span>,</span>
+<span>  b <span class="op">=</span> <span class="va">feature_signal</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="va">feature_dim</span>, sd <span class="op">=</span> <span class="fl">0.04</span><span class="op">)</span>, <span class="va">n</span>, <span class="va">feature_dim</span><span class="op">)</span>,</span>
+<span>  c <span class="op">=</span> <span class="va">feature_signal</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">n</span> <span class="op">*</span> <span class="va">feature_dim</span>, sd <span class="op">=</span> <span class="fl">0.04</span><span class="op">)</span>, <span class="va">n</span>, <span class="va">feature_dim</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">domain_summary</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  domain <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">observed</span><span class="op">)</span>,</span>
+<span>  n_rows <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">observed</span>, <span class="va">nrow</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  observed_columns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">observed</span>, <span class="va">ncol</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  feature_columns <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">features_true</span>, <span class="va">ncol</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">domain_summary</span></span>
+<span><span class="co">#&gt;   domain n_rows observed_columns feature_columns</span></span>
+<span><span class="co">#&gt; a      a     72                8               5</span></span>
+<span><span class="co">#&gt; b      b     72                6               5</span></span>
+<span><span class="co">#&gt; c      c     72                9               5</span></span></code></pre></div>
+<p>The observed matrices go into a <code>hyperdesign</code>. The feature
+matrices stay outside the fit.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">hd</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/multidesign/man/hyperdesign.html" class="external-link">hyperdesign</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>  a <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/pkg/multidesign/man/multidesign.html" class="external-link">multidesign</a></span><span class="op">(</span><span class="va">X1</span>, <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>row_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  b <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/pkg/multidesign/man/multidesign.html" class="external-link">multidesign</a></span><span class="op">(</span><span class="va">X2</span>, <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>row_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">hd</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://bbuchsbaum.github.io/multidesign/reference/hyperdesign.html" class="external-link">hyperdesign</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  a <span class="op">=</span> <span class="fu"><a href="https://bbuchsbaum.github.io/multidesign/reference/multidesign.html" class="external-link">multidesign</a></span><span class="op">(</span><span class="va">observed</span><span class="op">$</span><span class="va">a</span>, <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>row_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  b <span class="op">=</span> <span class="fu"><a href="https://bbuchsbaum.github.io/multidesign/reference/multidesign.html" class="external-link">multidesign</a></span><span class="op">(</span><span class="va">observed</span><span class="op">$</span><span class="va">b</span>, <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>row_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  c <span class="op">=</span> <span class="fu"><a href="https://bbuchsbaum.github.io/multidesign/reference/multidesign.html" class="external-link">multidesign</a></span><span class="op">(</span><span class="va">observed</span><span class="op">$</span><span class="va">c</span>, <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>row_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">hd</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; === Hyperdesign Object ===</span></span></span>
 <span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; </span></span></span>
-<span><span class="co"><span style="font-weight: bold;">#&gt; Number of blocks: </span> <span style="color: #00BB00;">2</span> </span></span>
+<span><span class="co"><span style="font-weight: bold;">#&gt; Number of blocks: </span> <span style="color: #00BB00;">3</span> </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; +- Block </span> <span style="color: #0000BB; font-weight: bold;">1</span> <span style="color: #0000BB; font-weight: bold;"> (a)</span> <span style="color: #0000BB; font-weight: bold;"> -----------------</span></span></span>
-<span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; </span>|  <span style="font-weight: bold;">Dimensions:</span> <span style="color: #00BB00;">60 x 8</span> </span></span>
+<span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; </span>|  <span style="font-weight: bold;">Dimensions:</span> <span style="color: #00BB00;">72 x 8</span> </span></span>
 <span><span class="co">#&gt; |  <span style="font-weight: bold;">Design Variables:</span> <span style="color: #00BB00;">row_id</span> </span></span>
 <span><span class="co">#&gt; |  <span style="font-weight: bold;">Design Structure:</span> </span></span>
-<span><span class="co">#&gt; |   <span style="color: #BBBBBB;">*</span> row_id: <span style="color: #00BB00;">60</span> levels (1, 2, 3...59, 60)</span></span>
+<span><span class="co">#&gt; |   <span style="color: #BBBBBB;">*</span> row_id: <span style="color: #00BB00;">72</span> levels (1, 2, 3...71, 72)</span></span>
 <span><span class="co">#&gt; |  <span style="font-weight: bold;">Column Design:</span> Present</span></span>
 <span><span class="co">#&gt; |   Variables:  <span style="color: #00BB00;">.index</span> </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; +- Block </span> <span style="color: #0000BB; font-weight: bold;">2</span> <span style="color: #0000BB; font-weight: bold;"> (b)</span> <span style="color: #0000BB; font-weight: bold;"> -----------------</span></span></span>
-<span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; </span>|  <span style="font-weight: bold;">Dimensions:</span> <span style="color: #00BB00;">60 x 6</span> </span></span>
+<span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; </span>|  <span style="font-weight: bold;">Dimensions:</span> <span style="color: #00BB00;">72 x 6</span> </span></span>
 <span><span class="co">#&gt; |  <span style="font-weight: bold;">Design Variables:</span> <span style="color: #00BB00;">row_id</span> </span></span>
 <span><span class="co">#&gt; |  <span style="font-weight: bold;">Design Structure:</span> </span></span>
-<span><span class="co">#&gt; |   <span style="color: #BBBBBB;">*</span> row_id: <span style="color: #00BB00;">60</span> levels (1, 2, 3...59, 60)</span></span>
+<span><span class="co">#&gt; |   <span style="color: #BBBBBB;">*</span> row_id: <span style="color: #00BB00;">72</span> levels (1, 2, 3...71, 72)</span></span>
+<span><span class="co">#&gt; |  <span style="font-weight: bold;">Column Design:</span> Present</span></span>
+<span><span class="co">#&gt; |   Variables:  <span style="color: #00BB00;">.index</span> </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; +- Block </span> <span style="color: #0000BB; font-weight: bold;">3</span> <span style="color: #0000BB; font-weight: bold;"> (c)</span> <span style="color: #0000BB; font-weight: bold;"> -----------------</span></span></span>
+<span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; </span>|  <span style="font-weight: bold;">Dimensions:</span> <span style="color: #00BB00;">72 x 9</span> </span></span>
+<span><span class="co">#&gt; |  <span style="font-weight: bold;">Design Variables:</span> <span style="color: #00BB00;">row_id</span> </span></span>
+<span><span class="co">#&gt; |  <span style="font-weight: bold;">Design Structure:</span> </span></span>
+<span><span class="co">#&gt; |   <span style="color: #BBBBBB;">*</span> row_id: <span style="color: #00BB00;">72</span> levels (1, 2, 3...71, 72)</span></span>
 <span><span class="co">#&gt; |  <span style="font-weight: bold;">Column Design:</span> Present</span></span>
 <span><span class="co">#&gt; |   Variables:  <span style="color: #00BB00;">.index</span> </span></span>
 <span><span class="co">#&gt; </span></span>
@@ -155,51 +209,224 @@ held-out evaluation.</p>
 <span><span class="co"><span style="color: #0000BB; font-weight: bold;">#&gt; </span></span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="turn-feature-similarity-into-correspondences">Turn feature similarity into correspondences<a class="anchor" aria-label="anchor" href="#turn-feature-similarity-into-correspondences"></a>
+<h2 id="what-does-feature_correspondences-mean">What does <code>feature_correspondences()</code> mean?<a class="anchor" aria-label="anchor" href="#what-does-feature_correspondences-mean"></a>
 </h2>
-<p>Here we use mutual top-1 cosine matches between the feature vectors.
-In a real problem you might use a threshold, mutual top-<code>k</code>,
-or weighted anchors.</p>
+<p>The helper in this vignette has two layers:</p>
+<ol style="list-style-type: decimal">
+<li>
+<code>feature_correspondence_matrix(Fa, Fb)</code> builds a sparse
+matrix whose rows index dataset <code>a</code> and whose columns index
+dataset <code>b</code>.</li>
+<li>
+<code>feature_correspondences()</code> converts the nonzero entries
+of those sparse matrices into the edge table expected by
+<code><a href="../reference/ssma_align.html">ssma_align()</a></code>.</li>
+</ol>
+<p>For domains <code>a</code> and <code>b</code>, the matrix below is
+<code>nrow(a) x nrow(b)</code>. Nonzero entry <code>(i, j)</code> means:
+row <code>i</code> in domain <code>a</code> should be treated as
+semantically close to row <code>j</code> in domain <code>b</code>.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">full_corr</span> <span class="op">&lt;-</span> <span class="fu">feature_correspondences</span><span class="op">(</span><span class="va">features_true</span><span class="op">$</span><span class="va">a</span>, <span class="va">features_true</span><span class="op">$</span><span class="va">b</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">W_ab</span> <span class="op">&lt;-</span> <span class="fu">feature_correspondence_matrix</span><span class="op">(</span></span>
+<span>  <span class="va">features_true</span><span class="op">$</span><span class="va">a</span>,</span>
+<span>  <span class="va">features_true</span><span class="op">$</span><span class="va">b</span>,</span>
+<span>  top_k <span class="op">=</span> <span class="fl">3</span>,</span>
+<span>  mutual <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  min_similarity <span class="op">=</span> <span class="fl">0.6</span></span>
+<span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">full_corr</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 57</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">full_corr</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   domain_i index_i domain_j index_j</span></span>
-<span><span class="co">#&gt; 1        1       1        2       1</span></span>
-<span><span class="co">#&gt; 2        1       2        2       2</span></span>
-<span><span class="co">#&gt; 3        1       3        2       3</span></span>
-<span><span class="co">#&gt; 4        1       4        2       4</span></span>
-<span><span class="co">#&gt; 5        1       5        2       5</span></span>
-<span><span class="co">#&gt; 6        1       6        2       6</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">W_ab</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 72 72</span></span>
+<span><span class="fu">Matrix</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/nnzero-methods.html" class="external-link">nnzero</a></span><span class="op">(</span><span class="va">W_ab</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 161</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu">Matrix</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/nnzero-methods.html" class="external-link">nnzero</a></span><span class="op">(</span><span class="va">W_ab</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/prod.html" class="external-link">prod</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">W_ab</span><span class="op">)</span><span class="op">)</span>, <span class="fl">4</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0.0311</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">W_ab</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; 72 x 72 sparse Matrix of class "dgCMatrix", with 161 entries</span></span>
+<span><span class="co">#&gt;    i j         x</span></span>
+<span><span class="co">#&gt; 1  1 1 0.9999124</span></span>
+<span><span class="co">#&gt; 2 18 1 0.9986160</span></span>
+<span><span class="co">#&gt; 3 63 1 0.9870367</span></span>
+<span><span class="co">#&gt; 4  2 2 0.9975204</span></span>
+<span><span class="co">#&gt; 5  3 3 0.9989185</span></span>
+<span><span class="co">#&gt; 6 20 3 0.9828414</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">full_corr</span><span class="op">)</span> <span class="op">&gt;=</span> <span class="fl">0.8</span> <span class="op">*</span> <span class="va">n</span><span class="op">)</span></span></code></pre></div>
-<p>That correspondence table is only for the full data. During
-cross-validation we must rebuild it on each training split so held-out
-rows do not leak into the fit.</p>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/dim.html" class="external-link">dim</a></span><span class="op">(</span><span class="va">W_ab</span><span class="op">)</span> <span class="op">==</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">observed</span><span class="op">$</span><span class="va">a</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">observed</span><span class="op">$</span><span class="va">b</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu">methods</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/methods/is.html" class="external-link">is</a></span><span class="op">(</span><span class="va">W_ab</span>, <span class="st">"sparseMatrix"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>Even with only 72 rows per domain, the kept edges are already a small
+fraction of the full bipartite matrix. In larger problems you would keep
+<code>top_k</code> small or build approximate row-neighbour candidates
+directly, but the geometry is the same: a sparse
+<strong>row-by-row</strong> correspondence matrix.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">corr_full</span> <span class="op">&lt;-</span> <span class="fu">feature_correspondences</span><span class="op">(</span></span>
+<span>  <span class="va">features_true</span>,</span>
+<span>  top_k <span class="op">=</span> <span class="fl">3</span>,</span>
+<span>  mutual <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  min_similarity <span class="op">=</span> <span class="fl">0.6</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">corr_full</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   domain_i index_i domain_j index_j    weight  source</span></span>
+<span><span class="co">#&gt; 1        1       1        2       1 0.9999124 feature</span></span>
+<span><span class="co">#&gt; 2        1      18        2       1 0.9986160 feature</span></span>
+<span><span class="co">#&gt; 3        1      63        2       1 0.9870367 feature</span></span>
+<span><span class="co">#&gt; 4        1       2        2       2 0.9975204 feature</span></span>
+<span><span class="co">#&gt; 5        1       3        2       3 0.9989185 feature</span></span>
+<span><span class="co">#&gt; 6        1      20        2       3 0.9828414 feature</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">features_true</span><span class="op">)</span><span class="op">[</span><span class="va">corr_full</span><span class="op">$</span><span class="va">domain_i</span><span class="op">]</span>,</span>
+<span>            <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">features_true</span><span class="op">)</span><span class="op">[</span><span class="va">corr_full</span><span class="op">$</span><span class="va">domain_j</span><span class="op">]</span>,</span>
+<span>            sep <span class="op">=</span> <span class="st">" -&gt; "</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; a -&gt; b a -&gt; c b -&gt; c </span></span>
+<span><span class="co">#&gt;    161    162    163</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="va">corr_full</span><span class="op">$</span><span class="va">index_i</span> <span class="op">&gt;=</span> <span class="fl">1L</span> <span class="op">&amp;</span> <span class="va">corr_full</span><span class="op">$</span><span class="va">index_i</span> <span class="op">&lt;=</span> <span class="va">n</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="va">corr_full</span><span class="op">$</span><span class="va">index_j</span> <span class="op">&gt;=</span> <span class="fl">1L</span> <span class="op">&amp;</span> <span class="va">corr_full</span><span class="op">$</span><span class="va">index_j</span> <span class="op">&lt;=</span> <span class="va">n</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>This table is what <code><a href="../reference/ssma_align.html">ssma_align()</a></code> actually consumes. The
+<code>weight</code> column keeps the cosine similarity, so stronger
+row-level feature matches get stronger cross-domain edges.</p>
 </div>
 <div class="section level2">
-<h2 id="score-held-out-rows">Score held-out rows<a class="anchor" aria-label="anchor" href="#score-held-out-rows"></a>
+<h2 id="end-to-end-inference-on-held-out-rows">End-to-end inference on held-out rows<a class="anchor" aria-label="anchor" href="#end-to-end-inference-on-held-out-rows"></a>
 </h2>
-<p><code><a href="../reference/cv_alignment_rows.html">cv_alignment_rows()</a></code> does row-wise cross-validation. We
-hold out rows from domain <code>a</code>, fit on the remaining data,
-project the held-out rows, and score them against the training rows in
-domain <code>b</code>.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<p>We will hold out a few rows from domain <code>a</code>, rebuild the
+feature-derived correspondences on the training rows only, fit SSMA,
+then project the held-out rows into the aligned space.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fold1</span> <span class="op">&lt;-</span> <span class="fu">multidesign</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/multidesign/reference/cv_rows.html" class="external-link">cv_rows</a></span><span class="op">(</span><span class="va">hd</span>, rows <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">8</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
+<span><span class="va">analysis</span> <span class="op">&lt;-</span> <span class="va">fold1</span><span class="op">$</span><span class="va">analysis</span></span>
+<span><span class="va">assessment</span> <span class="op">&lt;-</span> <span class="va">fold1</span><span class="op">$</span><span class="va">assessment</span></span>
+<span></span>
+<span><span class="va">analysis_ids</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">analysis</span>, <span class="kw">function</span><span class="op">(</span><span class="va">block</span><span class="op">)</span> <span class="va">block</span><span class="op">$</span><span class="va">design</span><span class="op">$</span><span class="va">row_id</span><span class="op">)</span></span>
+<span><span class="va">features_analysis</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Map</a></span><span class="op">(</span></span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="va">F</span>, <span class="va">ids</span><span class="op">)</span> <span class="cn">F</span><span class="op">[</span><span class="va">ids</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>,</span>
+<span>  <span class="va">features_true</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">analysis_ids</span><span class="op">)</span><span class="op">]</span>,</span>
+<span>  <span class="va">analysis_ids</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">corr_analysis</span> <span class="op">&lt;-</span> <span class="fu">feature_correspondences</span><span class="op">(</span></span>
+<span>  <span class="va">features_analysis</span>,</span>
+<span>  top_k <span class="op">=</span> <span class="fl">3</span>,</span>
+<span>  mutual <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  min_similarity <span class="op">=</span> <span class="fl">0.6</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ssma_align.html">ssma_align</a></span><span class="op">(</span></span>
+<span>  <span class="va">analysis</span>,</span>
+<span>  correspondences <span class="op">=</span> <span class="va">corr_analysis</span>,</span>
+<span>  preproc <span class="op">=</span> <span class="fu">multivarious</span><span class="fu">::</span><span class="fu"><a href="https://bbuchsbaum.github.io/multivarious/reference/center.html" class="external-link">center</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  ncomp <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>  control <span class="op">=</span> <span class="fu"><a href="../reference/ssma_align_control.html">ssma_align_control</a></span><span class="op">(</span></span>
+<span>    knn <span class="op">=</span> <span class="fl">8</span>,</span>
+<span>    rank_per_domain <span class="op">=</span> <span class="fl">12</span>,</span>
+<span>    verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">corr_analysis</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 462</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">corr_analysis</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span></span></code></pre></div>
+<p>Now project the held-out rows from domain <code>a</code> with
+<code><a href="../reference/oos_predict.html">oos_predict()</a></code>, retrieve their nearest neighbours in the
+training rows of domains <code>b</code> and <code>c</code>, and score
+those matches in the external feature space.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">query_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/oos_predict.html">oos_predict</a></span><span class="op">(</span><span class="va">fit</span>, <span class="va">assessment</span><span class="op">$</span><span class="va">a</span><span class="op">$</span><span class="va">x</span>, side <span class="op">=</span> <span class="st">"a"</span><span class="op">)</span></span>
+<span><span class="va">score_blocks</span> <span class="op">&lt;-</span> <span class="fu">score_row_blocks</span><span class="op">(</span><span class="va">analysis</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">target_scores_b</span> <span class="op">&lt;-</span> <span class="va">fit</span><span class="op">$</span><span class="va">s</span><span class="op">[</span><span class="va">score_blocks</span><span class="op">$</span><span class="va">b</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="va">target_scores_c</span> <span class="op">&lt;-</span> <span class="va">fit</span><span class="op">$</span><span class="va">s</span><span class="op">[</span><span class="va">score_blocks</span><span class="op">$</span><span class="va">c</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span></span>
+<span><span class="va">nn_b</span> <span class="op">&lt;-</span> <span class="fu">latent_knn</span><span class="op">(</span><span class="va">query_scores</span>, <span class="va">target_scores_b</span>, k <span class="op">=</span> <span class="fl">3L</span><span class="op">)</span></span>
+<span><span class="va">nn_c</span> <span class="op">&lt;-</span> <span class="fu">latent_knn</span><span class="op">(</span><span class="va">query_scores</span>, <span class="va">target_scores_c</span>, k <span class="op">=</span> <span class="fl">3L</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">query_ids</span> <span class="op">&lt;-</span> <span class="va">assessment</span><span class="op">$</span><span class="va">a</span><span class="op">$</span><span class="va">design</span><span class="op">$</span><span class="va">row_id</span></span>
+<span><span class="va">target_ids_b</span> <span class="op">&lt;-</span> <span class="va">analysis</span><span class="op">$</span><span class="va">b</span><span class="op">$</span><span class="va">design</span><span class="op">$</span><span class="va">row_id</span></span>
+<span><span class="va">target_ids_c</span> <span class="op">&lt;-</span> <span class="va">analysis</span><span class="op">$</span><span class="va">c</span><span class="op">$</span><span class="va">design</span><span class="op">$</span><span class="va">row_id</span></span>
+<span></span>
+<span><span class="va">feature_sim_b</span> <span class="op">&lt;-</span> <span class="fu">row_cosine_similarity</span><span class="op">(</span></span>
+<span>  <span class="va">features_true</span><span class="op">$</span><span class="va">a</span><span class="op">[</span><span class="va">query_ids</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>,</span>
+<span>  <span class="va">features_true</span><span class="op">$</span><span class="va">b</span><span class="op">[</span><span class="va">target_ids_b</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">feature_sim_c</span> <span class="op">&lt;-</span> <span class="fu">row_cosine_similarity</span><span class="op">(</span></span>
+<span>  <span class="va">features_true</span><span class="op">$</span><span class="va">a</span><span class="op">[</span><span class="va">query_ids</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>,</span>
+<span>  <span class="va">features_true</span><span class="op">$</span><span class="va">c</span><span class="op">[</span><span class="va">target_ids_c</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">retrieval_summary</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>    query_row <span class="op">=</span> <span class="va">query_ids</span>,</span>
+<span>    target_domain <span class="op">=</span> <span class="st">"b"</span>,</span>
+<span>    retrieved_row <span class="op">=</span> <span class="va">target_ids_b</span><span class="op">[</span><span class="va">nn_b</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>    feature_similarity <span class="op">=</span> <span class="va">feature_sim_b</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">query_ids</span><span class="op">)</span>, <span class="va">nn_b</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span><span class="op">)</span><span class="op">]</span>,</span>
+<span>    stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>    query_row <span class="op">=</span> <span class="va">query_ids</span>,</span>
+<span>    target_domain <span class="op">=</span> <span class="st">"c"</span>,</span>
+<span>    retrieved_row <span class="op">=</span> <span class="va">target_ids_c</span><span class="op">[</span><span class="va">nn_c</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>    feature_similarity <span class="op">=</span> <span class="va">feature_sim_c</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">query_ids</span><span class="op">)</span>, <span class="va">nn_c</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span><span class="op">)</span><span class="op">]</span>,</span>
+<span>    stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">retrieval_summary</span>, <span class="fl">8</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   query_row target_domain retrieved_row feature_similarity</span></span>
+<span><span class="co">#&gt; 1         1             b            38         -0.8740264</span></span>
+<span><span class="co">#&gt; 2         2             b             2          0.9975204</span></span>
+<span><span class="co">#&gt; 3         3             b             3          0.9989185</span></span>
+<span><span class="co">#&gt; 4         4             b             7          0.6290790</span></span>
+<span><span class="co">#&gt; 5         5             b            20          0.6033854</span></span>
+<span><span class="co">#&gt; 6         6             b            38          0.8531745</span></span>
+<span><span class="co">#&gt; 7         7             b             7          0.9969800</span></span>
+<span><span class="co">#&gt; 8         8             b             1          0.5987475</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/aggregate.html" class="external-link">aggregate</a></span><span class="op">(</span><span class="va">feature_similarity</span> <span class="op">~</span> <span class="va">target_domain</span>, <span class="va">retrieval_summary</span>, <span class="va">mean</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   target_domain feature_similarity</span></span>
+<span><span class="co">#&gt; 1             b          0.6004724</span></span>
+<span><span class="co">#&gt; 2             c          0.7154646</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">retrieval_summary</span><span class="op">$</span><span class="va">feature_similarity</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">retrieval_summary</span><span class="op">$</span><span class="va">feature_similarity</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.6</span><span class="op">)</span></span></code></pre></div>
+<p>That is the full prediction loop:</p>
+<ol style="list-style-type: decimal">
+<li>fit the alignment on observed training matrices;</li>
+<li>project new rows with <code><a href="../reference/oos_predict.html">oos_predict()</a></code>;</li>
+<li>retrieve nearby rows in the other domains;</li>
+<li>ask whether those retrieved rows have similar <strong>row-level
+features</strong>.</li>
+</ol>
+</div>
+<div class="section level2">
+<h2 id="cross-validated-predictive-performance">Cross-validated predictive performance<a class="anchor" aria-label="anchor" href="#cross-validated-predictive-performance"></a>
+</h2>
+<p><code><a href="../reference/cv_alignment_rows.html">cv_alignment_rows()</a></code> automates the same logic
+fold-by-fold. The crucial detail is that the correspondence table must
+be rebuilt inside <code>fit_fn()</code> from the training rows only, so
+held-out rows never leak into the fit.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">rows</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">)</span>,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">11</span><span class="op">:</span><span class="fl">20</span><span class="op">)</span>,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">21</span><span class="op">:</span><span class="fl">30</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">6</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>b <span class="op">=</span> <span class="fl">7</span><span class="op">:</span><span class="fl">12</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>c <span class="op">=</span> <span class="fl">13</span><span class="op">:</span><span class="fl">18</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">19</span><span class="op">:</span><span class="fl">24</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>b <span class="op">=</span> <span class="fl">25</span><span class="op">:</span><span class="fl">30</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>c <span class="op">=</span> <span class="fl">31</span><span class="op">:</span><span class="fl">36</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">fit_fn</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">analysis</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">ids_a</span> <span class="op">&lt;-</span> <span class="va">analysis</span><span class="op">$</span><span class="va">a</span><span class="op">$</span><span class="va">design</span><span class="op">$</span><span class="va">row_id</span></span>
-<span>  <span class="va">ids_b</span> <span class="op">&lt;-</span> <span class="va">analysis</span><span class="op">$</span><span class="va">b</span><span class="op">$</span><span class="va">design</span><span class="op">$</span><span class="va">row_id</span></span>
+<span>  <span class="va">analysis_ids</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">analysis</span>, <span class="kw">function</span><span class="op">(</span><span class="va">block</span><span class="op">)</span> <span class="va">block</span><span class="op">$</span><span class="va">design</span><span class="op">$</span><span class="va">row_id</span><span class="op">)</span></span>
+<span>  <span class="va">feature_blocks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Map</a></span><span class="op">(</span></span>
+<span>    <span class="kw">function</span><span class="op">(</span><span class="va">F</span>, <span class="va">ids</span><span class="op">)</span> <span class="cn">F</span><span class="op">[</span><span class="va">ids</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>,</span>
+<span>    <span class="va">features_true</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">analysis_ids</span><span class="op">)</span><span class="op">]</span>,</span>
+<span>    <span class="va">analysis_ids</span></span>
+<span>  <span class="op">)</span></span>
 <span></span>
 <span>  <span class="va">corr</span> <span class="op">&lt;-</span> <span class="fu">feature_correspondences</span><span class="op">(</span></span>
-<span>    <span class="va">features_true</span><span class="op">$</span><span class="va">a</span><span class="op">[</span><span class="va">ids_a</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>,</span>
-<span>    <span class="va">features_true</span><span class="op">$</span><span class="va">b</span><span class="op">[</span><span class="va">ids_b</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span>    <span class="va">feature_blocks</span>,</span>
+<span>    top_k <span class="op">=</span> <span class="fl">3</span>,</span>
+<span>    mutual <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    min_similarity <span class="op">=</span> <span class="fl">0.6</span></span>
 <span>  <span class="op">)</span></span>
 <span></span>
 <span>  <span class="fu">manifoldalign</span><span class="fu">::</span><span class="fu"><a href="../reference/ssma_align.html">ssma_align</a></span><span class="op">(</span></span>
@@ -224,36 +451,43 @@ domain <code>b</code>.</p>
 <span>  target_pool <span class="op">=</span> <span class="st">"analysis"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">cv_signal</span><span class="op">$</span><span class="va">scores</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 9</span></span></span>
-<span><span class="co">#&gt;   mean_top1_similarity mean_topk_similarity oracle_top1_similarity</span></span>
-<span><span class="co">#&gt;                  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>                0.675                0.680                  0.999</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>                0.398                0.473                  1.000</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span>                0.815                0.780                  1.000</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 6 more variables: oracle_topk_similarity &lt;dbl&gt;, top1_gap &lt;dbl&gt;,</span></span></span>
-<span><span class="co">#&gt; <span style="color: #949494;">#   topk_gap &lt;dbl&gt;, n_queries &lt;dbl&gt;, n_pairs &lt;dbl&gt;, .fold &lt;int&gt;</span></span></span>
+<span><span class="va">cv_signal</span><span class="op">$</span><span class="va">scores</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">".fold"</span>,</span>
+<span>  <span class="st">"mean_top1_similarity"</span>,</span>
+<span>  <span class="st">"mean_topk_similarity"</span>,</span>
+<span>  <span class="st">"n_queries"</span>,</span>
+<span>  <span class="st">"n_pairs"</span></span>
+<span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 6 × 5</span></span></span>
+<span><span class="co">#&gt;   .fold mean_top1_similarity mean_topk_similarity n_queries n_pairs</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>     1                0.711                0.563        12       2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>     2                0.957                0.585        12       2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span>     3                0.601                0.484        12       2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span>     4                0.527                0.582        12       2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span>     5                0.827                0.569        12       2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span>     6                0.921                0.862        12       2</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">cv_signal</span><span class="op">$</span><span class="va">scores</span><span class="op">$</span><span class="va">mean_top1_similarity</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">cv_signal</span><span class="op">$</span><span class="va">scores</span><span class="op">$</span><span class="va">mean_topk_similarity</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">cv_signal</span><span class="op">$</span><span class="va">scores</span><span class="op">$</span><span class="va">mean_top1_similarity</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.5</span><span class="op">)</span></span></code></pre></div>
-<p>The key score is <code>mean_top1_similarity</code>: for each held-out
-query row, project it into the fitted space, retrieve its nearest
-neighbor in the target block, and measure the cosine similarity of their
-external feature vectors.</p>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">cv_signal</span><span class="op">$</span><span class="va">scores</span><span class="op">$</span><span class="va">mean_top1_similarity</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.7</span><span class="op">)</span></span></code></pre></div>
+<p>The score still has the same interpretation as the manual example
+above. For each held-out query row, the model projects that row into the
+aligned space, retrieves nearby rows from the target domains, and
+measures the agreement of their external row-level feature vectors.</p>
 </div>
 <div class="section level2">
-<h2 id="does-the-score-detect-broken-semantic-structure">Does the score detect broken semantic structure?<a class="anchor" aria-label="anchor" href="#does-the-score-detect-broken-semantic-structure"></a>
+<h2 id="a-negative-control-for-the-scoring-rule">A negative control for the scoring rule<a class="anchor" aria-label="anchor" href="#a-negative-control-for-the-scoring-rule"></a>
 </h2>
-<p>A good held-out metric should drop when the feature-defined target
-structure is destroyed. We can test that by shuffling the target feature
-rows while keeping the fitted model fixed.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<p>To isolate the evaluation step, we can keep the fitted alignment
+procedure the same and shuffle the row-level feature vectors used only
+for scoring. If the metric is meaningful, held-out agreement should
+drop.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">20260421</span><span class="op">)</span></span>
-<span><span class="va">features_shuffled</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>  a <span class="op">=</span> <span class="va">features_true</span><span class="op">$</span><span class="va">a</span>,</span>
-<span>  b <span class="op">=</span> <span class="va">features_true</span><span class="op">$</span><span class="va">b</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
-<span><span class="op">)</span></span>
+<span><span class="va">features_shuffled</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">features_true</span>, <span class="kw">function</span><span class="op">(</span><span class="va">F</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="cn">F</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="cn">F</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">cv_shuffled</span> <span class="op">&lt;-</span> <span class="fu">manifoldalign</span><span class="fu">::</span><span class="fu"><a href="../reference/cv_alignment_rows.html">cv_alignment_rows</a></span><span class="op">(</span></span>
 <span>  <span class="va">hd</span>,</span>
@@ -266,48 +500,45 @@ rows while keeping the fitted model fixed.</p>
 <span></span>
 <span><span class="va">comparison</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span></span>
 <span>  <span class="fu">aggregate_cv</span><span class="op">(</span><span class="va">cv_signal</span>, <span class="st">"Aligned features"</span><span class="op">)</span>,</span>
-<span>  <span class="fu">aggregate_cv</span><span class="op">(</span><span class="va">cv_shuffled</span>, <span class="st">"Shuffled target features"</span><span class="op">)</span></span>
+<span>  <span class="fu">aggregate_cv</span><span class="op">(</span><span class="va">cv_shuffled</span>, <span class="st">"Shuffled scoring features"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">comparison</span></span>
-<span><span class="co">#&gt;                   scenario metric     value</span></span>
-<span><span class="co">#&gt; 1         Aligned features  top-1 0.6292889</span></span>
-<span><span class="co">#&gt; 2         Aligned features  top-k 0.6444415</span></span>
-<span><span class="co">#&gt; 3 Shuffled target features  top-1 0.1063780</span></span>
-<span><span class="co">#&gt; 4 Shuffled target features  top-k 0.0671158</span></span>
+<span><span class="co">#&gt;                    scenario metric      value</span></span>
+<span><span class="co">#&gt; 1          Aligned features  top-1 0.75735046</span></span>
+<span><span class="co">#&gt; 2          Aligned features  top-k 0.60740808</span></span>
+<span><span class="co">#&gt; 3 Shuffled scoring features  top-1 0.02336278</span></span>
+<span><span class="co">#&gt; 4 Shuffled scoring features  top-k 0.01084015</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">cv_signal</span><span class="op">$</span><span class="va">scores</span><span class="op">$</span><span class="va">mean_top1_similarity</span><span class="op">)</span> <span class="op">&gt;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">cv_shuffled</span><span class="op">$</span><span class="va">scores</span><span class="op">$</span><span class="va">mean_top1_similarity</span><span class="op">)</span> <span class="op">+</span> <span class="fl">0.2</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">cv_shuffled</span><span class="op">$</span><span class="va">scores</span><span class="op">$</span><span class="va">mean_top1_similarity</span><span class="op">)</span> <span class="op">+</span> <span class="fl">0.15</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <div class="figure">
-<img src="features-and-predictive-performance_files/figure-html/plot-comparison-1.png" class="r-plt" alt="Held-out feature agreement drops when the target feature rows are shuffled, which is what we want from a predictive scoring rule." width="576"><p class="caption">
-Held-out feature agreement drops when the target feature rows are
-shuffled, which is what we want from a predictive scoring rule.
+<img src="features-and-predictive-performance_files/figure-html/plot-comparison-1.png" class="r-plt" alt="Held-out feature agreement drops when the row-level feature vectors are shuffled at scoring time." width="576"><p class="caption">
+Held-out feature agreement drops when the row-level feature vectors are
+shuffled at scoring time.
 </p>
 </div>
-<p>This is the predictive story:</p>
-<ul>
-<li>the alignment is fit on the observed matrices,</li>
-<li>feature similarity defines the semantic notion of a good
-cross-domain match,</li>
-<li>held-out performance asks whether new rows land near semantically
-similar rows in the fitted space.</li>
-</ul>
 </div>
 <div class="section level2">
 <h2 id="design-takeaway">Design takeaway<a class="anchor" aria-label="anchor" href="#design-takeaway"></a>
 </h2>
-<p>If your features are only there to define supervision and evaluation,
-keep them <strong>outside</strong> the fit and use them to:</p>
+<p>If external features are only there to define supervision and
+evaluation, keep them outside the fit and use them in this order:</p>
 <ol style="list-style-type: decimal">
-<li>build correspondence edges on the training rows,</li>
-<li>score held-out rows with <code><a href="../reference/cv_alignment_rows.html">cv_alignment_rows()</a></code>.</li>
+<li>build sparse row-to-row correspondence matrices between
+domains;</li>
+<li>convert those matrices into a correspondence edge table for
+<code><a href="../reference/ssma_align.html">ssma_align()</a></code>;</li>
+<li>fit on training rows only;</li>
+<li>project held-out rows with <code><a href="../reference/oos_predict.html">oos_predict()</a></code> and score
+cross-domain retrieval with <code><a href="../reference/cv_alignment_rows.html">cv_alignment_rows()</a></code>.</li>
 </ol>
-<p>If the features are a real modality you want represented in the
-embedding, you can also add them as another domain in the alignment
-itself. That is a different model, and cross-validation then has to hold
-out the matching feature rows too.</p>
+<p>If the external features are themselves a modality you want
+represented in the embedding, add them as another domain. That is a
+different model. In that case the matching feature rows need to be held
+out from the fit as well.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>
