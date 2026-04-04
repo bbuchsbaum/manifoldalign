@@ -79,7 +79,7 @@ str(gpca_fit, max.level = 1)
 #>  $ block_indices:List of 3
 #>  $ labels       : Factor w/ 2 levels "class_A","class_B": 1 1 1 1 1 1 1 1 1 1 ...
 #>  - attr(*, "class")= chr [1:5] "gpca_align" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...
-#>  - attr(*, ".cache")=<environment: 0x560736f19bc0>
+#>  - attr(*, ".cache")=<environment: 0x55b62d3e97f8>
 ```
 
 ``` r

@@ -91,7 +91,7 @@ str(reg_fit, max.level = 1)
 #>  $ fidelity_history  :List of 1
 #>  $ classes           : chr "kema"
 #>  - attr(*, "class")= chr [1:5] "kema_orig" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...
-#>  - attr(*, ".cache")=<environment: 0x55633ca8b618>
+#>  - attr(*, ".cache")=<environment: 0x55cd90326d58>
 ```
 
 ``` r
