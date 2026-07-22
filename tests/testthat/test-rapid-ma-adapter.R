@@ -22,6 +22,18 @@ make_rapid_adapter_labels <- function(n, per_class = 3L) {
   list(truth = truth, labels = labels)
 }
 
+make_rapid_adapter_attributes <- function(n, phase = 0) {
+  index <- seq_len(n)
+  output <- data.frame(
+    brightness = sin(index / 7 + phase),
+    landform = factor(rep(c("flat", "ridge", "valley"), length.out = n)),
+    protected = rep(c(TRUE, FALSE), length.out = n)
+  )
+  output$brightness[[min(5L, n)]] <- NA_real_
+  output$landform[[min(9L, n)]] <- NA
+  output
+}
+
 test_that("RAPID-MA adapter exposes native pair and multiset semantics", {
   latent_a <- make_rapid_adapter_latent(36L)
   latent_b <- make_rapid_adapter_latent(41L, 0.2)
@@ -116,6 +128,97 @@ test_that("OOS reapplication is exact and held-out interpolation is bounded", {
   expect_true(all(is.finite(interpolated$probabilities)))
   expect_equal(rowSums(interpolated$probabilities), rep(1, 5L), tolerance = 1e-12)
   expect_error(oos_predict(fit, X_a[, -1L], side = "north"), "expects 11")
+})
+
+test_that("OOS interpolation can retain position and attribute structure", {
+  latent_a <- make_rapid_adapter_latent(48L)
+  latent_b <- make_rapid_adapter_latent(44L, 0.1)
+  X_a <- make_rapid_adapter_features(latent_a, 11L, 6251L)
+  X_b <- make_rapid_adapter_features(latent_b, 7L, 6252L)
+  attributes_a <- make_rapid_adapter_attributes(48L)
+  attributes_b <- make_rapid_adapter_attributes(44L, 0.2)
+  fit <- rapid_ma(
+    list(north = X_a, south = X_b),
+    labels = list(
+      make_rapid_adapter_labels(48L)$labels,
+      make_rapid_adapter_labels(44L)$labels
+    ),
+    positions = list(latent_a, latent_b),
+    attributes = list(attributes_a, attributes_b),
+    ncomp = 6L,
+    control = list(max_iter = 2L, min_iter = 1L)
+  )
+
+  default <- oos_predict(fit, X_a[1:7, , drop = FALSE], side = "north",
+                         type = "all", k = 6L)
+  explicit_feature <- oos_predict(
+    fit, X_a[1:7, , drop = FALSE], side = "north", type = "all", k = 6L,
+    view_weights = c(feature = 1)
+  )
+  expect_equal(default$embedding, explicit_feature$embedding, tolerance = 0)
+  expect_equal(default$probabilities, explicit_feature$probabilities,
+               tolerance = 0)
+
+  structured <- oos_predict(
+    fit, X_a[1:7, , drop = FALSE], side = "north", type = "all", k = 6L,
+    new_positions = latent_a[1:7, , drop = FALSE],
+    new_attributes = attributes_a[1:7, , drop = FALSE],
+    view_weights = c(feature = 1, position = 1, attribute = 1)
+  )
+  expect_equal(structured$embedding, fit$scores$north[1:7, , drop = FALSE],
+               tolerance = 1e-12)
+  expect_equal(
+    structured$probabilities,
+    fit$prediction_probabilities$north[1:7, , drop = FALSE],
+    tolerance = 1e-12
+  )
+  expect_identical(structured$views_used,
+                   c("feature", "position", "attribute"))
+  expect_equal(unname(structured$view_weights), rep(1 / 3, 3),
+               tolerance = 1e-12)
+  expect_identical(vapply(structured$view_neighbours, nrow, integer(1)),
+                   c(feature = 7L, position = 7L, attribute = 7L))
+
+  repeated_x <- X_a[20L, , drop = FALSE] + 1e-3
+  position_only <- oos_predict(
+    fit, rbind(repeated_x, repeated_x), side = "north", type = "embedding",
+    new_positions = latent_a[c(2L, 43L), , drop = FALSE],
+    view_weights = c(position = 1), k = 4L
+  )
+  expect_false(isTRUE(all.equal(position_only[1L, ], position_only[2L, ])))
+
+  reordered <- attributes_a[1:7, c("protected", "brightness", "landform")]
+  expect_equal(
+    oos_predict(
+      fit, X_a[1:7, , drop = FALSE], side = "north", type = "probabilities",
+      new_attributes = reordered, view_weights = c(attribute = 1)
+    ),
+    oos_predict(
+      fit, X_a[1:7, , drop = FALSE], side = "north", type = "probabilities",
+      new_attributes = attributes_a[1:7, , drop = FALSE],
+      view_weights = c(attribute = 1)
+    ),
+    tolerance = 0
+  )
+
+  expect_error(
+    oos_predict(fit, X_a[1:2, , drop = FALSE], side = "north",
+                view_weights = c(position = 1)),
+    "requires `new_positions`"
+  )
+  expect_error(
+    oos_predict(
+      fit, X_a[1:2, , drop = FALSE], side = "north",
+      new_attributes = attributes_a[1:2, -1L, drop = FALSE],
+      view_weights = c(attribute = 1)
+    ),
+    "fitted columns"
+  )
+  expect_error(
+    oos_predict(fit, X_a[1:2, , drop = FALSE], side = "north",
+                view_weights = c(feature = -1)),
+    "nonnegative"
+  )
 })
 
 test_that("bounded fine matching handles rectangles and fixes anchors", {

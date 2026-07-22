@@ -192,6 +192,12 @@
   .rapid_validate_attributes(attributes, n)
   hash_dim <- .rapid_int_scalar(hash_dim, "attribute_hash_dim")
 
+  column_names <- names(attributes)
+  encoding_names <- vapply(seq_along(attributes), function(j) {
+    name <- column_names[[j]]
+    if (is.null(name) || !nzchar(name)) paste0("attribute_", j) else name
+  }, character(1))
+
   numeric_hash <- matrix(0, n, hash_dim)
   categorical_hash <- matrix(0, n, hash_dim)
   missing_hash <- matrix(0, n, hash_dim)
@@ -203,8 +209,7 @@
   missing_any <- logical(n)
 
   for (j in seq_along(attributes)) {
-    name <- names(attributes)[j]
-    if (is.null(name) || !nzchar(name)) name <- paste0("attribute_", j)
+    name <- encoding_names[[j]]
     value <- attributes[[j]]
     missing <- is.na(value)
     if (is.numeric(value) && !is.factor(value) && !is.logical(value)) {
@@ -271,6 +276,8 @@
   list(
     view = scaled$view,
     metadata = list(
+      column_names = column_names,
+      encoding_names = encoding_names,
       column_types = column_types,
       missing_by_column = missing_by_column,
       missing_rows = as.integer(which(missing_any)),
@@ -278,6 +285,8 @@
       numeric_stats = numeric_stats,
       hash_dim = hash_dim,
       seed = as.integer(seed),
+      center = scaled$center,
+      scale = scaled$scale,
       active_columns = which(scaled$active),
       output_dim = as.integer(ncol(scaled$view))
     )
@@ -299,6 +308,8 @@
       view = NULL,
       metadata = list(
         mode = mode,
+        input_dim = as.integer(ncol(P)),
+        missing_indicator = FALSE,
         valid_rows = as.integer(sum(valid)),
         missing_rows = as.integer(missing_rows),
         center = numeric(ncol(P)),
@@ -332,6 +343,8 @@
     view = encoder_view,
     metadata = list(
       mode = mode,
+      input_dim = as.integer(ncol(P)),
+      missing_indicator = length(missing_rows) > 0L,
       valid_rows = as.integer(sum(valid)),
       missing_rows = as.integer(missing_rows),
       center = center,

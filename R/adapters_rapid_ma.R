@@ -134,6 +134,165 @@ fit_pair.rapid_ma_aligner <- function(
   X
 }
 
+.rapid_apply_oos_position_view <- function(new_positions, metadata, n_rows) {
+  .rapid_validate_numeric_matrix(
+    new_positions, "new_positions", n_rows = n_rows
+  )
+  position <- as.matrix(new_positions)
+  input_dim <- metadata$input_dim
+  if (is.null(input_dim)) input_dim <- length(metadata$center)
+  if (ncol(position) != input_dim) {
+    stop(
+      "`new_positions` has ", ncol(position),
+      " columns but this domain expects ", input_dim, ".",
+      call. = FALSE
+    )
+  }
+  valid <- rowSums(!is.finite(position)) == 0L
+  if (identical(metadata$mode, "relative") && any(valid)) {
+    position[valid, ] <- sweep(
+      position[valid, , drop = FALSE], 2L, metadata$center, "-"
+    ) / metadata$scale
+  }
+  position[!is.finite(position)] <- 0
+  if (isTRUE(metadata$missing_indicator)) {
+    position <- cbind(position, position_missing = as.numeric(!valid))
+  }
+  position
+}
+
+.rapid_apply_oos_attribute_view <- function(new_attributes, metadata, n_rows) {
+  .rapid_validate_attributes(new_attributes, n_rows)
+  expected <- metadata$column_names
+  if (is.null(expected)) {
+    stop(
+      "The fitted attribute encoder predates OOS attribute support; refit RAPID-MA.",
+      call. = FALSE
+    )
+  }
+  supplied <- names(new_attributes)
+  if (!identical(supplied, expected)) {
+    can_reorder <- !anyDuplicated(supplied) && !anyDuplicated(expected) &&
+      length(supplied) == length(expected) && setequal(supplied, expected)
+    if (!can_reorder) {
+      stop(
+        "`new_attributes` must contain the fitted columns: ",
+        paste(expected, collapse = ", "), ".",
+        call. = FALSE
+      )
+    }
+    new_attributes <- new_attributes[, expected, drop = FALSE]
+  }
+
+  hash_dim <- metadata$hash_dim
+  seed <- metadata$seed
+  n <- nrow(new_attributes)
+  numeric_hash <- matrix(0, n, hash_dim)
+  categorical_hash <- matrix(0, n, hash_dim)
+  missing_hash <- matrix(0, n, hash_dim)
+  encoding_names <- metadata$encoding_names
+  if (is.null(encoding_names)) {
+    encoding_names <- vapply(seq_along(expected), function(j) {
+      if (nzchar(expected[[j]])) expected[[j]] else paste0("attribute_", j)
+    }, character(1))
+  }
+
+  for (j in seq_along(new_attributes)) {
+    name <- encoding_names[[j]]
+    value <- new_attributes[[j]]
+    missing <- is.na(value)
+    numeric_value <- is.numeric(value) && !is.factor(value) && !is.logical(value)
+    if (identical(metadata$column_types[[j]], "numeric") && !numeric_value) {
+      stop("`new_attributes$", expected[[j]], "` must be numeric.", call. = FALSE)
+    }
+    if (identical(metadata$column_types[[j]], "categorical") && numeric_value) {
+      stop(
+        "`new_attributes$", expected[[j]], "` must be categorical or logical.",
+        call. = FALSE
+      )
+    }
+    if (numeric_value) {
+      x <- as.numeric(value)
+      missing <- missing | !is.finite(x)
+      stats <- metadata$numeric_stats[[name]]
+      z <- (x - stats$center) / stats$scale
+      z[missing | !is.finite(z)] <- 0
+      z <- pmax(pmin(z, 10), -10)
+      key <- paste0("numeric:", name)
+      bucket <- .rapid_hash_bucket(key, hash_dim, seed)
+      sign <- .rapid_hash_sign(key, seed)
+      numeric_hash[, bucket] <- numeric_hash[, bucket] + sign * z
+    } else {
+      x <- as.character(value)
+      rows <- which(!missing)
+      if (length(rows)) {
+        values <- enc2utf8(x[rows])
+        unique_values <- unique(values)
+        keys <- paste0("categorical:", name, "=", unique_values)
+        buckets <- vapply(
+          keys, .rapid_hash_bucket, integer(1), width = hash_dim, seed = seed
+        )
+        signs <- vapply(keys, .rapid_hash_sign, numeric(1), seed = seed)
+        value_index <- match(values, unique_values)
+        cells <- cbind(rows, buckets[value_index])
+        categorical_hash[cells] <-
+          categorical_hash[cells] + signs[value_index]
+      }
+    }
+    if (any(missing)) {
+      key <- paste0("missing:", name)
+      bucket <- .rapid_hash_bucket(key, hash_dim, seed)
+      sign <- .rapid_hash_sign(key, seed)
+      rows <- which(missing)
+      cells <- cbind(rows, rep.int(bucket, length(rows)))
+      missing_hash[cells] <- missing_hash[cells] + sign
+    }
+  }
+
+  raw <- cbind(numeric_hash, categorical_hash, missing_hash)
+  if (is.null(metadata$center) || is.null(metadata$scale)) {
+    stop(
+      "The fitted attribute encoder predates OOS attribute support; refit RAPID-MA.",
+      call. = FALSE
+    )
+  }
+  encoded <- sweep(raw, 2L, metadata$center, "-")
+  encoded <- sweep(encoded, 2L, metadata$scale, "/")
+  encoded[!is.finite(encoded)] <- 0
+  encoded <- encoded[, metadata$active_columns, drop = FALSE]
+  if (ncol(encoded) != metadata$output_dim) {
+    stop("The fitted OOS attribute encoder is internally inconsistent.", call. = FALSE)
+  }
+  encoded
+}
+
+.rapid_oos_view_weights <- function(view_weights) {
+  allowed <- c("feature", "position", "attribute")
+  if (is.null(view_weights)) view_weights <- c(feature = 1)
+  if (!is.numeric(view_weights) || !length(view_weights) ||
+      is.null(names(view_weights)) || any(!nzchar(names(view_weights))) ||
+      anyDuplicated(names(view_weights)) ||
+      any(!is.finite(view_weights)) || any(view_weights < 0)) {
+    stop(
+      "`view_weights` must be a named, finite, nonnegative numeric vector.",
+      call. = FALSE
+    )
+  }
+  unknown <- setdiff(names(view_weights), allowed)
+  if (length(unknown)) {
+    stop(
+      "Unknown OOS views: ", paste(unknown, collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  output <- stats::setNames(numeric(length(allowed)), allowed)
+  output[names(view_weights)] <- view_weights
+  if (sum(output) <= 0) {
+    stop("At least one `view_weights` value must be positive.", call. = FALSE)
+  }
+  output / sum(output)
+}
+
 .rapid_oos_weights <- function(training, query, k, zero_tolerance) {
   k <- min(.rapid_int_scalar(k, "k"), nrow(training))
   zero_tolerance <- .rapid_number_scalar(
@@ -180,6 +339,12 @@ fit_pair.rapid_ma_aligner <- function(
 #'   or all diagnostics.
 #' @param k Number of bounded interpolation neighbours.
 #' @param zero_tolerance Distance treated as an exact in-sample reapplication.
+#' @param new_positions Optional position matrix for structure-aware OOS
+#'   interpolation.
+#' @param new_attributes Optional attribute data frame for structure-aware OOS
+#'   interpolation.
+#' @param view_weights Named nonnegative weights over `feature`, `position`, and
+#'   `attribute`. The default is feature-only for backward compatibility.
 #' @param ... Unused.
 #' @return A matrix/vector, or a diagnostic list when `type = "all"`.
 #' @export
@@ -190,6 +355,9 @@ oos_predict.rapid_ma <- function(
   type = c("embedding", "probabilities", "class", "all"),
   k = 8L,
   zero_tolerance = sqrt(.Machine$double.eps),
+  new_positions = NULL,
+  new_attributes = NULL,
+  view_weights = c(feature = 1),
   ...
 ) {
   type <- match.arg(type)
@@ -200,13 +368,89 @@ oos_predict.rapid_ma <- function(
     stop("The fit does not contain RAPID-MA OOS preprocessing state.",
          call. = FALSE)
   }
-  query <- .rapid_apply_oos_feature_view(newX, metadata)
-  neighbours <- .rapid_oos_weights(training, query, k, zero_tolerance)
-  embedding <- as.matrix(neighbours$interpolation %*% fit_or_transform$scores[[m]])
-  colnames(embedding) <- colnames(fit_or_transform$scores[[m]])
-  probability <- as.matrix(
-    neighbours$interpolation %*% fit_or_transform$prediction_probabilities[[m]]
+  feature_query <- .rapid_apply_oos_feature_view(newX, metadata)
+  feature_neighbours <- .rapid_oos_weights(
+    training, feature_query, k, zero_tolerance
   )
+  weights <- .rapid_oos_view_weights(view_weights)
+  view_state <- list()
+  if (weights[["feature"]] > 0) view_state$feature <- feature_neighbours
+
+  retained_views <- fit_or_transform$relations[[m]]$views
+  if (weights[["position"]] > 0) {
+    position_state <- retained_views$position
+    if (is.null(new_positions)) {
+      stop(
+        "Positive position weight requires `new_positions`.", call. = FALSE
+      )
+    }
+    if (is.null(position_state$view) || !ncol(position_state$view)) {
+      stop("This domain has no retained position OOS view.", call. = FALSE)
+    }
+    position_query <- .rapid_apply_oos_position_view(
+      new_positions, position_state$metadata, nrow(feature_query)
+    )
+    if (ncol(position_query) != ncol(position_state$view)) {
+      stop("The fitted OOS position encoder is internally inconsistent.",
+           call. = FALSE)
+    }
+    view_state$position <- .rapid_oos_weights(
+      position_state$view, position_query, k, zero_tolerance
+    )
+  }
+  if (weights[["attribute"]] > 0) {
+    attribute_state <- retained_views$attribute
+    if (is.null(new_attributes)) {
+      stop(
+        "Positive attribute weight requires `new_attributes`.", call. = FALSE
+      )
+    }
+    if (is.null(attribute_state$view) || !ncol(attribute_state$view)) {
+      stop("This domain has no retained attribute OOS view.", call. = FALSE)
+    }
+    attribute_query <- .rapid_apply_oos_attribute_view(
+      new_attributes, attribute_state$metadata, nrow(feature_query)
+    )
+    view_state$attribute <- .rapid_oos_weights(
+      attribute_state$view, attribute_query, k, zero_tolerance
+    )
+  }
+
+  active_weights <- weights[names(view_state)]
+  active_weights <- active_weights / sum(active_weights)
+  embedding <- matrix(
+    0, nrow(feature_query), ncol(fit_or_transform$scores[[m]])
+  )
+  probability <- matrix(
+    0, nrow(feature_query),
+    ncol(fit_or_transform$prediction_probabilities[[m]])
+  )
+  for (view in names(view_state)) {
+    interpolation <- view_state[[view]]$interpolation
+    embedding <- embedding + active_weights[[view]] * as.matrix(
+      interpolation %*% fit_or_transform$scores[[m]]
+    )
+    probability <- probability + active_weights[[view]] * as.matrix(
+      interpolation %*% fit_or_transform$prediction_probabilities[[m]]
+    )
+  }
+
+  # An exact feature match identifies a retained row. Preserve the historical
+  # exact-reapplication contract even when auxiliary views contain duplicates.
+  exact_feature <- rowSums(
+    feature_neighbours$distance <= zero_tolerance
+  ) > 0L
+  if (weights[["feature"]] > 0 && any(exact_feature)) {
+    embedding[exact_feature, ] <- as.matrix(
+      feature_neighbours$interpolation[exact_feature, , drop = FALSE] %*%
+        fit_or_transform$scores[[m]]
+    )
+    probability[exact_feature, ] <- as.matrix(
+      feature_neighbours$interpolation[exact_feature, , drop = FALSE] %*%
+        fit_or_transform$prediction_probabilities[[m]]
+    )
+  }
+  colnames(embedding) <- colnames(fit_or_transform$scores[[m]])
   probability <- probability / pmax(rowSums(probability), 1e-15)
   colnames(probability) <- fit_or_transform$prototypes$class_levels
   choice <- max.col(probability, ties.method = "first")
@@ -216,16 +460,30 @@ oos_predict.rapid_ma <- function(
   if (type == "embedding") return(embedding)
   if (type == "probabilities") return(probability)
   if (type == "class") return(predicted)
+  primary <- if ("feature" %in% names(view_state)) {
+    view_state$feature
+  } else {
+    view_state[[1L]]
+  }
   list(
     embedding = embedding,
     probabilities = probability,
     class = predicted,
     confidence = confidence,
-    neighbours = neighbours$index,
-    distances = neighbours$distance,
-    weights = neighbours$weight,
+    neighbours = primary$index,
+    distances = primary$distance,
+    weights = primary$weight,
+    view_neighbours = lapply(view_state, `[[`, "index"),
+    view_distances = lapply(view_state, `[[`, "distance"),
+    view_interpolation_weights = lapply(view_state, `[[`, "weight"),
+    view_weights = active_weights,
+    views_used = names(view_state),
     side = fit_or_transform$domain_names[[m]],
-    exact_reapplications = rowSums(neighbours$distance <= zero_tolerance) > 0L
+    exact_reapplications = if (weights[["feature"]] > 0) {
+      exact_feature
+    } else {
+      rowSums(primary$distance <= zero_tolerance) > 0L
+    }
   )
 }
 

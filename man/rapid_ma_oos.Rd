@@ -12,6 +12,9 @@
   type = c("embedding", "probabilities", "class", "all"),
   k = 8L,
   zero_tolerance = sqrt(.Machine$double.eps),
+  new_positions = NULL,
+  new_attributes = NULL,
+  view_weights = c(feature = 1),
   ...
 )
 
@@ -37,6 +40,16 @@ or all diagnostics.}
 
 \item{zero_tolerance}{Distance treated as an exact in-sample reapplication.}
 
+\item{new_positions}{Optional position matrix for structure-aware OOS
+interpolation.}
+
+\item{new_attributes}{Optional attribute data frame for structure-aware OOS
+interpolation.}
+
+\item{view_weights}{Named nonnegative weights over \code{feature},
+\code{position}, and \code{attribute}. The default is feature-only for
+backward compatibility.}
+
 \item{...}{Additional arguments forwarded by the pair-fit method.}
 }
 \value{
@@ -44,7 +57,8 @@ A matrix or vector, or a list containing embeddings, probabilities, classes,
 confidence, and bounded-neighbour diagnostics when \code{type = "all"}.
 }
 \description{
-Applies the retained deterministic feature sketch and interpolates fitted
-RAPID-MA scores and probabilities from a bounded nearest-neighbour support.
+Applies retained deterministic feature, position, and attribute encoders and
+interpolates fitted RAPID-MA scores and probabilities from bounded
+nearest-neighbour supports. Feature-only interpolation remains the default.
 Exact training-row reapplication reproduces the fitted values.
 }
