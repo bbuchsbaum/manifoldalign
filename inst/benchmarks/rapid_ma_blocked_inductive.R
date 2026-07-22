@@ -867,7 +867,7 @@ source_files <- c(
   "R/rapid_ma_semisup.R", "inst/benchmarks/lema_reference.R",
   "inst/benchmarks/rapid_ma_blocked_inductive.R"
 )
-source_hash <- unname(tools::md5sum(source_files[file.exists(source_files)]))
+source_hash <- tools::md5sum(source_files[file.exists(source_files)])
 metadata <- c(
   "benchmark=RAPID-MA Chikusei real-scene blocked-inductive comparison",
   paste0("profile=", profile),
