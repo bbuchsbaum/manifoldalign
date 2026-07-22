@@ -1,0 +1,2 @@
+"method","status","evaluation_mode","classifier","runtime_sec","retained_mb","endpoint_rss_mb","rss_delta_mb","oa","macro_f1","miou","rare_recall","ece","hits1","mrr","coverage","error","sampled_peak_rss_mb","matching_evaluation_skipped","memory_limit_gb","n_common","n_source","n_target","total_nodes","repetition","seed"
+"rapid_ma_semisup","timeout",,,1200.008,,,,,,,,,,,,"method exceeded isolated 1200 second timeout",7199.34375,TRUE,30,454546,454546,545456,1000002,1,6001

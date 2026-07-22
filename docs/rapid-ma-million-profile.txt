@@ -1,0 +1,76 @@
+RAPID-MA million-node timeout bottleneck profile
+generated_utc=2026-07-22
+
+Million-node gate
+-----------------
+implementation_commit=9cdbe610d0ee72c91a779f21f980377221120304
+n_common=454546
+n_source=454546
+n_target=545456
+total_nodes=1000002
+status=timeout
+wall_clock_limit_sec=1200
+sampled_peak_rss_mb=7199.34375
+memory_limit_gb=30
+matching_evaluation_skipped=true
+
+Profile probe
+-------------
+purpose=function-level diagnosis at the largest previously completed scale
+n_common=100000
+n_target=120000
+total_nodes=220000
+threads=VECLIB_MAXIMUM_THREADS=1,OMP_NUM_THREADS=1,OPENBLAS_NUM_THREADS=1
+matching_evaluation_skipped=true
+Rprof_interval_sec=0.02
+elapsed_sec=142.725
+fit_runtime_sec=142.006
+retained_mb=482.9369
+oa=0.9362603
+macro_f1=0.9400217
+
+Rprof sampled total-time leaders
+--------------------------------
+function                                      seconds  percent
+.rapid_ma_fit                                 118.68    97.45
+.rapid_domain_preprocess                       78.38    64.36
+.rapid_prepare_relations                       71.76    58.93
+.rapid_build_neighbor_relation                 70.32    57.74
+RANN::nn2                                      66.26    54.41
+.rapid_evaluate_state                          37.82    31.06
+.rapid_uot_solve                               32.14    26.39
+uot_ti_sinkhorn_kl_sparse_csr_csc_cpp          28.88    23.71
+.rapid_diffusion_encode                         6.62     5.44
+.rapid_relmatch_fit                             5.44     4.47
+.rapid_prototype_relation                       5.12     4.20
+
+Interpretation
+--------------
+At 220,000 total nodes, exact bounded kNN relation construction accounts for
+57.74% of sampled time, almost entirely inside RANN::nn2. Repeated sparse UOT
+evaluation accounts for 26.39%. Together they account for 84.13% of sampled
+time. Diffusion, prototype relation contraction, matrix conversion, and all
+other sampled work are secondary.
+
+The million task has 4.54546 times as many common nodes as the profile probe
+but consumed more than 8.4503 times its profiled fit time. Treating the timeout
+as right censoring gives a conservative runtime exponent lower bound of 1.4095
+between these two configurations. Profiling overhead inflates the smaller-run
+denominator, so it cannot explain away the superlinear lower bound.
+
+Filing-ready optimization targets
+---------------------------------
+1. Replace monolithic exact RANN queries for feature, position, and attribute
+   graphs with reusable approximate indexes and bounded query batches. Use a
+   linear spatial-grid path for low-dimensional common-coordinate positions.
+2. Record per-view index-build and query times in the fit result, including
+   requested k, approximation tolerance, edges retained, and recall checks on
+   a frozen smaller oracle.
+3. Warm-start sparse UOT dual variables across alternating evaluations and
+   avoid recomputing unchanged candidate costs. Preserve the current exact
+   solver as the numerical oracle.
+4. Add a performance profile that is selected before evaluation and verify its
+   classification/matching deltas against the exact profile on untouched
+   seeds before another million-node attempt.
+5. Repeat the same 1,000,002-node gate under the unchanged 1,200-second and
+   30-GB ceilings. Do not claim completion from extrapolation.

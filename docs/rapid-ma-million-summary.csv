@@ -1,0 +1,2 @@
+"method","n_common","total_nodes","n_replicates","n_ok","n_timeout","n_memory_limit","n_failed","runtime_sec_mean","runtime_sec_sd","sampled_peak_rss_mb_mean","endpoint_rss_delta_mb_mean","retained_mb_mean","oa_mean","macro_f1_mean"
+"rapid_ma_semisup",454546,1000002,1,0,1,0,0,,,,,,,

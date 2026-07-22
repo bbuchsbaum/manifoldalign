@@ -275,12 +275,18 @@ source_paths <- c(
   "inst/benchmarks/lema_reference.R", "inst/benchmarks/rapid_ma_scaling.R"
 )
 source_paths <- source_paths[file.exists(source_paths)]
+git_commit <- tryCatch(
+  system2("git", c("rev-parse", "HEAD"), stdout = TRUE, stderr = FALSE),
+  error = function(...) NA_character_
+)
+if (length(git_commit) != 1L || !nzchar(git_commit)) git_commit <- NA_character_
 memory_gb <- if (requireNamespace("ps", quietly = TRUE) &&
                  "ps_system_memory" %in% getNamespaceExports("ps")) {
   tryCatch(ps::ps_system_memory()[["total"]] / 1024^3, error = function(...) NA_real_)
 } else NA_real_
 metadata <- c(
   paste("generated_utc", format(Sys.time(), tz = "UTC", usetz = TRUE), sep = "="),
+  paste("implementation_commit", git_commit, sep = "="),
   paste("profile", profile, sep = "="),
   paste("common_sizes", paste(common_sizes, collapse = ","), sep = "="),
   paste("rapid_sizes", paste(rapid_sizes, collapse = ","), sep = "="),
