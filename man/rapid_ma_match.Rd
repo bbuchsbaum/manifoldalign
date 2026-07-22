@@ -2,7 +2,7 @@
 % Please edit documentation in R/adapters_rapid_ma.R
 \name{rapid_ma_match}
 \alias{rapid_ma_match}
-\title{Bounded Prototype-Bucket Matching for a RAPID-MA Fit}
+\title{Bounded Multi-View Matching for a RAPID-MA Fit}
 \usage{
 rapid_ma_match(
   fit,
@@ -12,8 +12,12 @@ rapid_ma_match(
   prototype_per_node = 3L,
   candidate_cap = 32L,
   prototype_bucket_cap = 128L,
+  candidate_views = c("position", "attribute", "latent"),
+  view_candidate_k = 12L,
+  assignment = c("one_to_one", "independent"),
   latent_weight = 1,
   structure_weight = 0.25,
+  position_weight = 1,
   attribute_weight = 0.15,
   prototype_weight = 0.25
 )
@@ -31,7 +35,16 @@ rapid_ma_match(
 
 \item{prototype_bucket_cap}{Maximum target nodes retained per prototype.}
 
-\item{latent_weight,structure_weight,attribute_weight,prototype_weight}{
+\item{candidate_views}{Retained comparable views that contribute bounded
+nearest-neighbour candidates in addition to prototype buckets.}
+
+\item{view_candidate_k}{Number of candidates requested from each comparable
+view.}
+
+\item{assignment}{Either one-to-one greedy assignment or independent
+retrieval. Pair transforms use the one-to-one default.}
+
+\item{latent_weight,structure_weight,position_weight,attribute_weight,prototype_weight}{
 Nonnegative reranking weights.}
 }
 \value{
@@ -39,8 +52,10 @@ A \code{rapid_ma_matching} object with a sparse assignment operator, match
 table, coverage, confidence, anchors, and unmatched-node diagnostics.
 }
 \description{
-Generates candidates through sparse node-to-prototype supports, reranks only
-the bounded candidate set with latent, structural, attribute, and prototype
-evidence, and constructs a one-to-one sparse assignment. It never materializes
-a dense cross-domain node-pair matrix.
+Generates candidates through sparse node-to-prototype supports and bounded
+nearest-neighbour indexes over retained comparable views. It reranks only the
+bounded candidate set with latent, structural, position, attribute, and
+prototype evidence and constructs either a one-to-one assignment or
+independent retrieval result. It never materializes a dense cross-domain
+node-pair matrix.
 }

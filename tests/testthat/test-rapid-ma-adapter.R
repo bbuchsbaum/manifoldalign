@@ -303,3 +303,46 @@ test_that("fine matching accepts anchor-ID vectors and works across three domain
     "one-to-one"
   )
 })
+
+test_that("multi-view matching retrieves exact shared positions without dense pairs", {
+  latent <- make_rapid_adapter_latent(40L)
+  source <- make_rapid_adapter_features(latent, 9L, 6451L)
+  target <- make_rapid_adapter_features(latent, 6L, 6452L)
+  labels <- make_rapid_adapter_labels(40L)$labels
+  fit <- rapid_ma(
+    list(source = source, target = target),
+    labels = list(labels, labels),
+    positions = list(latent, latent),
+    ncomp = 5L,
+    control = list(max_iter = 1L, min_iter = 1L, seed = 6453L)
+  )
+
+  matching <- rapid_ma_match(
+    fit,
+    candidate_views = "position",
+    view_candidate_k = 4L,
+    candidate_cap = 8L,
+    assignment = "independent",
+    latent_weight = 0,
+    structure_weight = 0,
+    position_weight = 1,
+    attribute_weight = 0,
+    prototype_weight = 0
+  )
+
+  expect_identical(matching$matches$target, seq_len(40L))
+  expect_equal(matching$coverage, 1)
+  expect_identical(matching$candidate_views, "position")
+  expect_identical(matching$assignment_mode, "independent")
+  expect_lte(matching$candidate_edges, 40L * 8L)
+  expect_equal(Matrix::nnzero(matching$assignment), 40L)
+  expect_false(matching$dense_pairwise_allocated)
+  expect_error(
+    rapid_ma_match(fit, candidate_views = "not-a-view"),
+    "unique subset"
+  )
+  expect_error(
+    rapid_ma_match(fit, assignment = "many_to_many"),
+    "arg"
+  )
+})

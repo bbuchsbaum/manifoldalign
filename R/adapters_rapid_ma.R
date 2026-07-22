@@ -567,22 +567,40 @@ oos_predict.rapid_ma_pair_fit <- function(
 
 .rapid_match_buckets <- function(rows, K, cap) {
   buckets <- vector("list", K)
-  for (node in seq_along(rows)) {
-    row <- rows[[node]]
-    if (is.null(row)) next
-    for (j in seq_along(row$index)) {
-      prototype <- row$index[[j]]
-      buckets[[prototype]] <- rbind(
-        buckets[[prototype]], c(node = node, weight = row$value[[j]])
-      )
-    }
+  row_lengths <- vapply(rows, function(row) {
+    if (is.null(row)) 0L else length(row$index)
+  }, integer(1))
+  if (!sum(row_lengths)) {
+    return(lapply(buckets, function(...) {
+      matrix(numeric(0), 0L, 2L,
+             dimnames = list(NULL, c("node", "weight")))
+    }))
+  }
+  node <- rep.int(seq_along(rows), row_lengths)
+  prototype <- unlist(lapply(rows, function(row) {
+    if (is.null(row)) integer(0) else row$index
+  }), use.names = FALSE)
+  weight <- unlist(lapply(rows, function(row) {
+    if (is.null(row)) numeric(0) else row$value
+  }), use.names = FALSE)
+  ordering <- order(prototype, -weight, node, method = "radix")
+  node <- node[ordering]
+  prototype <- prototype[ordering]
+  weight <- weight[ordering]
+  grouped <- split(seq_along(prototype), prototype)
+  for (name in names(grouped)) {
+    index <- head(grouped[[name]], cap)
+    buckets[[as.integer(name)]] <- cbind(
+      node = node[index], weight = weight[index]
+    )
   }
   lapply(buckets, function(bucket) {
-    if (is.null(bucket)) return(matrix(numeric(0), 0L, 2L,
-                                       dimnames = list(NULL, c("node", "weight"))))
-    bucket <- matrix(bucket, ncol = 2L, dimnames = list(NULL, c("node", "weight")))
-    bucket[head(order(-bucket[, "weight"], bucket[, "node"], method = "radix"), cap),
-           , drop = FALSE]
+    if (is.null(bucket)) {
+      matrix(numeric(0), 0L, 2L,
+             dimnames = list(NULL, c("node", "weight")))
+    } else {
+      matrix(bucket, ncol = 2L, dimnames = list(NULL, c("node", "weight")))
+    }
   })
 }
 
@@ -600,7 +618,51 @@ oos_predict.rapid_ma_pair_fit <- function(
   if (!is.finite(value) || value <= 1e-12) 1 else value
 }
 
-#' Bounded prototype-bucket matching for a RAPID-MA fit
+.rapid_match_view <- function(fit, source, target, view) {
+  values <- switch(
+    view,
+    latent = fit$scores,
+    structure = fit$preprocessing$structures,
+    attribute = fit$preprocessing$attributes,
+    position = lapply(fit$relations, function(relation) {
+      state <- relation$views$position
+      if (is.null(state)) NULL else state$view
+    }),
+    NULL
+  )
+  if (is.null(values) || length(values) < max(source, target) ||
+      is.null(values[[source]]) || is.null(values[[target]])) {
+    return(NULL)
+  }
+  left <- as.matrix(values[[source]])
+  right <- as.matrix(values[[target]])
+  if (!ncol(left) || ncol(left) != ncol(right) ||
+      nrow(left) != fit$domain_sizes[[source]] ||
+      nrow(right) != fit$domain_sizes[[target]]) {
+    return(NULL)
+  }
+  left[!is.finite(left)] <- 0
+  right[!is.finite(right)] <- 0
+  list(source = left, target = right)
+}
+
+.rapid_match_view_candidates <- function(view, k) {
+  k <- min(k, nrow(view$target))
+  neighbours <- RANN::nn2(
+    data = view$target, query = view$source, k = k,
+    treetype = "kd", searchtype = "standard", eps = 0
+  )
+  distance <- neighbours$nn.dists
+  index <- neighbours$nn.idx
+  if (is.null(dim(distance))) distance <- matrix(distance, ncol = k)
+  if (is.null(dim(index))) index <- matrix(index, ncol = k)
+  scale <- .rapid_match_scale(as.numeric(distance))
+  strength <- exp(pmax(-distance / scale, -700))
+  strength[!is.finite(strength)] <- 0
+  list(index = index, distance = distance, strength = strength)
+}
+
+#' Bounded multi-view matching for a RAPID-MA fit
 #'
 #' @param fit A fitted `rapid_ma` object.
 #' @param from,to Source and target domains.
@@ -608,7 +670,13 @@ oos_predict.rapid_ma_pair_fit <- function(
 #' @param prototype_per_node Number of strongest prototype buckets queried.
 #' @param candidate_cap Maximum retained target candidates per source node.
 #' @param prototype_bucket_cap Maximum target nodes retained per prototype.
-#' @param latent_weight,structure_weight,attribute_weight,prototype_weight
+#' @param candidate_views Retained comparable views that contribute bounded
+#'   nearest-neighbour candidates in addition to prototype buckets.
+#' @param view_candidate_k Number of candidates requested from each comparable
+#'   view.
+#' @param assignment Either one-to-one greedy assignment or independent
+#'   retrieval. Pair transforms use the one-to-one default.
+#' @param latent_weight,structure_weight,position_weight,attribute_weight,prototype_weight
 #'   Nonnegative reranking weights.
 #' @return A `rapid_ma_matching` object with a sparse assignment operator,
 #'   match table, coverage, confidence, and unmatched-node diagnostics.
@@ -621,8 +689,12 @@ rapid_ma_match <- function(
   prototype_per_node = 3L,
   candidate_cap = 32L,
   prototype_bucket_cap = 128L,
+  candidate_views = c("position", "attribute", "latent"),
+  view_candidate_k = 12L,
+  assignment = c("one_to_one", "independent"),
   latent_weight = 1,
   structure_weight = 0.25,
+  position_weight = 1,
   attribute_weight = 0.15,
   prototype_weight = 0.25
 ) {
@@ -639,9 +711,22 @@ rapid_ma_match <- function(
   prototype_bucket_cap <- .rapid_int_scalar(
     prototype_bucket_cap, "prototype_bucket_cap"
   )
+  view_candidate_k <- .rapid_int_scalar(view_candidate_k, "view_candidate_k")
+  assignment_mode <- match.arg(assignment)
+  allowed_candidate_views <- c("position", "attribute", "structure", "latent")
+  if (!is.character(candidate_views) || anyNA(candidate_views) ||
+      any(!nzchar(candidate_views)) || anyDuplicated(candidate_views) ||
+      any(!candidate_views %in% allowed_candidate_views)) {
+    stop(
+      "`candidate_views` must be a unique subset of: ",
+      paste(allowed_candidate_views, collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
   view_weights <- c(
     latent = latent_weight,
     structure = structure_weight,
+    position = position_weight,
     attribute = attribute_weight,
     prototype = prototype_weight
   )
@@ -661,12 +746,21 @@ rapid_ma_match <- function(
   buckets <- .rapid_match_buckets(
     target_rows, ncol(Q_target), prototype_bucket_cap
   )
+  candidate_state <- list()
+  for (view in candidate_views) {
+    matrices <- .rapid_match_view(fit, source, target, view)
+    if (!is.null(matrices)) {
+      candidate_state[[view]] <- .rapid_match_view_candidates(
+        matrices, view_candidate_k
+      )
+    }
+  }
   n_source <- nrow(Q_source)
   n_target <- nrow(Q_target)
   anchor_pairs <- .rapid_match_anchor_pairs(anchors, n_source, n_target)
   anchor_by_source <- stats::setNames(anchor_pairs[, 2L], anchor_pairs[, 1L])
-  edge_source <- edge_target <- integer(0)
-  edge_prototype <- numeric(0)
+  edge_target_rows <- vector("list", n_source)
+  edge_prototype_rows <- vector("list", n_source)
 
   for (i in seq_len(n_source)) {
     row <- source_rows[[i]]
@@ -679,6 +773,13 @@ rapid_ma_match <- function(
         strengths <- c(strengths, row$value[[j]] * bucket[, "weight"])
       }
     }
+    if (length(candidate_state)) {
+      for (view in names(candidate_state)) {
+        state <- candidate_state[[view]]
+        candidates <- c(candidates, as.integer(state$index[i, ]))
+        strengths <- c(strengths, as.numeric(state$strength[i, ]))
+      }
+    }
     if (as.character(i) %in% names(anchor_by_source)) {
       candidates <- c(candidates, anchor_by_source[[as.character(i)]])
       strengths <- c(strengths, Inf)
@@ -688,15 +789,18 @@ rapid_ma_match <- function(
     candidate <- as.integer(names(aggregate_strength))
     ordering <- order(-aggregate_strength, candidate, method = "radix")
     candidate <- head(candidate[ordering], candidate_cap)
-    edge_source <- c(edge_source, rep.int(i, length(candidate)))
-    edge_target <- c(edge_target, candidate)
-    edge_prototype <- c(
-      edge_prototype,
-      vapply(candidate, function(j) {
+    edge_target_rows[[i]] <- candidate
+    edge_prototype_rows[[i]] <- vapply(candidate, function(j) {
         .rapid_match_similarity(source_rows[[i]], target_rows[[j]])
       }, numeric(1))
-    )
   }
+
+  edge_lengths <- lengths(edge_target_rows)
+  edge_source <- rep.int(seq_len(n_source), edge_lengths)
+  edge_target <- as.integer(unlist(edge_target_rows, use.names = FALSE))
+  edge_prototype <- as.numeric(unlist(
+    edge_prototype_rows, use.names = FALSE
+  ))
 
   represented <- unique(edge_source)
   missing_source <- setdiff(seq_len(n_source), represented)
@@ -729,6 +833,10 @@ rapid_ma_match <- function(
       fit$preprocessing$structures[[target]]
     )
   } else rep(0, length(edge_source))
+  position_view <- .rapid_match_view(fit, source, target, "position")
+  position_distance <- if (!is.null(position_view)) {
+    squared_distance(position_view$source, position_view$target)
+  } else rep(0, length(edge_source))
   attribute_distance <- if (!is.null(fit$preprocessing$attributes)) {
     squared_distance(
       fit$preprocessing$attributes[[source]],
@@ -739,6 +847,8 @@ rapid_ma_match <- function(
     latent_distance / .rapid_match_scale(latent_distance) +
     view_weights[["structure"]] *
     structure_distance / .rapid_match_scale(structure_distance) +
+    view_weights[["position"]] *
+    position_distance / .rapid_match_scale(position_distance) +
     view_weights[["attribute"]] *
     attribute_distance / .rapid_match_scale(attribute_distance) +
     view_weights[["prototype"]] * (1 - edge_prototype)
@@ -746,7 +856,8 @@ rapid_ma_match <- function(
   edge_key <- paste(edge_source, edge_target, sep = ":")
   cost[edge_key %in% anchor_key] <- -Inf
 
-  assigned_source <- assigned_target <- rep(FALSE, max(n_source, n_target))
+  assigned_source <- rep(FALSE, n_source)
+  assigned_target <- rep(FALSE, n_target)
   match_target <- rep(NA_integer_, n_source)
   match_cost <- rep(NA_real_, n_source)
   anchored <- rep(FALSE, n_source)
@@ -761,9 +872,12 @@ rapid_ma_match <- function(
   for (e in ordering) {
     i <- edge_source[[e]]
     j <- edge_target[[e]]
-    if (assigned_source[[i]] || assigned_target[[j]]) next
+    if (assigned_source[[i]]) next
+    if (identical(assignment_mode, "one_to_one") && assigned_target[[j]]) next
+    if (identical(assignment_mode, "independent") && assigned_target[[j]] &&
+        any(anchor_pairs[, 2L] == j)) next
     assigned_source[[i]] <- TRUE
-    assigned_target[[j]] <- TRUE
+    if (identical(assignment_mode, "one_to_one")) assigned_target[[j]] <- TRUE
     match_target[[i]] <- j
     match_cost[[i]] <- cost[[e]]
   }
@@ -796,6 +910,9 @@ rapid_ma_match <- function(
       unmatched_target = setdiff(seq_len(n_target), match_target[matched]),
       candidate_edges = as.integer(length(edge_source)),
       candidate_cap = candidate_cap,
+      candidate_views = names(candidate_state),
+      view_candidate_k = view_candidate_k,
+      assignment_mode = assignment_mode,
       anchors = anchor_pairs,
       from = fit$domain_names[[source]],
       to = fit$domain_names[[target]],
