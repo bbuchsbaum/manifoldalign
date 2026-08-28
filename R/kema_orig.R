@@ -1,5 +1,9 @@
 #' Original Kernel Manifold Alignment (KEMA)
 #'
+#' `kema_orig()` is a deprecated duplicate of [kema()]. New code should call
+#' `kema()`, which runs this same fidelity-gated original formulation.
+#' `kema_orig()` is scheduled for removal in manifoldalign 1.0.0.
+#'
 #' Paper-faithful implementation of Tuia & Camps-Valls (2016) using the
 #' generalized eigenproblems:
 #'
@@ -21,6 +25,15 @@
 #' adaptation. PLoS ONE, 11(2), e0148655.
 #' @export
 kema_orig <- function(data, y, ...) {
+  .Deprecated(
+    "kema",
+    package = "manifoldalign",
+    msg = paste0(
+      "kema_orig() is deprecated because it duplicates the public KEMA API. ",
+      "Use kema(); it now runs the same fidelity-gated original formulation. ",
+      "kema_orig() is scheduled for removal in manifoldalign 1.0.0."
+    )
+  )
   UseMethod("kema_orig")
 }
 
@@ -34,14 +47,16 @@ kema_orig <- function(data, y, ...) {
 #' @param mu Weight for class-pull Laplacian in \eqn{L + \mu L_s}.
 #' @param kernel Kernel function.
 #' @param sample_frac Fraction of samples retained as landmarks (<1 => REKEMA).
-#' @param lambda Non-negative regularization added to RHS generalized matrix.
-#'   Set to `0` for strict paper formulation.
+#' @param lambda Positive Tikhonov regularization added to the RHS generalized
+#'   matrix. A positive value is required because the partial generalized
+#'   eigensolver uses that matrix as an inner-product metric.
 #' @param backend Backend for the generalized eigensolver. One of `"auto"`,
 #'   `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`.
 #' @param backend_control Optional list for backend auto-selection and fidelity
 #'   diagnostics. Supported keys: `full_exact_max_n`, `reduced_exact_max_r`,
+#'   `dense_exact_max_dim`,
 #'   `fidelity_residual_tol`, `fidelity_orth_tol`, `fidelity_action`,
-#'   `primme_tol`, and `primme_method`.
+#'   `eigencore_tol`, `eigencore_maxit`, and `kernel_rank_tol`.
 #' @export
 kema_orig.multidesign <- function(data, y,
                                   subject,
@@ -52,7 +67,7 @@ kema_orig.multidesign <- function(data, y,
                                   mu = 0.5,
                                   kernel = coskern(),
                                   sample_frac = 1,
-                                  lambda = 0,
+                                  lambda = 1e-4,
                                   backend = "auto",
                                   backend_control = NULL,
                                   ...) {
@@ -86,7 +101,7 @@ kema_orig.hyperdesign <- function(data, y,
                                   mu = 0.5,
                                   kernel = coskern(),
                                   sample_frac = 1,
-                                  lambda = 0,
+                                  lambda = 1e-4,
                                   backend = "auto",
                                   backend_control = NULL,
                                   ...) {
@@ -98,7 +113,12 @@ kema_orig.hyperdesign <- function(data, y,
   chk::chk_true(mu >= 0)
   chk::chk_range(sample_frac, c(0, 1))
   chk::chk_number(lambda)
-  chk::chk_true(lambda >= 0)
+  if (lambda <= 0) {
+    stop(
+      "lambda must be strictly positive so the KEMA denominator defines an SPD metric.",
+      call. = FALSE
+    )
+  }
   backend <- match.arg(
     backend,
     c("auto", "full_exact", "reduced_exact", "operator_exact")
@@ -113,28 +133,53 @@ kema_orig.hyperdesign <- function(data, y,
 
   # Apply preprocessing per domain and preserve fitted processor state.
   pdata <- data
-  proclist <- vector("list", length(data))
-  is_stateful_preproc <- inherits(preproc, "prepper") || inherits(preproc, "pre_processor")
-  if (is_stateful_preproc) {
-    preproc_list <- replicate(
-      length(data),
-      unserialize(serialize(preproc, connection = NULL)),
-      simplify = FALSE
-    )
+  n_domains <- length(data)
+  is_preproc_object <- inherits(preproc, "prepper") ||
+    inherits(preproc, "pre_processor")
+  if (!is.list(preproc) || is_preproc_object) {
+    preproc_list <- rep(list(preproc), n_domains)
+  } else if (length(preproc) == 1L) {
+    preproc_list <- rep(preproc, n_domains)
+  } else if (length(preproc) == n_domains) {
+    preproc_list <- preproc
   } else {
-    preproc_list <- rep(list(preproc), length(data))
+    stop(
+      "Length of preproc list (", length(preproc),
+      ") must match number of KEMA domains (", n_domains, ").",
+      call. = FALSE
+    )
   }
 
+  proclist <- vector("list", n_domains)
   for (i in seq_along(data)) {
+    Xi <- as.matrix(data[[i]]$x)
     pre_i <- preproc_list[[i]]
-    if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
-      pre_i <- unserialize(serialize(pre_i, connection = NULL))
+    if (is.null(pre_i)) {
+      pdata[[i]]$x <- Xi
+      proclist[[i]] <- NULL
+    } else if (is.function(pre_i)) {
+      pdata[[i]]$x <- pre_i(Xi)
+      proclist[[i]] <- pre_i
+    } else {
+      if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
+        pre_i <- unserialize(serialize(pre_i, connection = NULL))
+      }
+      if (exists(
+        "fit_transform",
+        envir = asNamespace("multivarious"),
+        mode = "function"
+      )) {
+        fitted <- multivarious::fit_transform(pre_i, Xi)
+        pdata[[i]]$x <- fitted$transformed
+        proclist[[i]] <- fitted$preproc
+      } else {
+        proc_template <- multivarious::prep(pre_i)
+        transformed_x <- multivarious::init_transform(proc_template, Xi)
+        pdata[[i]]$x <- transformed_x
+        proc_attr <- attr(transformed_x, "preproc")
+        proclist[[i]] <- if (is.null(proc_attr)) proc_template else proc_attr
+      }
     }
-    proc_template <- multivarious::prep(pre_i)
-    transformed_x <- multivarious::init_transform(proc_template, data[[i]]$x)
-    pdata[[i]]$x <- transformed_x
-    proc_attr <- attr(transformed_x, "preproc")
-    proclist[[i]] <- if (is.null(proc_attr)) proc_template else proc_attr
   }
   names(proclist) <- names(data)
 
@@ -161,7 +206,7 @@ kema_orig.hyperdesign <- function(data, y,
 
   # Build within-domain graph W (block diagonal).
   W_blocks <- lapply(pdata, function(dom) {
-    g <- neighborweights::graph_weights(
+    g <- adjoin::graph_weights(
       dom$x,
       weight_mode = "normalized",
       neighbor_mode = "knn",
@@ -169,11 +214,13 @@ kema_orig.hyperdesign <- function(data, y,
       type = "normal",
       sigma = sigma
     )
-    A <- neighborweights::adjacency(g)
+    A <- adjoin::adjacency(g)
     if (!methods::is(A, "sparseMatrix")) {
       A <- Matrix::Matrix(A, sparse = TRUE)
     }
-    as(A, "dgCMatrix")
+    A <- (A + Matrix::t(A)) / 2
+    Matrix::diag(A) <- 0
+    as(Matrix::drop0(A), "dgCMatrix")
   })
   W <- Matrix::bdiag(W_blocks)
   n_total <- nrow(W)
@@ -188,13 +235,19 @@ kema_orig.hyperdesign <- function(data, y,
   Ls <- Matrix::Diagonal(x = Matrix::rowSums(Ws)) - Ws
   Ld <- Matrix::Diagonal(x = Matrix::rowSums(Wd)) - Wd
 
+  component_basis <- kema_graph_component_basis(W + mu * Ws)
+
   Ks <- compute_kernels(pdata, kernel, sample_frac = sample_frac, centre_kernel = FALSE)
   Ks_sparse <- lapply(Ks, function(k) {
     if (!methods::is(k, "sparseMatrix")) {
-      Matrix::Matrix(k, sparse = TRUE)
+      k <- Matrix::Matrix(k, sparse = TRUE)
     } else {
-      k
+      k <- k
     }
+    if (sample_frac >= 1) {
+      k <- (k + Matrix::t(k)) / 2
+    }
+    Matrix::drop0(k)
   })
   r_total <- sum(vapply(Ks_sparse, ncol, integer(1)))
 
@@ -208,6 +261,13 @@ kema_orig.hyperdesign <- function(data, y,
     }
     Z_cache
   }
+
+  quotient <- build_kema_kernel_quotient(
+    Ks = Ks_sparse,
+    full_form = sample_frac >= 1,
+    component_basis = component_basis,
+    rank_tol = control$kernel_rank_tol
+  )
 
   auto_backend <- if (identical(backend, "auto")) {
     choose_kema_orig_backend(sample_frac, n_total, r_total, control)
@@ -231,6 +291,7 @@ kema_orig.hyperdesign <- function(data, y,
         candidate,
         full_exact = solve_kema_orig_full(
           Z = get_Z(),
+          quotient = quotient,
           L = L,
           Ls = Ls,
           Ld = Ld,
@@ -241,6 +302,7 @@ kema_orig.hyperdesign <- function(data, y,
         ),
         reduced_exact = solve_kema_orig_rekema(
           Z = get_Z(),
+          quotient = quotient,
           L = L,
           Ls = Ls,
           Ld = Ld,
@@ -251,6 +313,7 @@ kema_orig.hyperdesign <- function(data, y,
         ),
         operator_exact = solve_kema_orig_operator(
           Z = get_Z(),
+          quotient = quotient,
           L = L,
           Ls = Ls,
           Ld = Ld,
@@ -319,13 +382,12 @@ kema_orig.hyperdesign <- function(data, y,
       "': max_rel_residual=", signif(fidelity$max_rel_residual, 3),
       ", max_B_orth_offdiag=", signif(fidelity$max_b_orth_offdiag, 3)
     )
-    if (identical(control$fidelity_action, "error")) {
-      stop(fidelity_msg, call. = FALSE)
-    }
-    if (identical(control$fidelity_action, "warn") ||
-        identical(control$fidelity_action, "fallback")) {
-      warning(fidelity_msg, call. = FALSE)
-    }
+    stop(
+      fidelity_msg,
+      ". No KEMA fit was returned because its generalized-eigen solution ",
+      "did not meet the configured fidelity gate.",
+      call. = FALSE
+    )
   }
 
   if (identical(eig$coefficient_space, "full")) {
@@ -383,6 +445,18 @@ kema_orig.hyperdesign <- function(data, y,
   result$backend_candidates <- candidates
   result$fidelity <- list(
     passed = isTRUE(fidelity$passed),
+    eigenvalue_zero_tol = eig$zero_tol,
+    spectral_scale = eig$spectral_scale,
+    n_eigenpairs_examined = eig$n_eigenpairs_examined,
+    n_residual_rejected = eig$n_residual_rejected,
+    eigensolver = eig$eigensolver,
+    quotient_dimension = eig$eigensolver_stats$quotient_dimension,
+    kernel_rank_discarded = eig$eigensolver_stats$kernel_rank_discarded,
+    graph_nullity = eig$eigensolver_stats$graph_nullity,
+    nullity_deflated = eig$eigensolver_stats$nullity_deflated,
+    eigencore_certificate_passed = isTRUE(
+      eig$eigensolver_stats$certificate$passed
+    ),
     max_rel_residual = fidelity$max_rel_residual,
     max_b_orth_offdiag = fidelity$max_b_orth_offdiag,
     min_b_gram_diag = fidelity$min_b_gram_diag,
@@ -430,17 +504,67 @@ build_original_class_graphs <- function(labels) {
 
 #' @keywords internal
 #' @noRd
-select_nontrivial_eigenpairs <- function(values, vectors, ncomp, tol = 1e-10) {
-  non_trivial <- which(abs(values) > tol)
-  if (length(non_trivial) >= ncomp) {
-    take <- non_trivial[seq_len(ncomp)]
-  } else {
-    take <- seq_len(min(ncomp, length(values)))
+select_nontrivial_eigenpairs <- function(values, vectors, ncomp,
+                                         tol = sqrt(.Machine$double.eps),
+                                         spectral_scale = NULL,
+                                         residuals_rel = NULL,
+                                         residual_tol = Inf) {
+  finite_abs <- abs(values[is.finite(values)])
+  observed_scale <- if (length(finite_abs)) max(finite_abs) else 0
+  supplied_scale <- spectral_scale[
+    is.finite(spectral_scale) & spectral_scale >= 0
+  ]
+  spectral_scale <- max(c(observed_scale, supplied_scale, 0))
+  zero_tol <- max(100 * .Machine$double.eps, tol * spectral_scale)
+  negative <- which(is.finite(values) & values < -zero_tol)
+  if (length(negative)) {
+    stop(
+      "KEMA generalized eigenproblem returned ", length(negative),
+      " materially negative eigenvalue(s); the paper formulation requires a ",
+      "positive-semidefinite numerator. Smallest value: ",
+      signif(min(values[negative]), 6), ".",
+      call. = FALSE
+    )
   }
-  if (length(take) < ncomp) {
-    stop("Failed to extract enough eigenvectors (got ", length(take), ", need ", ncomp, ").", call. = FALSE)
+  non_trivial_mask <- is.finite(values) & values > zero_tol
+  residual_mask <- rep(TRUE, length(values))
+  if (!is.null(residuals_rel)) {
+    if (length(residuals_rel) != length(values)) {
+      stop("residuals_rel must have one value per eigenpair.", call. = FALSE)
+    }
+    residual_mask <- is.finite(residuals_rel) & residuals_rel <= residual_tol
   }
-  list(values = values[take], vectors = vectors[, take, drop = FALSE])
+  non_trivial <- which(non_trivial_mask & residual_mask)
+  non_trivial <- non_trivial[order(values[non_trivial])]
+  n_residual_rejected <- sum(non_trivial_mask & !residual_mask)
+
+  if (length(non_trivial) < ncomp) {
+    stop(
+      "Failed to extract ", ncomp, " non-trivial KEMA eigenpairs: only ",
+      length(non_trivial), " of ", length(values),
+      " returned eigenpairs exceeded the numerical-zero threshold ",
+      signif(zero_tol, 4), " and met the residual tolerance ",
+      signif(residual_tol, 4), ". The generalized problem may have a larger ",
+      "null space than anticipated; improve graph/class connectivity, add ",
+      "regularization, or request fewer components.",
+      call. = FALSE
+    )
+  }
+
+  take <- non_trivial[seq_len(ncomp)]
+  list(
+    values = values[take],
+    vectors = vectors[, take, drop = FALSE],
+    zero_tol = zero_tol,
+    spectral_scale = spectral_scale,
+    n_eigenpairs_examined = length(values),
+    n_residual_rejected = n_residual_rejected,
+    selected_residuals_rel = if (is.null(residuals_rel)) {
+      NULL
+    } else {
+      residuals_rel[take]
+    }
+  )
 }
 
 #' @keywords internal
@@ -449,11 +573,13 @@ default_kema_backend_control <- function() {
   list(
     full_exact_max_n = 1200L,
     reduced_exact_max_r = 5000L,
-    fidelity_residual_tol = 5e-4,
-    fidelity_orth_tol = 1e-3,
-    fidelity_action = "warn",
-    primme_tol = 1e-6,
-    primme_method = "PRIMME_DEFAULT_MIN_MATVECS"
+    dense_exact_max_dim = 400L,
+    fidelity_residual_tol = 1e-6,
+    fidelity_orth_tol = 1e-6,
+    fidelity_action = "fallback",
+    eigencore_tol = 1e-8,
+    eigencore_maxit = 500L,
+    kernel_rank_tol = sqrt(.Machine$double.eps)
   )
 }
 
@@ -485,21 +611,29 @@ normalize_kema_backend_control <- function(control) {
 
   out$full_exact_max_n <- as.integer(out$full_exact_max_n)
   out$reduced_exact_max_r <- as.integer(out$reduced_exact_max_r)
-  out$fidelity_action <- match.arg(
-    out$fidelity_action,
-    c("warn", "error", "fallback", "ignore")
-  )
+  out$dense_exact_max_dim <- as.integer(out$dense_exact_max_dim)
+  out$eigencore_maxit <- as.integer(out$eigencore_maxit)
+  if (length(out$fidelity_action) != 1L ||
+      !is.character(out$fidelity_action) ||
+      !out$fidelity_action %in% c("fallback", "error")) {
+    stop(
+      "backend_control$fidelity_action must be one of 'fallback' or 'error'.",
+      call. = FALSE
+    )
+  }
   chk::chk_true(out$full_exact_max_n > 2)
   chk::chk_true(out$reduced_exact_max_r > 2)
+  chk::chk_true(out$dense_exact_max_dim > 2)
   chk::chk_number(out$fidelity_residual_tol)
   chk::chk_true(out$fidelity_residual_tol > 0)
   chk::chk_number(out$fidelity_orth_tol)
   chk::chk_true(out$fidelity_orth_tol > 0)
-  chk::chk_number(out$primme_tol)
-  chk::chk_true(out$primme_tol > 0)
-  if (!is.null(out$primme_method) && !is.character(out$primme_method)) {
-    stop("backend_control$primme_method must be NULL or character.", call. = FALSE)
-  }
+  chk::chk_number(out$eigencore_tol)
+  chk::chk_true(out$eigencore_tol > 0)
+  chk::chk_true(out$eigencore_maxit > 0)
+  chk::chk_number(out$kernel_rank_tol)
+  chk::chk_true(out$kernel_rank_tol > 0)
+  chk::chk_true(out$kernel_rank_tol < 1)
 
   out
 }
@@ -542,7 +676,7 @@ kema_orig_backend_candidates <- function(requested_backend, auto_backend, sample
 
 #' @keywords internal
 #' @noRd
-compute_kema_fidelity <- function(values, vectors, A_apply, B_apply, residual_tol, orth_tol) {
+compute_kema_relative_residuals <- function(values, vectors, A_apply, B_apply) {
   V <- if (is.matrix(vectors) || methods::is(vectors, "Matrix")) {
     vectors
   } else {
@@ -561,7 +695,27 @@ compute_kema_fidelity <- function(values, vectors, A_apply, B_apply, residual_to
   resid_num <- sqrt(colSums(resid^2))
   resid_den <- sqrt(colSums(Av^2)) + abs(values) * sqrt(colSums(Bv^2))
   resid_den[resid_den < .Machine$double.eps] <- 1
-  residuals_rel <- as.numeric(resid_num / resid_den)
+  as.numeric(resid_num / resid_den)
+}
+
+#' @keywords internal
+#' @noRd
+compute_kema_fidelity <- function(values, vectors, A_apply, B_apply, residual_tol, orth_tol) {
+  V <- if (is.matrix(vectors) || methods::is(vectors, "Matrix")) {
+    vectors
+  } else {
+    matrix(vectors, ncol = 1L)
+  }
+  Bv <- B_apply(V)
+  if (!is.matrix(Bv) && !methods::is(Bv, "Matrix")) {
+    Bv <- matrix(Bv, ncol = 1L)
+  }
+  residuals_rel <- compute_kema_relative_residuals(
+    values,
+    V,
+    A_apply,
+    B_apply
+  )
 
   gram <- as.matrix(Matrix::crossprod(V, Bv))
   gram_diag <- diag(gram)
@@ -596,19 +750,279 @@ compute_kema_fidelity <- function(values, vectors, A_apply, B_apply, residual_to
   )
 }
 
+#' Exact graph-Laplacian null basis from connected components
+#'
 #' @keywords internal
 #' @noRd
-kema_primme_options <- function(control) {
-  opts <- list(tol = control$primme_tol)
-  if (!is.null(control$primme_method) && nzchar(control$primme_method)) {
-    opts$method <- control$primme_method
+kema_graph_component_basis <- function(adjacency) {
+  adjacency <- Matrix::Matrix(adjacency, sparse = TRUE)
+  adjacency <- (adjacency + Matrix::t(adjacency)) / 2
+  Matrix::diag(adjacency) <- 0
+  adjacency <- Matrix::drop0(adjacency)
+  n <- nrow(adjacency)
+  if (n < 1L) {
+    stop("KEMA graph must contain at least one sample.", call. = FALSE)
   }
-  opts
+
+  graph <- igraph::graph_from_adjacency_matrix(
+    adjacency,
+    mode = "undirected",
+    weighted = TRUE,
+    diag = FALSE
+  )
+  membership <- igraph::components(graph)$membership
+  component_sizes <- tabulate(membership, nbins = max(membership))
+  Matrix::sparseMatrix(
+    i = seq_len(n),
+    j = membership,
+    x = 1 / sqrt(component_sizes[membership]),
+    dims = c(n, length(component_sizes))
+  )
+}
+
+#' Compact coefficient basis for the numerical image of the kernel blocks
+#'
+#' @keywords internal
+#' @noRd
+kema_kernel_block_basis <- function(K, full_form, rank_tol) {
+  K <- as.matrix(K)
+  storage.mode(K) <- "double"
+
+  if (isTRUE(full_form)) {
+    if (nrow(K) != ncol(K)) {
+      stop("Full KEMA requires square kernel blocks.", call. = FALSE)
+    }
+    K <- (K + t(K)) / 2
+    decomp <- eigen(K, symmetric = TRUE)
+    scale <- max(abs(decomp$values), 0)
+    threshold <- max(100 * .Machine$double.eps, rank_tol * scale)
+    materially_negative <- decomp$values < -threshold
+    if (any(materially_negative)) {
+      stop(
+        "KEMA kernel block is not positive semidefinite; smallest eigenvalue is ",
+        signif(min(decomp$values), 6), ".",
+        call. = FALSE
+      )
+    }
+    keep <- which(decomp$values > threshold)
+    if (!length(keep)) {
+      stop("KEMA kernel block has zero numerical rank.", call. = FALSE)
+    }
+    U <- decomp$vectors[, keep, drop = FALSE]
+    return(list(
+      U = U,
+      d = decomp$values[keep],
+      V = U,
+      rank = length(keep),
+      original_rank = ncol(K),
+      threshold = threshold
+    ))
+  }
+
+  decomp <- svd(K, nu = min(dim(K)), nv = min(dim(K)))
+  scale <- max(decomp$d, 0)
+  threshold <- max(100 * .Machine$double.eps, rank_tol * scale)
+  keep <- which(decomp$d > threshold)
+  if (!length(keep)) {
+    stop("REKEMA kernel block has zero numerical rank.", call. = FALSE)
+  }
+  list(
+    U = decomp$u[, keep, drop = FALSE],
+    d = decomp$d[keep],
+    V = decomp$v[, keep, drop = FALSE],
+    rank = length(keep),
+    original_rank = ncol(K),
+    threshold = threshold
+  )
+}
+
+#' Build the KEMA quotient by kernel null directions and graph components
+#'
+#' @keywords internal
+#' @noRd
+build_kema_kernel_quotient <- function(Ks, full_form, component_basis,
+                                       rank_tol = sqrt(.Machine$double.eps)) {
+  pieces <- lapply(
+    Ks,
+    kema_kernel_block_basis,
+    full_form = full_form,
+    rank_tol = rank_tol
+  )
+  U <- Matrix::bdiag(lapply(pieces, function(x) Matrix::Matrix(x$U, sparse = TRUE)))
+  V <- Matrix::bdiag(lapply(pieces, function(x) Matrix::Matrix(x$V, sparse = TRUE)))
+  singular_values <- unlist(lapply(pieces, `[[`, "d"), use.names = FALSE)
+  H <- U %*% Matrix::Diagonal(x = singular_values)
+
+  component_basis <- Matrix::Matrix(component_basis, sparse = TRUE)
+  if (nrow(component_basis) != nrow(U)) {
+    stop("Kernel and graph-component dimensions do not match.", call. = FALSE)
+  }
+  UtC <- as.matrix(Matrix::crossprod(U, component_basis))
+  residual_gram <- as.matrix(
+    Matrix::crossprod(component_basis) - Matrix::crossprod(UtC)
+  )
+  residual_gram <- (residual_gram + t(residual_gram)) / 2
+  intersection <- eigen(residual_gram, symmetric = TRUE)
+  intersection_scale <- max(abs(intersection$values), 1)
+  intersection_tol <- max(
+    100 * .Machine$double.eps,
+    rank_tol * intersection_scale
+  )
+  keep_intersection <- which(intersection$values <= intersection_tol)
+  constraints <- if (length(keep_intersection)) {
+    component_coefficients <- intersection$vectors[
+      , keep_intersection, drop = FALSE
+    ]
+    sweep(
+      UtC %*% component_coefficients,
+      1L,
+      singular_values,
+      "/"
+    )
+  } else {
+    matrix(numeric(0), nrow = length(singular_values), ncol = 0L)
+  }
+
+  list(
+    H = H,
+    V = V,
+    constraints = constraints,
+    rank = length(singular_values),
+    original_rank = sum(vapply(pieces, `[[`, integer(1), "original_rank")),
+    discarded_rank = sum(vapply(
+      pieces,
+      function(x) x$original_rank - x$rank,
+      integer(1)
+    )),
+    graph_nullity = ncol(component_basis),
+    nullity_deflated = ncol(constraints),
+    block_ranks = vapply(pieces, `[[`, integer(1), "rank"),
+    block_thresholds = vapply(pieces, `[[`, numeric(1), "threshold")
+  )
+}
+
+#' Form and solve the nullspace-safe KEMA quotient pencil
+#'
+#' @keywords internal
+#' @noRd
+solve_kema_quotient <- function(quotient, M, Ld, lambda, ncomp, control,
+                                force_partial = FALSE,
+                                original_A_apply = NULL,
+                                original_B_apply = NULL) {
+  H <- quotient$H
+  q <- ncol(H)
+  available <- q - ncol(quotient$constraints)
+  if (available < ncomp) {
+    stop(
+      "KEMA quotient has only ", available,
+      " positive-dimensional direction(s) after nullspace deflation; need ",
+      ncomp, ".",
+      call. = FALSE
+    )
+  }
+
+  A <- as.matrix(Matrix::crossprod(H, M %*% H))
+  B <- as.matrix(
+    Matrix::crossprod(H, Ld %*% H) +
+      lambda * Matrix::Diagonal(q)
+  )
+  A <- (A + t(A)) / 2
+  B <- (B + t(B)) / 2
+  storage.mode(A) <- "double"
+  storage.mode(B) <- "double"
+
+  use_full <- !isTRUE(force_partial) && q <= control$dense_exact_max_dim
+  fit <- if (use_full) {
+    eigencore::eig_full(A, B = B, structure = eigencore::hermitian())
+  } else {
+    constraints <- quotient$constraints
+    if (!ncol(constraints)) {
+      constraints <- NULL
+    }
+    eigencore::eig_partial(
+      A,
+      B = B,
+      k = ncomp,
+      target = eigencore::smallest(),
+      method = eigencore::lobpcg(
+        maxit = control$eigencore_maxit,
+        constraints = constraints
+      ),
+      tol = control$eigencore_tol,
+      allow_dense_fallback = "never"
+    )
+  }
+
+  cert <- eigencore::certificate(fit)
+  if (!isTRUE(cert$passed) && !use_full && q <= control$dense_exact_max_dim) {
+    fit <- eigencore::eig_full(
+      A,
+      B = B,
+      structure = eigencore::hermitian()
+    )
+    cert <- eigencore::certificate(fit)
+    use_full <- TRUE
+  }
+  if (!isTRUE(cert$passed)) {
+    stop(
+      "eigencore failed to certify the KEMA quotient solve (method: ",
+      fit$method, ", max backward error: ",
+      signif(cert$max_backward_error, 4), ").",
+      call. = FALSE
+    )
+  }
+  values <- as.numeric(Re(eigencore::values(fit)))
+  vectors <- as.matrix(Re(eigencore::vectors(fit)))
+  mapped_vectors <- quotient$V %*% vectors
+  use_original_residual <- is.function(original_A_apply) &&
+    is.function(original_B_apply)
+  residuals_rel <- if (use_original_residual) {
+    compute_kema_relative_residuals(
+      values,
+      mapped_vectors,
+      A_apply = original_A_apply,
+      B_apply = original_B_apply
+    )
+  } else {
+    compute_kema_relative_residuals(
+      values,
+      vectors,
+      A_apply = function(x) A %*% x,
+      B_apply = function(x) B %*% x
+    )
+  }
+  selected <- select_nontrivial_eigenpairs(
+    values,
+    if (use_original_residual) mapped_vectors else vectors,
+    ncomp,
+    spectral_scale = max(abs(values), 0),
+    residuals_rel = residuals_rel,
+    residual_tol = control$fidelity_residual_tol
+  )
+  if (!use_original_residual) {
+    selected$vectors <- quotient$V %*% selected$vectors
+  }
+  selected$eigensolver <- if (use_full) {
+    "eigencore_dense_full"
+  } else {
+    "eigencore_lobpcg_deflated"
+  }
+  selected$eigensolver_stats <- list(
+    method = fit$method,
+    certificate = cert,
+    quotient_dimension = q,
+    original_dimension = quotient$original_rank,
+    kernel_rank_discarded = quotient$discarded_rank,
+    graph_nullity = quotient$graph_nullity,
+    nullity_deflated = quotient$nullity_deflated,
+    full_spectrum = use_full
+  )
+  selected
 }
 
 #' @keywords internal
 #' @noRd
-solve_kema_orig_full <- function(Z, L, Ls, Ld, mu, lambda, ncomp, control) {
+solve_kema_orig_full <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, control) {
   n <- nrow(Z)
   if (n != ncol(Z)) {
     stop("full_exact requires a square block-kernel matrix (set sample_frac = 1).", call. = FALSE)
@@ -617,23 +1031,23 @@ solve_kema_orig_full <- function(Z, L, Ls, Ld, mu, lambda, ncomp, control) {
     stop("ncomp must be less than total sample count for full KEMA.", call. = FALSE)
   }
 
-  A <- Z %*% (L + mu * Ls) %*% Matrix::t(Z)
-  B <- Z %*% Ld %*% Matrix::t(Z) + lambda * Matrix::Diagonal(n)
-  decomp <- do.call(
-    PRIMME::eigs_sym,
-    c(
-      list(
-        A = A,
-        NEig = min(ncomp + 1, n - 1),
-        which = "SA",
-        B = B
-      ),
-      kema_primme_options(control)
-    )
+  M <- L + mu * Ls
+  A_apply <- function(x) Z %*% (M %*% (Matrix::t(Z) %*% x))
+  B_apply <- function(x) {
+    Z %*% (Ld %*% (Matrix::t(Z) %*% x)) + lambda * x
+  }
+  selected <- solve_kema_quotient(
+    quotient,
+    M,
+    Ld,
+    lambda,
+    ncomp,
+    control,
+    original_A_apply = A_apply,
+    original_B_apply = B_apply
   )
-  selected <- select_nontrivial_eigenpairs(decomp$values, decomp$vectors, ncomp)
-  selected$A_apply <- function(x) A %*% x
-  selected$B_apply <- function(x) B %*% x
+  selected$A_apply <- A_apply
+  selected$B_apply <- B_apply
   selected$score_apply <- function(x) Z %*% x
   selected$coefficient_space <- "full"
   selected$formulation <- "eq6_full_exact"
@@ -642,29 +1056,29 @@ solve_kema_orig_full <- function(Z, L, Ls, Ld, mu, lambda, ncomp, control) {
 
 #' @keywords internal
 #' @noRd
-solve_kema_orig_rekema <- function(Z, L, Ls, Ld, mu, lambda, ncomp, control) {
+solve_kema_orig_rekema <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, control) {
   r <- ncol(Z)
   if (r <= ncomp) {
     stop("REKEMA landmark rank (", r, ") must be > ncomp (", ncomp, ").", call. = FALSE)
   }
 
-  A <- Matrix::crossprod(Z, (L + mu * Ls) %*% Z)
-  B <- Matrix::crossprod(Z, Ld %*% Z) + lambda * Matrix::Diagonal(r)
-  decomp <- do.call(
-    PRIMME::eigs_sym,
-    c(
-      list(
-        A = A,
-        NEig = min(ncomp + 1, r - 1),
-        which = "SA",
-        B = B
-      ),
-      kema_primme_options(control)
-    )
+  M <- L + mu * Ls
+  A_apply <- function(x) Matrix::crossprod(Z, M %*% (Z %*% x))
+  B_apply <- function(x) {
+    Matrix::crossprod(Z, Ld %*% (Z %*% x)) + lambda * x
+  }
+  selected <- solve_kema_quotient(
+    quotient,
+    M,
+    Ld,
+    lambda,
+    ncomp,
+    control,
+    original_A_apply = A_apply,
+    original_B_apply = B_apply
   )
-  selected <- select_nontrivial_eigenpairs(decomp$values, decomp$vectors, ncomp)
-  selected$A_apply <- function(x) A %*% x
-  selected$B_apply <- function(x) B %*% x
+  selected$A_apply <- A_apply
+  selected$B_apply <- B_apply
   selected$score_apply <- function(x) Z %*% x
   selected$coefficient_space <- "reduced"
   selected$formulation <- "eq10_reduced_exact"
@@ -673,7 +1087,7 @@ solve_kema_orig_rekema <- function(Z, L, Ls, Ld, mu, lambda, ncomp, control) {
 
 #' @keywords internal
 #' @noRd
-solve_kema_orig_operator <- function(Z, L, Ls, Ld, mu, lambda, ncomp, control) {
+solve_kema_orig_operator <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, control) {
   r <- ncol(Z)
   if (r <= ncomp) {
     stop("Operator rank (", r, ") must be > ncomp (", ncomp, ").", call. = FALSE)
@@ -710,22 +1124,17 @@ solve_kema_orig_operator <- function(Z, L, Ls, Ld, mu, lambda, ncomp, control) {
     restore_shape(matrix(as.numeric(out), nrow = r), xin)
   }
 
-  decomp <- do.call(
-    PRIMME::eigs_sym,
-    c(
-      list(
-        A = A_apply,
-        NEig = min(ncomp + 1, r - 1),
-        which = "SA",
-        B = B_apply,
-        isreal = TRUE,
-        n = r
-      ),
-      kema_primme_options(control)
-    )
+  selected <- solve_kema_quotient(
+    quotient,
+    M,
+    Ld,
+    lambda,
+    ncomp,
+    control,
+    force_partial = TRUE,
+    original_A_apply = A_apply,
+    original_B_apply = B_apply
   )
-
-  selected <- select_nontrivial_eigenpairs(decomp$values, decomp$vectors, ncomp)
   selected$A_apply <- A_apply
   selected$B_apply <- B_apply
   selected$score_apply <- function(x) Z %*% x

@@ -11,7 +11,7 @@ library(testthat)
 }
 
 test_that("ssma_align aligns near-identical domains with explicit correspondences", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
 
@@ -50,7 +50,7 @@ test_that("ssma_align aligns near-identical domains with explicit correspondence
 })
 
 test_that("ssma_align operator solver matches reduced-solver subspace on same fixture", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
   skip_if_not_installed("RSpectra")
@@ -108,7 +108,7 @@ test_that("ssma_align operator solver matches reduced-solver subspace on same fi
 })
 
 test_that("ssma_align reports serial decontamination diagnostics", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
 
@@ -155,7 +155,7 @@ test_that("ssma_align reports serial decontamination diagnostics", {
 })
 
 test_that("ssma_align accepts unquoted labels and design-column serial_index", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
 
   set.seed(20260301)

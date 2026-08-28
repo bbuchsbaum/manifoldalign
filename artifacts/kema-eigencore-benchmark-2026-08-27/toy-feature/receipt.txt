@@ -1,0 +1,5 @@
+generated: 2026-08-27T20:12:39-0400
+methods: kema_linear_label,kema_rbf_full_label,kema_rbf_reduced_label
+scenarios: linear_affine,isometric_curve,hard_nonisometric,partial_open_set,noisy_label_shift
+seeds: 1,2,3
+eigencore: 1.0.3

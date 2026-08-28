@@ -194,7 +194,11 @@ global_geo_align <- function(data, ...) {
 #' @method global_geo_align hyperdesign
 #' @param y Optional unquoted column name in design tables for label-based correspondences
 #' @param correspondences Optional data.frame with columns domain_i/index_i/domain_j/index_j
-#' @param feature_correspondence Optional list specifying spatial anchor basis settings
+#' @param feature_correspondence Optional list specifying spatial anchor basis
+#'   settings. Its `smoothness` entry builds an undirected-union kNN graph of
+#'   the anchors. Anchors with no neighbor within `3 * sigma` receive zero
+#'   smoothness penalty; the fitted object reports this policy and the number
+#'   of such isolates.
 #' @param preproc Preprocessing function or list. Default: multivarious::center()
 #' @param ncomp Number of components to extract. Default: 20
 #' @param control Control settings from global_geo_align_control()
@@ -460,6 +464,9 @@ global_geo_align.hyperdesign <- function(
         knn = sab_info$smoothness$knn,
         sigma = sab_info$smoothness$sigma,
         weight_mode = sab_info$smoothness$weight_mode,
+        symmetrization = sab_info$smoothness$symmetrization,
+        isolate_policy = sab_info$smoothness$isolate_policy,
+        n_isolates = sab_info$smoothness$n_isolates,
         laplacian = if (isTRUE(sab_info$smoothness$store_laplacian)) sab_info$smoothness$laplacian else NULL
       )
     )
@@ -1355,6 +1362,97 @@ global_geo_align.default <- function(data, ...) {
   as.numeric(stats::median(d))
 }
 
+.anchor_spatial_adjacency <- function(
+  anchors,
+  knn,
+  sigma,
+  weight_mode,
+  adjacency_fun = NULL
+) {
+  using_adjoin <- is.null(adjacency_fun)
+  if (using_adjoin) {
+    adjacency_fun <- getExportedValue("adjoin", "spatial_adjacency")
+  }
+  if (!is.function(adjacency_fun)) {
+    stop("`adjacency_fun` must be a function.", call. = FALSE)
+  }
+
+  required_formals <- c(
+    "coord_mat", "dthresh", "nnk", "weight_mode", "sigma",
+    "include_diagonal", "normalized", "stochastic"
+  )
+  missing_formals <- setdiff(required_formals, names(formals(adjacency_fun)))
+  if (length(missing_formals)) {
+    source <- if (using_adjoin) {
+      paste0("Installed adjoin ", as.character(utils::packageVersion("adjoin")))
+    } else {
+      "The supplied adjacency function"
+    }
+    stop(
+      source,
+      " has an incompatible spatial_adjacency() API; missing argument(s): ",
+      paste(missing_formals, collapse = ", "),
+      if (using_adjoin) {
+        ". Reinstall a supported adjoin release (for example, `pak::pak(\"bbuchsbaum/adjoin\")`)."
+      } else {
+        "."
+      },
+      call. = FALSE
+    )
+  }
+
+  n_anchors <- nrow(anchors)
+  adjacency <- tryCatch(
+    do.call(
+      adjacency_fun,
+      list(
+        coord_mat = anchors,
+        dthresh = 3 * sigma,
+        nnk = min(n_anchors, knn + 1L),
+        weight_mode = weight_mode,
+        sigma = sigma,
+        include_diagonal = FALSE,
+        normalized = FALSE,
+        stochastic = FALSE
+      )
+    ),
+    error = function(e) {
+      stop(
+        "Failed to build the anchor adjacency with adjoin::spatial_adjacency(): ",
+        conditionMessage(e),
+        call. = FALSE
+      )
+    }
+  )
+
+  adjacency <- tryCatch(
+    as(Matrix::Matrix(adjacency, sparse = TRUE), "dgCMatrix"),
+    error = function(e) {
+      stop("Anchor adjacency must be coercible to a sparse numeric matrix: ", conditionMessage(e), call. = FALSE)
+    }
+  )
+  if (!identical(dim(adjacency), c(n_anchors, n_anchors))) {
+    stop(
+      "Anchor adjacency has dimensions ",
+      paste(dim(adjacency), collapse = " x "),
+      "; expected ", n_anchors, " x ", n_anchors, ".",
+      call. = FALSE
+    )
+  }
+  if (length(adjacency@x) && any(!is.finite(adjacency@x) | adjacency@x < 0)) {
+    stop("Anchor adjacency weights must be finite and non-negative.", call. = FALSE)
+  }
+
+  Matrix::diag(adjacency) <- 0
+  adjacency <- Matrix::drop0(adjacency)
+
+  # spatial_adjacency() returns a directed kNN graph. Use the undirected
+  # union so a one-way neighbor relation is not lost because of row ordering.
+  adjacency <- pmax(adjacency, Matrix::t(adjacency))
+  Matrix::diag(adjacency) <- 0
+  as(Matrix::drop0(adjacency), "dgCMatrix")
+}
+
 .build_sab_matrix <- function(voxel_coords, anchors, sigma, nn_anchors) {
   nn <- RANN::nn2(data = anchors, query = voxel_coords, k = nn_anchors)
   idx <- nn$nn.idx
@@ -1406,22 +1504,15 @@ global_geo_align.default <- function(data, ...) {
     stop("`feature_correspondence$smoothness$sigma` must be positive.", call. = FALSE)
   }
 
-  S <- neighborweights::spatial_adjacency(
-    anchors,
+  S <- .anchor_spatial_adjacency(
+    anchors = anchors,
+    knn = knn,
     sigma = sigma,
-    weight_mode = weight_mode,
-    nnk = knn,
-    normalized = FALSE,
-    stochastic = FALSE,
-    handle_isolates = "self_loop"
+    weight_mode = weight_mode
   )
-  S <- Matrix::Matrix(S, sparse = TRUE)
-  S <- Matrix::forceSymmetric(S, uplo = "U")
-  S <- as(S, "dgCMatrix")
-  Matrix::diag(S) <- 0
-  S <- Matrix::drop0(S)
 
-  deg <- Matrix::rowSums(S)
+  deg <- as.numeric(Matrix::rowSums(S))
+  isolates <- deg <= .Machine$double.eps
   L <- Matrix::Diagonal(x = deg) - S
   store_laplacian <- if (is.null(smoothness_spec$store_laplacian)) FALSE else isTRUE(smoothness_spec$store_laplacian)
 
@@ -1430,6 +1521,9 @@ global_geo_align.default <- function(data, ...) {
     knn = knn,
     sigma = sigma,
     weight_mode = weight_mode,
+    symmetrization = "union",
+    isolate_policy = "zero_penalty",
+    n_isolates = as.integer(sum(isolates)),
     laplacian = L,
     store_laplacian = store_laplacian
   )

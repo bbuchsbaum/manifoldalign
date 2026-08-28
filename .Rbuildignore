@@ -6,6 +6,8 @@
 ^\.DS_Store$
 ^\.omc$
 ^\.claude$
+^\.mote$
+^\.rcmdcheck_result\.rds$
 
 # pkgdown
 ^_pkgdown\.yml$
@@ -21,6 +23,7 @@
 # Development notes and docs
 ^README\.Rmd$
 ^README\.md$
+^AGENTS\.md$
 ^CLAUDE\.md$
 ^KEMA_TEST_STATUS\.md$
 ^EXAMPLES_ADDED\.md$
@@ -41,6 +44,7 @@
 ^test_.*\.R$
 
 # Build artifacts
+^artifacts$
 ^repomix-output\.xml$
 ^repomix-output\.txt$
 ^manifoldalign\.Rcheck$

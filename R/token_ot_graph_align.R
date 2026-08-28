@@ -324,11 +324,11 @@ resolve_token_ot_graph_align_control <- function(control) {
     as.numeric(sigma)
   }
   gw <- safe_compute(
-    neighborweights::graph_weights(X, k = k_use, weight_mode = "heat",
+    adjoin::graph_weights(X, k = k_use, weight_mode = "heat",
                                    sigma = sigma_use, neighbor_mode = "knn"),
     "Graph construction failed in token_ot_graph_align"
   )
-  A <- neighborweights::adjacency(gw)
+  A <- adjoin::adjacency(gw)
   A <- (A + Matrix::t(A)) / 2
   Matrix::diag(A) <- 0
   A <- Matrix::drop0(methods::as(A, "dgCMatrix"))

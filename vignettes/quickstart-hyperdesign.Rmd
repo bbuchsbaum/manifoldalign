@@ -1,8 +1,10 @@
 ---
 title: 'Quickstart: Building a hyperdesign and running alignments'
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{Quickstart: Building a hyperdesign and running alignments}
-  %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Quickstart: Building a hyperdesign and running alignments}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
   preset: homage
@@ -84,7 +86,7 @@ kema_fit <- kema(
   ncomp = 2,
   knn = 3,
   sigma = 0.8,
-  solver = "regression",
+  solver = "exact",
   preproc = multivarious::pass()
 )
 ```

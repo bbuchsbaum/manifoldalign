@@ -245,7 +245,7 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
   
   bases <- lapply(seq_along(strata), function(stratum_idx) {
     stratum <- strata[[stratum_idx]]
-    # Ensure stratum$x is a matrix for neighborweights
+    # Ensure stratum$x is a matrix for adjoin
     if (!is.matrix(stratum$x)) {
       stratum$x <- as.matrix(stratum$x)
       if (!is.matrix(stratum$x)) {
@@ -262,7 +262,7 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
     # Auto-tune sigma for graph construction via median distance heuristic
     sigma_g <- tryCatch(choose_sigma(stratum$x), error = function(e) 0.5)
     graph_weights <- tryCatch(
-      neighborweights::graph_weights(
+      adjoin::graph_weights(
         stratum$x,
         weight_mode = "normalized",
         neighbor_mode = "knn",
@@ -275,7 +275,7 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
       }
     )
 
-    adj_matrix <- neighborweights::adjacency(graph_weights)
+    adj_matrix <- adjoin::adjacency(graph_weights)
     adj_matrix <- (adj_matrix + Matrix::t(adj_matrix)) / 2
     adj_matrix <- Matrix::drop0(adj_matrix)
 

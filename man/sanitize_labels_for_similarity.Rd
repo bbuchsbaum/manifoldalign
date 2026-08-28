@@ -17,7 +17,7 @@ Vector with the same length and names as `labels` but with all
 Ensures there are no NA values passed into simfun by replacing each missing
 label with a unique placeholder. Using unique placeholders prevents all
 unlabeled samples from being treated as the same class while still keeping
-the input compatible with functions like neighborweights::binary_label_matrix,
+the input compatible with functions like adjoin::binary_label_matrix,
 which cannot accept NA values.
 }
 \keyword{internal}

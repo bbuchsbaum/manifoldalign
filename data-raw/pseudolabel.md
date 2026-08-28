@@ -121,7 +121,7 @@ simfun_sparse <- function(lab) {
   if (sum(good) <= 1)                # nothing to link
     return(Matrix::sparseMatrix(i = integer(0), j = integer(0),
                                 dims = c(length(lab), length(lab))))
-  M <- neighborweights::binary_label_matrix(lab[good],
+  M <- adjoin::binary_label_matrix(lab[good],
                                             lab[good],
                                             type = "s")
   ## embed into full-size sparse matrix
@@ -136,7 +136,7 @@ disfun_sparse <- function(lab) {
   if (sum(good) <= 1)
     return(Matrix::sparseMatrix(i = integer(0), j = integer(0),
                                 dims = c(length(lab), length(lab))))
-  M <- neighborweights::binary_label_matrix(lab[good],
+  M <- adjoin::binary_label_matrix(lab[good],
                                             lab[good],
                                             type = "d")
   Matrix::sparseMatrix(i = row(M)[M != 0],
@@ -148,7 +148,7 @@ disfun_sparse <- function(lab) {
 
 *   **Key considerations:**
     1.  **Importance of `is.na()`:** The code correctly uses `is.na()` to create the sparse matrices. This skips all the samples that have `NA` (which is what you want).
-    2.  **`neighborweights::binary_label_matrix`:** This is the core function for building the `Ws` and `Wd` graphs. It generates the "pull" and "push" edges based on the pseudo-labels. Ensure this package is correctly installed and working.
+    2.  **`adjoin::binary_label_matrix`:** This is the core function for building the `Ws` and `Wd` graphs. It generates the "pull" and "push" edges based on the pseudo-labels. Ensure this package is correctly installed and working.
 
 ##### 2.4. Step 4: Running KEMA with the Augmented Labels
 

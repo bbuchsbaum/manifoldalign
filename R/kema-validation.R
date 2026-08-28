@@ -1,429 +1,288 @@
-# TICKET S7: Advanced Numerical Validation Functions for KEMA
-# 
-# This file provides functions to validate KEMA implementation against
-# the mathematical specifications in Tuia & Camps-Valls (2016).
-
-#' Extract Eigenvalues from KEMA Solver
-#' 
-#' This function extracts eigenvalues from the KEMA generalized eigenvalue problem
-#' to enable validation against paper specifications.
-#' 
-#' @param strata List of data strata
-#' @param labels Vector of class labels
-#' @param kernel Kernel function
-#' @param knn Number of nearest neighbors
-#' @param u Trade-off parameter
-#' @param lambda Regularization parameter
-#' @param ncomp Number of components
-#' @param solver Solver method
-#' @return List containing eigenvalues and related validation metrics
-#' @keywords internal
-extract_kema_eigenvalues <- function(strata, labels, kernel = kernlab::rbfdot(sigma = 0.1), 
-                                     knn = 5, u = 0.5, lambda = 0, ncomp = 3, 
-                                     solver = "exact") {
-  
-  # Compute similarity graphs
-  Sl <- compute_local_similarity(strata, labels, knn, 
-                                 weight_mode = "normalized", 
-                                 type = "normal",  
-                                 sigma = 0.73,
-                                 repulsion = FALSE)
-  
-  # Class similarity
-  Ws <- neighborweights::binary_label_matrix(labels)
-  
-  # Dissimilarity graph using labeled pairs only (paper-faithful)
-  label_vec <- as.character(labels)
-  labeled_idx <- which(!is.na(label_vec))
-  Wd <- Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0),
-                              dims = c(length(labels), length(labels)))
-  if (length(labeled_idx) > 1) {
-    labs <- label_vec[labeled_idx]
-    dissim <- outer(labs, labs, FUN = function(a, b) as.integer(a != b))
-    Wd[labeled_idx, labeled_idx] <- Matrix::Matrix(dissim, sparse = TRUE)
-    Matrix::diag(Wd) <- 0
-  }
-  if (!methods::is(Wd, "dgCMatrix")) {
-    Wd <- as(Wd, "dgCMatrix")
-  }
-  
-  # Normalize graphs
-  G <- normalize_graphs(Sl, Ws, Wd)
-  
-  # Compute kernels
-  Ks <- compute_kernels(strata, kernel, sample_frac = 1)
-  Z <- Matrix::bdiag(Ks)
-  
-  # Compute Laplacians
-  Lap <- compute_laplacians(G$Ws, G$Wr, G$W, G$Wd, use_laplacian = FALSE)
-  
-  # Extract eigenvalues from the exact formulation
-  if (solver == "exact") {
-    # CORRECTED FORMULATION (from Ticket 1):
-    # A = u*L + (1-u)*Ls  (pull towards manifold structure and same-class samples)
-    # B = lambda*I  (regularization only for validation)
-    
-    A_laplacian <- u * Lap$L + (1-u) * Lap$Ls
-    B_laplacian <- lambda * Matrix::Diagonal(nrow(Lap$L))
-    
-    # Solve the generalized eigenvalue problem A*x = lambda*B*x
-    # For validation, we solve the reduced problem directly
-    A_full <- Z %*% A_laplacian %*% Matrix::t(Z)
-    B_full <- Z %*% B_laplacian %*% Matrix::t(Z)
-    
-    # Extract eigenvalues using PRIMME
-    decomp <- tryCatch({
-      PRIMME::eigs_sym(A_full, NEig = min(ncomp + 5, nrow(A_full) - 1), 
-                       which = "SA", B = B_full)
-    }, error = function(e) {
-      warning("Eigenvalue extraction failed: ", e$message)
-      return(list(values = rep(NA, ncomp), vectors = NULL))
-    })
-    
-    # Filter out trivial eigenvalues (near zero)
-    non_trivial_mask <- abs(decomp$values) > 1e-10
-    eigenvals <- decomp$values[non_trivial_mask]
-    
-    return(list(
-      eigenvalues = eigenvals,
-      n_trivial = sum(!non_trivial_mask),
-      solver_used = "exact",
-      A_norm = Matrix::norm(A_laplacian, "F"),
-      B_norm = Matrix::norm(B_laplacian, "F")
-    ))
-    
-  } else {
-    # For regression solver, eigenvalues come from the pull graph only
-    A_pull <- u * Lap$L + (1-u) * Lap$Ls
-    
-    decomp <- tryCatch({
-      PRIMME::eigs_sym(A_pull, NEig = min(ncomp + 5, nrow(A_pull) - 1), which = "SA")
-    }, error = function(e) {
-      warning("Eigenvalue extraction failed: ", e$message)
-      return(list(values = rep(NA, ncomp), vectors = NULL))
-    })
-    
-    # Filter out trivial eigenvalues
-    non_trivial_mask <- abs(decomp$values) > 1e-10
-    eigenvals <- decomp$values[non_trivial_mask]
-    
-    return(list(
-      eigenvalues = eigenvals,
-      n_trivial = sum(!non_trivial_mask),
-      solver_used = "regression",
-      A_norm = Matrix::norm(A_pull, "F")
-    ))
-  }
-}
-
-#' Generate Synthetic Two-Domain Spiral Data
+#' Generate a Synthetic Two-Domain Spiral Fixture
 #'
-#' Creates the synthetic spiral dataset used in KEMA paper Figure 2
-#' for numerical validation.
+#' Creates a deterministic two-domain spiral fixture inspired by the qualitative
+#' examples used in manifold-alignment papers. It is not a digitized or exact
+#' reproduction of a published KEMA benchmark.
 #'
-#' @param n_per_domain Number of samples per domain
-#' @param noise_level Gaussian noise standard deviation
-#' @param seed Random seed for reproducibility
-#' @return List with domain data and labels
+#' @param n_per_domain Number of samples per domain.
+#' @param noise_level Gaussian noise standard deviation.
+#' @param seed Random seed for reproducibility.
+#' @return A list with domain data, labels, and combined strata.
 #' @examples
 #' data <- generate_spiral_validation_data(n_per_domain = 50, seed = 123)
 #' str(data)
 #' @export
-generate_spiral_validation_data <- function(n_per_domain = 100, noise_level = 0.1, seed = 42) {
+generate_spiral_validation_data <- function(n_per_domain = 100,
+                                            noise_level = 0.1,
+                                            seed = 42) {
   set.seed(seed)
-  
-  # Domain 1: Spiral in 2D
-  t1 <- seq(0, 4*pi, length.out = n_per_domain)
+
+  t <- seq(0, 4 * pi, length.out = n_per_domain)
   x1 <- cbind(
-    t1 * cos(t1) + rnorm(n_per_domain, 0, noise_level),
-    t1 * sin(t1) + rnorm(n_per_domain, 0, noise_level)
+    t * cos(t) + stats::rnorm(n_per_domain, 0, noise_level),
+    t * sin(t) + stats::rnorm(n_per_domain, 0, noise_level)
   )
-  
-  # Domain 2: Spiral in 2D (rotated and scaled)
-  t2 <- seq(0, 4*pi, length.out = n_per_domain)
   x2 <- cbind(
-    0.8 * t2 * cos(t2 + pi/4) + rnorm(n_per_domain, 0, noise_level),
-    0.8 * t2 * sin(t2 + pi/4) + rnorm(n_per_domain, 0, noise_level)
+    0.8 * t * cos(t + pi / 4) + stats::rnorm(n_per_domain, 0, noise_level),
+    0.8 * t * sin(t + pi / 4) + stats::rnorm(n_per_domain, 0, noise_level)
   )
-  
-  # Create labels based on spiral position (early vs late in spiral)
-  labels1 <- ifelse(t1 < 2*pi, "early", "late")
-  labels2 <- ifelse(t2 < 2*pi, "early", "late")
-  
-  # Create strata format
+  labels1 <- ifelse(t < 2 * pi, "early", "late")
+  labels2 <- ifelse(t < 2 * pi, "early", "late")
+
   strata <- list(
     list(x = x1, design = data.frame(labels = labels1)),
     list(x = x2, design = data.frame(labels = labels2))
   )
-  
-  all_labels <- c(labels1, labels2)
-  
-  return(list(
+
+  list(
     strata = strata,
-    labels = all_labels,
-    domain1 = list(x = x1, design = data.frame(labels = labels1)),
-    domain2 = list(x = x2, design = data.frame(labels = labels2))
-  ))
-}
-
-#' Validate KEMA Eigenvalues Against Paper Specifications
-#' 
-#' Tests whether KEMA produces eigenvalues matching those reported
-#' in Figure 2 of Tuia & Camps-Valls (2016).
-#' 
-#' @param expected_eigenvals Expected eigenvalue ratios from paper (default: c(0.82, 0.41))
-#' @param tolerance Numerical tolerance for comparison
-#' @param n_per_domain Number of samples per domain for test
-#' @return List with validation results
-#' @examples
-#' \donttest{
-#' result <- validate_kema_eigenvalues()
-#' print(result$success)
-#' }
-#' @export
-validate_kema_eigenvalues <- function(expected_eigenvals = c(0.82, 0.41), 
-                                      tolerance = 0.1, n_per_domain = 100) {
-  
-  # Generate test data
-  data <- generate_spiral_validation_data(n_per_domain = n_per_domain, 
-                                          noise_level = 0.05, seed = 42)
-  
-  # Extract eigenvalues
-  eigenval_result <- extract_kema_eigenvalues(
-    strata = data$strata,
-    labels = data$labels,
-    kernel = kernlab::rbfdot(sigma = 0.1),
-    knn = 5,
-    u = 0.5,
-    lambda = 0,
-    ncomp = length(expected_eigenvals),
-    solver = "exact"
+    labels = c(labels1, labels2),
+    domain1 = strata[[1L]],
+    domain2 = strata[[2L]]
   )
-  
-  if (any(is.na(eigenval_result$eigenvalues))) {
-    return(list(
-      success = FALSE,
-      message = "Failed to extract eigenvalues",
-      eigenvalues = eigenval_result$eigenvalues
-    ))
-  }
-  
-  # Compare with expected values
-  computed_eigenvals <- eigenval_result$eigenvalues[1:length(expected_eigenvals)]
-  differences <- abs(computed_eigenvals - expected_eigenvals)
-  within_tolerance <- all(differences <= tolerance)
-  
-  return(list(
-    success = within_tolerance,
-    computed_eigenvalues = computed_eigenvals,
-    expected_eigenvalues = expected_eigenvals,
-    differences = differences,
-    tolerance = tolerance,
-    max_difference = max(differences),
-    solver_info = eigenval_result
+}
+
+#' Withdrawn KEMA Paper-Eigenvalue Validator
+#'
+#' This compatibility shim is retained so historical callers receive an
+#' explicit failure. The former routine did not reproduce a documented paper
+#' fixture and solved a different generalized problem whose right-hand side was
+#' only `lambda * I`; its claimed comparison with paper eigenvalues was therefore
+#' not valid accuracy evidence.
+#'
+#' @param expected_eigenvals Deprecated and ignored.
+#' @param tolerance Deprecated and ignored.
+#' @param n_per_domain Deprecated and ignored.
+#' @return This function emits a deprecation warning and then errors.
+#' @seealso [run_kema_validation_suite()]
+#' @examples
+#' \dontrun{
+#' validate_kema_eigenvalues()
+#' }
+#' @export
+validate_kema_eigenvalues <- function(expected_eigenvals = c(0.82, 0.41),
+                                      tolerance = 0.1,
+                                      n_per_domain = 100) {
+  .Deprecated(
+    msg = paste0(
+      "validate_kema_eigenvalues() is deprecated and withdrawn because it ",
+      "did not reproduce a documented paper fixture or the implemented KEMA ",
+      "generalized eigenproblem. Use run_kema_validation_suite()."
+    )
+  )
+  stop(
+    "Historical KEMA paper-eigenvalue validation is invalid. Use the ",
+    "fidelity-gated residual and backend-agreement checks in ",
+    "run_kema_validation_suite().",
+    call. = FALSE
+  )
+}
+
+#' Withdrawn KEMA Out-of-Sample Reconstruction Validator
+#'
+#' This compatibility shim is retained temporarily so existing callers receive
+#' an explicit failure instead of a fabricated validation score. The former
+#' implementation did not fit KEMA or evaluate held-out predictions; it returned
+#' `expected_error` plus random noise and has therefore been withdrawn.
+#'
+#' @param expected_error Deprecated and ignored.
+#' @param tolerance Deprecated and ignored.
+#' @param test_fraction Deprecated and ignored.
+#' @return This function emits a deprecation warning and then errors.
+#' @details
+#' No direct reconstruction replacement is currently available because KEMA's
+#' out-of-sample projection has not passed an independent reconstruction oracle.
+#' Use [cv_alignment_rows()] for leakage-safe held-out alignment scoring.
+#' Historical results from this function are invalid.
+#' @seealso [cv_alignment_rows()]
+#' @examples
+#' \dontrun{
+#' validate_out_of_sample_reconstruction()
+#' }
+#' @export
+validate_out_of_sample_reconstruction <- function(expected_error = 0.14,
+                                                  tolerance = 0.05,
+                                                  test_fraction = 0.2) {
+  .Deprecated(
+    msg = paste0(
+      "validate_out_of_sample_reconstruction() is deprecated and withdrawn ",
+      "because it did not fit KEMA or evaluate held-out predictions. ",
+      "Use cv_alignment_rows() for leakage-safe held-out alignment scoring."
+    )
+  )
+  stop(
+    "KEMA out-of-sample reconstruction validation is withdrawn until a ",
+    "verified OOS predictor and independent reconstruction oracle are available.",
+    call. = FALSE
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.kema_validation_hyperdesign <- function(data) {
+  multidesign::hyperdesign(list(
+    domain1 = multidesign::multidesign(
+      data$domain1$x,
+      data.frame(labels = factor(data$domain1$design$labels))
+    ),
+    domain2 = multidesign::multidesign(
+      data$domain2$x,
+      data.frame(labels = factor(data$domain2$design$labels))
+    )
   ))
 }
 
-#' Test Out-of-Sample Reconstruction Accuracy
-#' 
-#' Validates KEMA's out-of-sample reconstruction capability against
-#' the L2 error reported in the paper appendix.
+#' Run Enforced KEMA Numerical Validation
 #'
-#' @param expected_error Expected L2 reconstruction error (default: 0.14)
-#' @param tolerance Numerical tolerance for comparison
-#' @param test_fraction Fraction of data to use for testing
-#' @return List with reconstruction validation results
-#' @examples
-#' \donttest{
-#' result <- validate_out_of_sample_reconstruction()
-#' print(result$success)
-#' }
-#' @export
-validate_out_of_sample_reconstruction <- function(expected_error = 0.14, 
-                                                  tolerance = 0.05, 
-                                                  test_fraction = 0.2) {
-  
-  # Generate test data
-  data <- generate_spiral_validation_data(n_per_domain = 100, 
-                                          noise_level = 0.1, seed = 123)
-  
-  n_total <- length(data$labels)
-  n_test <- round(test_fraction * n_total)
-  
-  # Split data into training and test sets
-  test_indices <- sample(n_total, n_test)
-  train_indices <- setdiff(1:n_total, test_indices)
-  
-  # Create training data
-  train_strata <- list()
-  train_labels <- c()
-  
-  # Split each domain
-  domain1_size <- nrow(data$domain1$x)
-  domain1_test <- test_indices[test_indices <= domain1_size]
-  domain1_train <- setdiff(1:domain1_size, domain1_test)
-  
-  domain2_test <- test_indices[test_indices > domain1_size] - domain1_size
-  domain2_train <- setdiff(1:nrow(data$domain2$x), domain2_test)
-  
-  if (length(domain1_train) > 0) {
-    train_strata[[1]] <- list(
-      x = data$domain1$x[domain1_train, , drop = FALSE],
-      labels = data$domain1$labels[domain1_train]
-    )
-    train_labels <- c(train_labels, data$domain1$labels[domain1_train])
-  }
-  
-  if (length(domain2_train) > 0) {
-    train_strata[[length(train_strata) + 1]] <- list(
-      x = data$domain2$x[domain2_train, , drop = FALSE],
-      labels = data$domain2$labels[domain2_train]
-    )
-    train_labels <- c(train_labels, data$domain2$labels[domain2_train])
-  }
-  
-  # Train KEMA on training data
-  tryCatch({
-    # This is a simplified validation - full implementation would require
-    # proper out-of-sample projection capabilities
-    
-    # For now, we return a placeholder result
-    computed_error <- expected_error + rnorm(1, 0, 0.01)  # Simulate small variation
-    
-    within_tolerance <- abs(computed_error - expected_error) <= tolerance
-    
-    return(list(
-      success = within_tolerance,
-      computed_error = computed_error,
-      expected_error = expected_error,
-      difference = abs(computed_error - expected_error),
-      tolerance = tolerance,
-      message = "Out-of-sample reconstruction validation (simplified implementation)"
-    ))
-    
-  }, error = function(e) {
-    return(list(
-      success = FALSE,
-      message = paste("Out-of-sample validation failed:", e$message),
-      computed_error = NA
-    ))
-  })
-}
-
-#' Comprehensive KEMA Numerical Validation
-#' 
-#' Runs all numerical validation tests for KEMA implementation.
-#' 
-#' @param verbose Whether to print detailed results
-#' @return List with all validation results
+#' Fits deterministic KEMA fixtures and records the same numerical contracts
+#' required of every returned fit: generalized-eigen backward residual,
+#' B-orthogonality, numerical-zero exclusion, and agreement between matrix and
+#' operator backends up to subspace indeterminacy.
+#'
+#' @param verbose Whether to print a concise report.
+#' @return A list containing `fidelity_validation`, `backend_agreement`,
+#'   `withdrawn_validations`, and `overall_success`.
+#' @details
+#' Withdrawn paper-eigenvalue, regression-solver, and fabricated reconstruction
+#' checks are reported for auditability but do not contribute to
+#' `overall_success`.
 #' @examples
 #' \donttest{
 #' results <- run_kema_validation_suite(verbose = FALSE)
-#' print(results$overall_success)
+#' results$overall_success
 #' }
 #' @export
 run_kema_validation_suite <- function(verbose = TRUE) {
-  
   if (verbose) {
-    cat("Running KEMA Numerical Validation Suite\n")
-    cat("=======================================\n\n")
+    cat("Running enforced KEMA numerical validation\n")
   }
-  
-  results <- list()
-  
-  # Test 1: Eigenvalue validation
-  if (verbose) cat("1. Validating eigenvalues against paper specifications...\n")
-  results$eigenvalue_validation <- tryCatch({
-    validate_kema_eigenvalues()
-  }, error = function(e) {
-    list(success = FALSE, message = paste("Eigenvalue validation failed:", e$message))
-  })
-  
-  if (verbose) {
-    if (results$eigenvalue_validation$success) {
-          cat("   (checkmark) Eigenvalues match paper specifications\n")
-  } else {
-    cat("   (X) Eigenvalue validation failed\n")
-      cat("     Message:", results$eigenvalue_validation$message, "\n")
-    }
-  }
-  
-  # Test 2: Out-of-sample reconstruction
-  if (verbose) cat("2. Validating out-of-sample reconstruction accuracy...\n")
-  results$reconstruction_validation <- tryCatch({
-    validate_out_of_sample_reconstruction()
-  }, error = function(e) {
-    list(success = FALSE, message = paste("Reconstruction validation failed:", e$message))
-  })
-  
-  if (verbose) {
-    if (results$reconstruction_validation$success) {
-          cat("   (checkmark) Out-of-sample reconstruction meets accuracy requirements\n")
-  } else {
-    cat("   (X) Reconstruction validation failed\n")
-      cat("     Message:", results$reconstruction_validation$message, "\n")
-    }
-  }
-  
-  # Test 3: Solver consistency
-  if (verbose) cat("3. Testing solver method consistency...\n")
-  results$solver_consistency <- tryCatch({
-    data <- generate_spiral_validation_data(n_per_domain = 50, seed = 456)
-    
-    # Test both solvers
-    # Create multidesign objects
-    md1 <- multidesign::multidesign(data$domain1$x, data.frame(labels = data$domain1$labels))
-    md2 <- multidesign::multidesign(data$domain2$x, data.frame(labels = data$domain2$labels))
-    
-    # Create hyperdesign
-    hd <- multidesign::hyperdesign(list(domain1 = md1, domain2 = md2))
-    
-    kema_exact <- kema.hyperdesign(
-      data = hd, y = labels, ncomp = 2, solver = "exact",
-      lambda = 0.001, knn = 3, u = 0.5
+
+  fidelity_validation <- tryCatch({
+    data <- generate_spiral_validation_data(
+      n_per_domain = 30,
+      noise_level = 0.05,
+      seed = 42
     )
-    
-    kema_regression <- kema.hyperdesign(
-      data = hd, y = labels, ncomp = 2, solver = "regression",
-      lambda = 0.001, knn = 3, u = 0.5
+    hd <- .kema_validation_hyperdesign(data)
+    fit <- kema(
+      hd,
+      y = labels,
+      ncomp = 2,
+      knn = 5,
+      kernel = kernlab::rbfdot(sigma = 0.5),
+      lambda = 1e-3,
+      backend = "full_exact"
     )
-    
-    # Check correlation between first components
-    correlation <- cor(kema_exact$s[,1], kema_regression$s[,1])
-    
+
+    success <- isTRUE(fit$fidelity$passed) &&
+      fit$fidelity$max_rel_residual <= 1e-6 &&
+      fit$fidelity$max_b_orth_offdiag <= 1e-6 &&
+      all(fit$eigenvalues$values > fit$fidelity$eigenvalue_zero_tol)
     list(
-      success = abs(correlation) > 0.8,
-      correlation = correlation,
-      message = paste("Solver correlation:", round(correlation, 3))
+      success = success,
+      backend = fit$backend,
+      eigensolver = fit$fidelity$eigensolver,
+      max_rel_residual = fit$fidelity$max_rel_residual,
+      max_b_orth_offdiag = fit$fidelity$max_b_orth_offdiag,
+      eigenvalue_zero_tol = fit$fidelity$eigenvalue_zero_tol,
+      eigenvalues = fit$eigenvalues$values
     )
-    
   }, error = function(e) {
-    list(success = FALSE, message = paste("Solver consistency test failed:", e$message))
+    list(success = FALSE, message = conditionMessage(e))
   })
-  
-  if (verbose) {
-    if (results$solver_consistency$success) {
-          cat("   (checkmark) Solver methods produce consistent results\n")
-  } else {
-    cat("   (X) Solver consistency test failed\n")
-      cat("     Message:", results$solver_consistency$message, "\n")
+
+  backend_agreement <- tryCatch({
+    data <- generate_spiral_validation_data(
+      n_per_domain = 20,
+      noise_level = 0.05,
+      seed = 91
+    )
+    hd <- .kema_validation_hyperdesign(data)
+    fit_backend <- function(backend) {
+      kema(
+        hd,
+        y = labels,
+        ncomp = 2,
+        knn = 4,
+        kernel = kernlab::rbfdot(sigma = 0.5),
+        lambda = 1e-3,
+        backend = backend
+      )
     }
-  }
-  
-  # Summary
-  all_passed <- all(sapply(results, function(x) x$success))
-  
+    full <- fit_backend("full_exact")
+    operator <- fit_backend("operator_exact")
+
+    Q_full <- qr.Q(qr(as.matrix(full$s)))
+    Q_operator <- qr.Q(qr(as.matrix(operator$s)))
+    correlations <- svd(
+      crossprod(Q_full, Q_operator),
+      nu = 0,
+      nv = 0
+    )$d
+    eigenvalue_error <- max(abs(
+      full$eigenvalues$values - operator$eigenvalues$values
+    ))
+    success <- isTRUE(full$fidelity$passed) &&
+      isTRUE(operator$fidelity$passed) &&
+      min(correlations) >= 1 - 1e-6 &&
+      eigenvalue_error <= 1e-6
+    list(
+      success = success,
+      canonical_correlations = correlations,
+      max_eigenvalue_error = eigenvalue_error,
+      full_max_rel_residual = full$fidelity$max_rel_residual,
+      operator_max_rel_residual = operator$fidelity$max_rel_residual
+    )
+  }, error = function(e) {
+    list(success = FALSE, message = conditionMessage(e))
+  })
+
+  withdrawn_validations <- list(
+    paper_eigenvalue_ratios = list(
+      status = "withdrawn",
+      reason = paste0(
+        "The former validator did not reproduce a documented paper fixture ",
+        "and solved the wrong generalized right-hand side."
+      )
+    ),
+    regression_solver_consistency = list(
+      status = "withdrawn",
+      reason = paste0(
+        "solver='regression' never selected a distinct implementation, so ",
+        "agreement with solver='exact' was tautological."
+      )
+    ),
+    out_of_sample_reconstruction = list(
+      status = "withdrawn",
+      reason = paste0(
+        "The former routine returned expected_error plus random noise without ",
+        "fitting KEMA or evaluating held-out predictions."
+      ),
+      replacement = "cv_alignment_rows"
+    )
+  )
+
+  overall_success <- isTRUE(fidelity_validation$success) &&
+    isTRUE(backend_agreement$success)
   if (verbose) {
-    cat("\nValidation Summary:\n")
-    cat("==================\n")
-    if (all_passed) {
-      cat("(checkmark) All validation tests passed\n")
-    } else {
-      cat("(X) Some validation tests failed\n")
-    }
-    cat("\n")
+    cat(
+      "  fidelity gate: ",
+      if (isTRUE(fidelity_validation$success)) "PASS" else "FAIL",
+      "\n",
+      sep = ""
+    )
+    cat(
+      "  backend agreement: ",
+      if (isTRUE(backend_agreement$success)) "PASS" else "FAIL",
+      "\n",
+      sep = ""
+    )
   }
-  
-  results$overall_success <- all_passed
-  return(results)
-} 
+
+  list(
+    fidelity_validation = fidelity_validation,
+    backend_agreement = backend_agreement,
+    withdrawn_validations = withdrawn_validations,
+    overall_success = overall_success
+  )
+}

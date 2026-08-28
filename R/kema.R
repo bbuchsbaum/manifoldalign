@@ -7,7 +7,6 @@
 #' @importFrom rlang enquo !!
 #' @importFrom purrr map
 #' @importFrom coop cosine
-#' @importFrom neighborweights graph_weights class_graph repulsion_graph binary_label_matrix adjacency
 #' @importFrom methods new is as
 #' @import Matrix
 #' @keywords internal
@@ -259,10 +258,10 @@ compute_local_similarity <- function(strata, y, knn, weight_mode, type, sigma, r
     labs <- x$design[[y_name]]
     
     # SEMI-SUPERVISED: Handle missing labels
-    # neighborweights functions can handle NA values in labels
+    # adjoin functions can handle NA values in labels
     # but we need to ensure they're passed through correctly
     
-    g <- neighborweights::graph_weights(x$x,
+    g <- adjoin::graph_weights(x$x,
                                         weight_mode=weight_mode,
                                         neighbor_mode="knn",
                                         k=knn,
@@ -271,7 +270,7 @@ compute_local_similarity <- function(strata, y, knn, weight_mode, type, sigma, r
     
     # Handle NA labels in class graph
     cg <- tryCatch({
-      neighborweights::class_graph(labs)
+      adjoin::class_graph(labs)
     }, error = function(e) {
       # If class_graph fails with NA labels, create empty sparse matrix
       n <- length(labs)
@@ -282,7 +281,7 @@ compute_local_similarity <- function(strata, y, knn, weight_mode, type, sigma, r
     
     if (repulsion) {
       r <- tryCatch({
-        neighborweights::repulsion_graph(g, cg, method="weighted")
+        adjoin::repulsion_graph(g, cg, method="weighted")
       }, error = function(e) {
         # If repulsion_graph fails, create empty repulsion matrix
         n <- length(labs)
@@ -290,10 +289,10 @@ compute_local_similarity <- function(strata, y, knn, weight_mode, type, sigma, r
                 "Creating empty repulsion graph. Error: ", e$message, call. = FALSE)
         Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0), dims = c(n, n))
       })
-      list(G=neighborweights::adjacency(g), R=neighborweights::adjacency(r))
+      list(G=adjoin::adjacency(g), R=adjoin::adjacency(r))
     } else {
       list(
-        G = neighborweights::adjacency(g),
+        G = adjoin::adjacency(g),
         R = Matrix::sparseMatrix(
           i = integer(0),
           j = integer(0),
@@ -445,7 +444,7 @@ compute_between_graph <- function(strata, y, dfun=NULL) {
     # Sanitize labels before constructing between-class graph to avoid NA indices
     all_dlabels <- unlist(dlabels)
     all_dlabels[is.na(all_dlabels)] <- "UNLABELED"
-    neighborweights::binary_label_matrix(all_dlabels, all_dlabels, type="d")
+    adjoin::binary_label_matrix(all_dlabels, all_dlabels, type="d")
   } else {
     dlabels <- unlist(lapply(strata, function(s) {
       s$design[[y_name]]
@@ -578,7 +577,7 @@ normalize_graphs <- function(Sl, Ws, Wd) {
 #' Ensures there are no NA values passed into simfun by replacing each missing
 #' label with a unique placeholder. Using unique placeholders prevents all
 #' unlabeled samples from being treated as the same class while still keeping
-#' the input compatible with functions like neighborweights::binary_label_matrix,
+#' the input compatible with functions like adjoin::binary_label_matrix,
 #' which cannot accept NA values.
 #'
 #' @param labels Vector of labels that may contain NA entries
@@ -606,7 +605,50 @@ sanitize_labels_for_similarity <- function(labels) {
   }
   sanitized
 }
- 
+
+#' @keywords internal
+#' @noRd
+.reject_ignored_kema_arguments <- function(explicit_legacy, dots) {
+  rejected <- names(explicit_legacy)[explicit_legacy]
+  if (length(dots)) {
+    dot_names <- names(dots)
+    if (is.null(dot_names)) {
+      dot_names <- rep("...", length(dots))
+    }
+    dot_names[is.na(dot_names) | !nzchar(dot_names)] <- "..."
+    rejected <- c(rejected, dot_names)
+  }
+  rejected <- unique(rejected)
+  if (length(rejected)) {
+    stop(
+      "Unsupported KEMA argument(s): ", paste(rejected, collapse = ", "),
+      ". These compatibility controls were withdrawn because the current ",
+      "implementation did not use them; silently accepting them could ",
+      "misrepresent the fitted objective.",
+      call. = FALSE
+    )
+  }
+}
+
+#' @keywords internal
+#' @noRd
+.validate_kema_solver <- function(solver) {
+  if (length(solver) != 1L || !is.character(solver) || is.na(solver)) {
+    stop("solver must be the single value 'exact'.", call. = FALSE)
+  }
+  if (identical(solver, "regression")) {
+    stop(
+      "solver='regression' has been withdrawn: it never selected a distinct ",
+      "regression implementation and silently ran the exact KEMA solver. ",
+      "Use solver='exact' or omit solver.",
+      call. = FALSE
+    )
+  }
+  if (!identical(solver, "exact")) {
+    stop("solver must be 'exact'.", call. = FALSE)
+  }
+  invisible(solver)
+}
 
 #' Kernel Manifold Alignment for Multidesign Data
 #'
@@ -627,22 +669,24 @@ sanitize_labels_for_similarity <- function(labels) {
 #' @param kernel Kernel function to use (default: coskern())
 #' @param sample_frac Fraction of samples to use for kernel approximation 
 #'   (default: 1)
-#' @param use_laplacian Deprecated compatibility argument; ignored by current
-#'   implementation.
-#' @param solver Deprecated compatibility argument; currently accepted values are
-#'   "regression" and "exact", but both route to the same original KEMA solver.
+#' @param use_laplacian Withdrawn compatibility argument. Supplying it now
+#'   errors because previous releases silently ignored it.
+#' @param solver Eigensolver contract. Only `"exact"` is supported. The former
+#'   `"regression"` value never selected a distinct implementation and is now
+#'   rejected.
 #' @param backend Backend for the original eigensolver. One of `"auto"`,
-#'   `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`.
+#'   `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`. The legacy
+#'   `"operator_exact"` name requests the certified partial quotient solver,
+#'   with a certified dense fallback for small quotients; the quotient matrices
+#'   are currently materialized.
 #' @param backend_control Optional list controlling auto backend thresholds and
 #'   fidelity checks (passed through to `kema_orig()`).
-#' @param dweight Deprecated compatibility argument; ignored.
-#' @param rweight Deprecated compatibility argument; ignored.
-#' @param simfun Deprecated compatibility argument; ignored.
-#' @param disfun Deprecated compatibility argument; ignored.
-#' @param lambda Regularization parameter for matrix conditioning 
-#'   (default: 0.0001)
-#' @param centre_kernel Deprecated compatibility argument; ignored.
-#' @param ... Additional arguments (currently unused)
+#' @param dweight,rweight,simfun,disfun Withdrawn compatibility arguments.
+#'   Supplying any of them errors because they were previously ignored.
+#' @param lambda Strictly positive Tikhonov regularization for the generalized
+#'   metric (default: 0.0001).
+#' @param centre_kernel Withdrawn compatibility argument. Supplying it errors.
+#' @param ... No additional arguments are accepted; unknown arguments error.
 #'
 #' @return A multiblock_biprojector object containing the KEMA alignment
 #'
@@ -689,12 +733,12 @@ kema.multidesign <- function(data, y,
                              kernel=coskern(), 
                              sample_frac=1,
                              use_laplacian=TRUE, 
-                             solver="regression",
+                             solver="exact",
                              backend="auto",
                              backend_control=NULL,
                              dweight=.1,
                              rweight=0,
-                             simfun=neighborweights::binary_label_matrix,
+                             simfun=adjoin::binary_label_matrix,
                              disfun=NULL,
                              lambda=.0001,
                              centre_kernel=FALSE,
@@ -703,9 +747,18 @@ kema.multidesign <- function(data, y,
   subject <- rlang::enquo(subject)
   y <- rlang::enquo(y)
 
-  if (!solver %in% c("regression", "exact")) {
-    stop("solver must be either 'regression' or 'exact'", call. = FALSE)
-  }
+  .reject_ignored_kema_arguments(
+    c(
+      use_laplacian = !missing(use_laplacian),
+      dweight = !missing(dweight),
+      rweight = !missing(rweight),
+      simfun = !missing(simfun),
+      disfun = !missing(disfun),
+      centre_kernel = !missing(centre_kernel)
+    ),
+    list(...)
+  )
+  .validate_kema_solver(solver)
 
   if (is.null(kernel)) {
     if (is.null(sigma)) {
@@ -739,11 +792,10 @@ kema.multidesign <- function(data, y,
   # Preserve legacy class tag for downstream code using `kema()`.
   result$classes <- "kema"
   if (is.numeric(result$eigenvalues)) {
-    legacy_solver <- if (identical(solver, "regression")) "exact_via_kema_orig" else "exact"
     result$eigenvalues <- list(
       values = as.numeric(result$eigenvalues),
       all_values = as.numeric(result$eigenvalues),
-      solver = legacy_solver
+      solver = "exact"
     )
   }
   result$regression_quality <- NULL
@@ -770,18 +822,17 @@ kema.multidesign <- function(data, y,
 #' @param kernel Kernel function to use (default: coskern())
 #' @param sample_frac Fraction of samples to use for kernel approximation 
 #'   (default: 1)
-#' @param use_laplacian Deprecated compatibility argument; ignored.
-#' @param solver Deprecated compatibility argument; accepted values are
-#'   `"regression"` and `"exact"`, but both currently route to the original
-#'   KEMA solver.
-#' @param dweight Deprecated compatibility argument; ignored.
-#' @param rweight Deprecated compatibility argument; ignored.
-#' @param simfun Deprecated compatibility argument; ignored.
-#' @param disfun Deprecated compatibility argument; ignored.
-#' @param lambda Regularization parameter for matrix conditioning 
-#'   (default: 0.0001)
-#' @param centre_kernel Deprecated compatibility argument; ignored.
-#' @param ... Additional arguments (currently unused)
+#' @param use_laplacian Withdrawn compatibility argument. Supplying it now
+#'   errors because previous releases silently ignored it.
+#' @param solver Eigensolver contract. Only `"exact"` is supported. The former
+#'   `"regression"` value never selected a distinct implementation and is now
+#'   rejected.
+#' @param dweight,rweight,simfun,disfun Withdrawn compatibility arguments.
+#'   Supplying any of them errors because they were previously ignored.
+#' @param lambda Strictly positive Tikhonov regularization for the generalized
+#'   metric (default: 0.0001).
+#' @param centre_kernel Withdrawn compatibility argument. Supplying it errors.
+#' @param ... No additional arguments are accepted; unknown arguments error.
 #'
 #' @return A multiblock_biprojector object containing the KEMA alignment
 #'
@@ -820,8 +871,8 @@ kema.multidesign <- function(data, y,
 #' the original generalized eigenproblems from Tuia & Camps-Valls (2016),
 #' including the reduced-rank REKEMA form when `sample_frac < 1`.
 #'
-#' Legacy extension arguments remain in the API for backward compatibility but
-#' are ignored by the current implementation.
+#' Legacy extension arguments remain temporarily in the function signature so
+#' callers receive an actionable error. They are not silently ignored.
 #'
 #' @references
 #' Tuia, D., & Camps-Valls, G. (2016). Kernel manifold alignment for domain 
@@ -839,12 +890,12 @@ kema.hyperdesign <- function(data, y,
                              kernel=NULL, 
                              sample_frac=1,
                              use_laplacian=TRUE, 
-                             solver="regression",
+                             solver="exact",
                              backend="auto",
                              backend_control=NULL,
                              dweight=.1,
                              rweight=0,
-                             simfun=neighborweights::binary_label_matrix,
+                             simfun=adjoin::binary_label_matrix,
                              disfun=NULL,
                              lambda=.0001,
                              centre_kernel=FALSE,
@@ -852,15 +903,25 @@ kema.hyperdesign <- function(data, y,
   
   y <- rlang::enquo(y)
 
+  .reject_ignored_kema_arguments(
+    c(
+      use_laplacian = !missing(use_laplacian),
+      dweight = !missing(dweight),
+      rweight = !missing(rweight),
+      simfun = !missing(simfun),
+      disfun = !missing(disfun),
+      centre_kernel = !missing(centre_kernel)
+    ),
+    list(...)
+  )
+  .validate_kema_solver(solver)
+
   chk::chk_number(ncomp)
   chk::chk_true(ncomp > 0)
   chk::chk_range(sample_frac, c(0,1))
   chk::chk_number(knn)
   chk::chk_true(knn > 0)
   chk::chk_range(u, c(0,1))
-  if (!solver %in% c("regression", "exact")) {
-    stop("solver must be either 'regression' or 'exact'", call. = FALSE)
-  }
 
   # Legacy compatibility: keep old arguments in signature but route to original KEMA.
   if (is.null(kernel)) {
@@ -894,11 +955,10 @@ kema.hyperdesign <- function(data, y,
   # Preserve legacy class tag for downstream code using `kema()`.
   result$classes <- "kema"
   if (is.numeric(result$eigenvalues)) {
-    legacy_solver <- if (identical(solver, "regression")) "exact_via_kema_orig" else "exact"
     result$eigenvalues <- list(
       values = as.numeric(result$eigenvalues),
       all_values = as.numeric(result$eigenvalues),
-      solver = legacy_solver
+      solver = "exact"
     )
   }
   result$regression_quality <- NULL

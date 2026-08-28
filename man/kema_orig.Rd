@@ -20,7 +20,7 @@ kema_orig(data, y, ...)
   mu = 0.5,
   kernel = coskern(),
   sample_frac = 1,
-  lambda = 0,
+  lambda = 1e-04,
   backend = "auto",
   backend_control = NULL,
   ...
@@ -36,7 +36,7 @@ kema_orig(data, y, ...)
   mu = 0.5,
   kernel = coskern(),
   sample_frac = 1,
-  lambda = 0,
+  lambda = 1e-04,
   backend = "auto",
   backend_control = NULL,
   ...
@@ -67,25 +67,31 @@ kema_orig(data, y, ...)
 
 \item{sample_frac}{Fraction of samples retained as landmarks (<1 => REKEMA).}
 
-\item{lambda}{Non-negative regularization added to RHS generalized matrix.
-Set to `0` for strict paper formulation.}
+\item{lambda}{Positive Tikhonov regularization added to the RHS generalized
+matrix. A positive value is required because the partial generalized
+eigensolver uses that matrix as an inner-product metric.}
 
 \item{backend}{Backend for the generalized eigensolver. One of `"auto"`,
 `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`.}
 
 \item{backend_control}{Optional list for backend auto-selection and fidelity
 diagnostics. Supported keys: `full_exact_max_n`, `reduced_exact_max_r`,
+`dense_exact_max_dim`,
 `fidelity_residual_tol`, `fidelity_orth_tol`, `fidelity_action`,
-`primme_tol`, and `primme_method`.}
+`eigencore_tol`, `eigencore_maxit`, and `kernel_rank_tol`.}
 }
 \value{
 A `multiblock_biprojector` object with KEMA embeddings.
 }
 \description{
-Paper-faithful implementation of Tuia & Camps-Valls (2016) using the
-generalized eigenproblems:
+`kema_orig()` is a deprecated duplicate of [kema()]. New code should call
+`kema()`, which runs this same fidelity-gated original formulation.
+`kema_orig()` is scheduled for removal in manifoldalign 1.0.0.
 }
 \details{
+Paper-faithful implementation of Tuia & Camps-Valls (2016) using the
+generalized eigenproblems:
+
 Full KEMA (Eq. 6):
 \deqn{K (L + \mu L_s) K \Lambda = \lambda K L_d K \Lambda}
 

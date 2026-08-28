@@ -58,5 +58,5 @@ domain. Default: `multivarious::center()`.}
 }
 \description{
 Baseline SSMA implementation based on Wang et al. feature-level manifold
-alignment (`Z^T L Z f = \lambda Z^T D Z f`) solved in a reduced-rank space.
+alignment (`Z^T L Z f = λ Z^T D Z f`) solved in a reduced-rank space.
 }

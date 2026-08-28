@@ -11,7 +11,7 @@
 #'   along with per-domain orthogonal transforms; supports unequal node counts naturally.
 #'
 #' The implementation reuses shared helpers in this package:
-#' - neighborweights::graph_weights + adjacency for graph building
+#' - adjoin::graph_weights + adjacency for graph building
 #' - graph_laplacian (internal) for Laplacian construction
 #' - safe_compute, compute_block_indices, feature_block_indices, new_alignment_result
 #'
@@ -386,10 +386,10 @@ compute_mma_embeddings <- function(strata, ncomp, sigma, knn, embedding, normali
         X <- s$x; n <- nrow(X)
         knn_val <- if (is.null(knn)) min(max(ceiling(log(n)), 3), max(n - 1, 1)) else min(knn, max(n - 1, 1))
         gw <- safe_compute(
-          neighborweights::graph_weights(X, k = knn_val, weight_mode = "heat", sigma = sigma, neighbor_mode = "knn"),
+          adjoin::graph_weights(X, k = knn_val, weight_mode = "heat", sigma = sigma, neighbor_mode = "knn"),
           "Graph construction failed in MMA (K selection)"
         )
-        A <- neighborweights::adjacency(gw)
+        A <- adjoin::adjacency(gw)
         L <- graph_laplacian(A, normalized = FALSE)
         max(2L, min(choose_K_theta_min(L, target_var = target_var), max(n - 2L, 1L)))
       }, integer(1))
@@ -405,10 +405,10 @@ compute_mma_embeddings <- function(strata, ncomp, sigma, knn, embedding, normali
       n <- nrow(X)
       knn_val <- if (is.null(knn)) min(max(ceiling(log(n)), 3), max(n - 1, 1)) else min(knn, max(n - 1, 1))
       gw <- safe_compute(
-        neighborweights::graph_weights(X, k = knn_val, weight_mode = "heat", sigma = sigma, neighbor_mode = "knn"),
+        adjoin::graph_weights(X, k = knn_val, weight_mode = "heat", sigma = sigma, neighbor_mode = "knn"),
         "Graph construction failed in MMA"
       )
-      A <- neighborweights::adjacency(gw)
+      A <- adjoin::adjacency(gw)
       L <- graph_laplacian(A, normalized = FALSE)
 
       K <- max(2L, min(K_final, max(n - 2L, 1L)))

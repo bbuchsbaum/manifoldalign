@@ -1,0 +1,19 @@
+"tier","family","overlap_regime","method_id","method","n_rows","n_intended","n_ok","n_error","n_timeout","n_crash","completion_rate","conditional_top1","intent_top1","intent_top1_ci_low","intent_top1_ci_high","intent_top1_sd","conditional_mrr","conditional_coverage","conditional_classification_oa","intent_classification_oa","median_runtime_sec","median_peak_rss_mb","max_peak_rss_mb"
+"large_scaling","geometric","partial_overlap","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"oracle","geometric","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.291666666666667,0.291666666666667,-0.237758530673945,0.821091864007279,0.058925565098879,0.439303751803752,1,0.3,0.3,0.1525,259.1328125,273.0625
+"oracle","sbm","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.291666666666667,0.291666666666667,-1.29660892535517,1.8799422586885,0.176776695296637,0.449123677248677,1,0.1,0.1,0.195,251,255.765625
+"oracle","scale_free","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.25,0.25,0.25,0.25,0,0.413840788840789,1,0.2,0.2,0.161,267.2265625,281.875
+"small_accuracy","geometric","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.00416666666666667,0.00416666666666667,-0.0487758530673945,0.0571091864007279,0.0058925565098879,0.0283267409611542,1,0.111111111111111,0.111111111111111,0.2725,356.8203125,407.578125
+"small_accuracy","sbm","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.0166666666666667,0.0166666666666667,-0.0892183728014558,0.122551706134789,0.0117851130197758,0.0609468093082037,1,0.201388888888889,0.201388888888889,0.2485,307.9765625,311.765625
+"small_accuracy","scale_free","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.0166666666666667,0.0166666666666667,-0.0892183728014558,0.122551706134789,0.0117851130197758,0.0577514013551167,1,0.222222222222222,0.222222222222222,0.2235,312.1484375,319.78125
+"small_accuracy","geometric","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,

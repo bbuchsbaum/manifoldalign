@@ -2,7 +2,7 @@
 % Please edit documentation in R/kema-validation.R
 \name{validate_kema_eigenvalues}
 \alias{validate_kema_eigenvalues}
-\title{Validate KEMA Eigenvalues Against Paper Specifications}
+\title{Withdrawn KEMA Paper-Eigenvalue Validator}
 \usage{
 validate_kema_eigenvalues(
   expected_eigenvals = c(0.82, 0.41),
@@ -11,22 +11,27 @@ validate_kema_eigenvalues(
 )
 }
 \arguments{
-\item{expected_eigenvals}{Expected eigenvalue ratios from paper (default: c(0.82, 0.41))}
+\item{expected_eigenvals}{Deprecated and ignored.}
 
-\item{tolerance}{Numerical tolerance for comparison}
+\item{tolerance}{Deprecated and ignored.}
 
-\item{n_per_domain}{Number of samples per domain for test}
+\item{n_per_domain}{Deprecated and ignored.}
 }
 \value{
-List with validation results
+This function emits a deprecation warning and then errors.
 }
 \description{
-Tests whether KEMA produces eigenvalues matching those reported
-in Figure 2 of Tuia & Camps-Valls (2016).
+This compatibility shim is retained so historical callers receive an
+explicit failure. The former routine did not reproduce a documented paper
+fixture and solved a different generalized problem whose right-hand side was
+only `lambda * I`; its claimed comparison with paper eigenvalues was therefore
+not valid accuracy evidence.
 }
 \examples{
-\donttest{
-result <- validate_kema_eigenvalues()
-print(result$success)
+\dontrun{
+validate_kema_eigenvalues()
 }
+}
+\seealso{
+[run_kema_validation_suite()]
 }

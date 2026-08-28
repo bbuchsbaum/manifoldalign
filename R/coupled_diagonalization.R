@@ -86,7 +86,7 @@
 #' @method coupled_diagonalization hyperdesign
 #' @export
 #' @importFrom Matrix sparseMatrix Diagonal crossprod colSums rowSums bdiag
-#' @importFrom neighborweights graph_weights
+#' @importFrom adjoin graph_weights
 #' @importFrom multivarious center init_transform multiblock_biprojector
 #' @importFrom chk chk_number chk_true
 coupled_diagonalization.hyperdesign <- function(data,
@@ -276,7 +276,7 @@ coupled_diagonalization.hyperdesign <- function(data,
   eigendecomps <- vector("list", m)
   
   if (!used_spectral_cache) {
-    # Build graph Laplacians using neighborweights
+    # Build graph Laplacians using adjoin
     if (verbose) message("Building graph Laplacians...")
     
     for (i in seq_len(m)) {
@@ -285,12 +285,12 @@ coupled_diagonalization.hyperdesign <- function(data,
       } else {
         paste0("domain_", i)
       }
-      # Use neighborweights for consistency with package
-      W_graph <- neighborweights::graph_weights(X_list[[i]],
+      # Use adjoin for consistency with package
+      W_graph <- adjoin::graph_weights(X_list[[i]],
                                               k = knn,
                                               weight_mode = "heat",
                                               sigma = sigma)
-      W <- neighborweights::adjacency(W_graph)
+      W <- adjoin::adjacency(W_graph)
       # Symmetrize weights in case the builder returned a directed graph
       W <- 0.5 * (W + Matrix::t(W))
       Matrix::diag(W) <- 0

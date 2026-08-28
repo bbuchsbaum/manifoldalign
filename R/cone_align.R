@@ -491,11 +491,11 @@ compute_embedding <- function(domain, ncomp, sigma, use_laplacian, knn) {
 
   # Construct k-nearest neighbor graph (robust to data type)
   graph_w <- safe_compute(
-    neighborweights::graph_weights(x, k = knn_val, weight_mode = "heat",
+    adjoin::graph_weights(x, k = knn_val, weight_mode = "heat",
                                    sigma = sigma, neighbor_mode = "knn"),
     "Graph construction failed in CONE-Align"
   )
-  A <- neighborweights::adjacency(graph_w)
+  A <- adjoin::adjacency(graph_w)
   
   # Compute graph Laplacian (following GRASP patterns)
   L <- graph_laplacian(A, normalized = use_laplacian)

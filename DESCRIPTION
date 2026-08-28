@@ -8,6 +8,7 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Imports:
     Matrix,
+    eigencore (>= 1.0.3),
     PRIMME,
     RSpectra,
     glmnet,

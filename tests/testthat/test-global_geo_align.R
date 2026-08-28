@@ -189,6 +189,136 @@ test_that("global_geo_align supports anchor smoothness regularization", {
   expect_true(methods::is(fit$feature_correspondence$smoothness$laplacian, "Matrix"))
 })
 
+test_that("anchor smoothness matches a tiny kNN Laplacian oracle", {
+  anchors <- cbind(c(0, 1, 3), 0)
+  smoothness <- manifoldalign:::.build_anchor_smoothness(
+    anchors,
+    list(
+      lambda = 1,
+      knn = 1,
+      sigma = 10,
+      weight_mode = "binary",
+      store_laplacian = TRUE
+    )
+  )
+
+  # The directed 1-NN edges are 1 -> 2, 2 -> 1, and 3 -> 2. The
+  # undirected-union policy must preserve both {1, 2} and {2, 3}.
+  expected <- matrix(
+    c(
+       1, -1,  0,
+      -1,  2, -1,
+       0, -1,  1
+    ),
+    nrow = 3,
+    byrow = TRUE
+  )
+  L <- as.matrix(smoothness$laplacian)
+
+  expect_equal(L, expected)
+  expect_equal(drop(L %*% rep(1, 3)), rep(0, 3), tolerance = 1e-12)
+  expect_gte(min(eigen(L, symmetric = TRUE, only.values = TRUE)$values), -1e-12)
+  expect_equal(smoothness$symmetrization, "union")
+  expect_equal(smoothness$isolate_policy, "zero_penalty")
+  expect_equal(smoothness$n_isolates, 0L)
+})
+
+test_that("anchor smoothness preserves isolates, components, and row identity", {
+  anchors <- cbind(c(0, 1.1, 3.6, 100), 0)
+  spec <- list(
+    lambda = 1,
+    knn = 1,
+    sigma = 1,
+    weight_mode = "binary",
+    store_laplacian = TRUE
+  )
+  original <- manifoldalign:::.build_anchor_smoothness(anchors, spec)
+  L <- as.matrix(original$laplacian)
+
+  expect_equal(L[4, ], rep(0, 4))
+  expect_equal(L[, 4], rep(0, 4))
+  expect_equal(original$n_isolates, 1L)
+  expect_equal(sum(abs(eigen(L, symmetric = TRUE, only.values = TRUE)$values) < 1e-10), 2L)
+
+  permutation <- c(4, 2, 1, 3)
+  permuted <- manifoldalign:::.build_anchor_smoothness(anchors[permutation, , drop = FALSE], spec)
+  expect_equal(
+    as.matrix(permuted$laplacian),
+    L[permutation, permutation, drop = FALSE],
+    tolerance = 1e-12
+  )
+})
+
+test_that("anchor smoothness heat weights are numerically correct", {
+  anchors <- cbind(c(0, 1, 3), 0)
+  sigma <- 2
+  smoothness <- manifoldalign:::.build_anchor_smoothness(
+    anchors,
+    list(lambda = 1, knn = 2, sigma = sigma, weight_mode = "heat")
+  )
+
+  distances <- as.matrix(stats::dist(anchors))
+  adjacency <- exp(-(distances^2) / (2 * sigma^2))
+  diag(adjacency) <- 0
+  expected <- diag(rowSums(adjacency)) - adjacency
+  dimnames(expected) <- NULL
+
+  expect_equal(as.matrix(smoothness$laplacian), expected, tolerance = 1e-12)
+})
+
+test_that("anchor adjacency supports both isolate APIs and rejects incompatible APIs", {
+  anchors <- cbind(c(0, 1, 3), 0)
+  legacy_api <- function(
+    coord_mat,
+    dthresh,
+    nnk,
+    weight_mode,
+    sigma,
+    include_diagonal,
+    normalized,
+    stochastic
+  ) {
+    Matrix::Matrix(
+      matrix(c(0, 1, 0, 0, 0, 0, 0, 1, 0), nrow = 3, byrow = TRUE),
+      sparse = TRUE
+    )
+  }
+  current_api <- function(
+    coord_mat,
+    dthresh,
+    nnk,
+    weight_mode,
+    sigma,
+    include_diagonal,
+    normalized,
+    stochastic,
+    handle_isolates = c("self_loop", "keep_zero", "drop")
+  ) {
+    legacy_api(
+      coord_mat, dthresh, nnk, weight_mode, sigma,
+      include_diagonal, normalized, stochastic
+    )
+  }
+
+  call_builder <- function(fun) {
+    manifoldalign:::.anchor_spatial_adjacency(
+      anchors,
+      knn = 1,
+      sigma = 10,
+      weight_mode = "binary",
+      adjacency_fun = fun
+    )
+  }
+  expected <- matrix(c(0, 1, 0, 1, 0, 1, 0, 1, 0), nrow = 3, byrow = TRUE)
+
+  expect_equal(as.matrix(call_builder(legacy_api)), expected)
+  expect_equal(as.matrix(call_builder(current_api)), expected)
+  expect_error(
+    call_builder(function(coord_mat, nnk) diag(nrow(coord_mat))),
+    "incompatible spatial_adjacency\\(\\) API.*dthresh"
+  )
+})
+
 test_that("global_geo_align validates SAB voxel coordinate dimensions", {
   set.seed(9)
   X1 <- matrix(rnorm(20 * 5), 20, 5)

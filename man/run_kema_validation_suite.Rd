@@ -2,22 +2,31 @@
 % Please edit documentation in R/kema-validation.R
 \name{run_kema_validation_suite}
 \alias{run_kema_validation_suite}
-\title{Comprehensive KEMA Numerical Validation}
+\title{Run Enforced KEMA Numerical Validation}
 \usage{
 run_kema_validation_suite(verbose = TRUE)
 }
 \arguments{
-\item{verbose}{Whether to print detailed results}
+\item{verbose}{Whether to print a concise report.}
 }
 \value{
-List with all validation results
+A list containing `fidelity_validation`, `backend_agreement`,
+  `withdrawn_validations`, and `overall_success`.
 }
 \description{
-Runs all numerical validation tests for KEMA implementation.
+Fits deterministic KEMA fixtures and records the same numerical contracts
+required of every returned fit: generalized-eigen backward residual,
+B-orthogonality, numerical-zero exclusion, and agreement between matrix and
+operator backends up to subspace indeterminacy.
+}
+\details{
+Withdrawn paper-eigenvalue, regression-solver, and fabricated reconstruction
+checks are reported for auditability but do not contribute to
+`overall_success`.
 }
 \examples{
 \donttest{
 results <- run_kema_validation_suite(verbose = FALSE)
-print(results$overall_success)
+results$overall_success
 }
 }

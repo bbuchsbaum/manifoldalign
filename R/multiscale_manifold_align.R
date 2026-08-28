@@ -93,7 +93,7 @@ multiscale_manifold_align <- function(data, ...) {
   sigma_use <- if (is.null(sigma)) choose_sigma(X) else sigma
 
   gw <- safe_compute(
-    neighborweights::graph_weights(
+    adjoin::graph_weights(
       X,
       k = k_use,
       weight_mode = "heat",
@@ -103,7 +103,7 @@ multiscale_manifold_align <- function(data, ...) {
     "Within-domain graph construction failed in multiscale_manifold_align()."
   )
 
-  A <- neighborweights::adjacency(gw)
+  A <- adjoin::adjacency(gw)
   A <- (A + Matrix::t(A)) / 2
   Matrix::diag(A) <- 0
   A <- Matrix::drop0(methods::as(A, "dgCMatrix"))

@@ -116,7 +116,7 @@ pairwise_cosine <- function(S1, S2) {
 test_that("coupled_diagonalization recovers known coupled structure", {
   skip_if_not_installed("multidesign")
   skip_if_not_installed("multivarious")
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   
   # Generate perfectly coupled data
   coupled_data <- generate_coupled_data(

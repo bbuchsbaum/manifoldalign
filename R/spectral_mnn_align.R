@@ -238,11 +238,11 @@ resolve_spectral_mnn_align_control <- function(control) {
   }
 
   graph_w <- safe_compute(
-    neighborweights::graph_weights(X, k = k_use, weight_mode = "heat",
+    adjoin::graph_weights(X, k = k_use, weight_mode = "heat",
                                    sigma = sigma_use, neighbor_mode = "knn"),
     "Graph construction failed in spectral_mnn_align"
   )
-  A <- neighborweights::adjacency(graph_w)
+  A <- adjoin::adjacency(graph_w)
   A <- (A + Matrix::t(A)) / 2
 
   L <- .graph_laplacian_spectral_mnn(A, normalized = isTRUE(use_laplacian))

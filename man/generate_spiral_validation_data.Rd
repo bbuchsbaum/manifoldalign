@@ -2,7 +2,7 @@
 % Please edit documentation in R/kema-validation.R
 \name{generate_spiral_validation_data}
 \alias{generate_spiral_validation_data}
-\title{Generate Synthetic Two-Domain Spiral Data}
+\title{Generate a Synthetic Two-Domain Spiral Fixture}
 \usage{
 generate_spiral_validation_data(
   n_per_domain = 100,
@@ -11,18 +11,19 @@ generate_spiral_validation_data(
 )
 }
 \arguments{
-\item{n_per_domain}{Number of samples per domain}
+\item{n_per_domain}{Number of samples per domain.}
 
-\item{noise_level}{Gaussian noise standard deviation}
+\item{noise_level}{Gaussian noise standard deviation.}
 
-\item{seed}{Random seed for reproducibility}
+\item{seed}{Random seed for reproducibility.}
 }
 \value{
-List with domain data and labels
+A list with domain data, labels, and combined strata.
 }
 \description{
-Creates the synthetic spiral dataset used in KEMA paper Figure 2
-for numerical validation.
+Creates a deterministic two-domain spiral fixture inspired by the qualitative
+examples used in manifold-alignment papers. It is not a digitized or exact
+reproduction of a published KEMA benchmark.
 }
 \examples{
 data <- generate_spiral_validation_data(n_per_domain = 50, seed = 123)

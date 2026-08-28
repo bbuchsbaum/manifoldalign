@@ -44,7 +44,7 @@ The following is a ticketed list of prioritized action items. Addressing these w
 *   **Problem:** Several operations create large, dense matrices, making the algorithm infeasible for datasets with more than a few thousand samples due to O(n²) memory complexity.
 *   **Recommended Action:**
     1.  **Sparse Block Diagonals:** In `compute_kernels`, when creating the block-diagonal kernel matrix `Z`, do not use `Matrix::bdiag` on a list of dense matrices. Instead, ensure each kernel block `k` is a sparse matrix first, or use `Matrix::.bdiag(lapply(Ks, Matrix::Matrix, sparse=TRUE))` to build a sparse block-diagonal matrix from the start.
-    2.  **Avoid Densification:** The operation `diag(Ws) <- 0` in `normalize_graphs` on a `dgCMatrix` will create a dense copy. Modify the graph construction logic in `neighborweights` or helpers to avoid creating self-loops in the first place.
+    2.  **Avoid Densification:** The operation `diag(Ws) <- 0` in `normalize_graphs` on a `dgCMatrix` will create a dense copy. Modify the graph construction logic in `adjoin` or helpers to avoid creating self-loops in the first place.
     3.  **Explicit Sparsity:** Ensure all graph Laplacians (`Ls`, `Lr`, `L`, `Ld`) and adjacency matrices (`W`, `Wr`, `Ws`, `Wd`) are always stored as sparse `dgCMatrix` objects.
 
 ---

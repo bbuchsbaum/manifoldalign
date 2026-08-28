@@ -1,54 +1,63 @@
-skip_if_not_installed("kernlab")
-skip_if_not_installed("tibble")
-skip_if_not_installed("manifoldalign")
-
-skip_if_benchmarks_disabled("Benchmark tests disabled; enable with options(manifoldalign.run_benchmarks = TRUE)")
-
-make_toy_hyperdesign <- function(n_per_domain = 20, noise = 0.05) {
-  set.seed(123)
-  t <- seq(0, 2 * pi, length.out = n_per_domain)
-  spiral <- function(t, phase = 0) {
-    cbind(
-      cos(t + phase) + rnorm(length(t), sd = noise),
-      sin(t + phase) + rnorm(length(t), sd = noise)
-    )
-  }
-  domain1 <- spiral(t)
-  domain2 <- spiral(t, phase = pi / 4)
-  labels <- factor(ifelse(t <= pi, "early", "late"))
+make_operator_kema_fixture <- function(n_per_domain = 18, n_features = 4) {
+  set.seed(91)
+  X1 <- matrix(rnorm(n_per_domain * n_features), n_per_domain, n_features)
+  X2 <- matrix(
+    rnorm(n_per_domain * n_features) + 0.25,
+    n_per_domain,
+    n_features
+  )
+  labels <- factor(rep(1:3, length.out = n_per_domain))
   multidesign::hyperdesign(list(
-    d1 = multidesign::multidesign(domain1, tibble::tibble(lbl = labels)),
-    d2 = multidesign::multidesign(domain2, tibble::tibble(lbl = labels))
+    d1 = multidesign::multidesign(
+      X1,
+      data.frame(lbl = labels)
+    ),
+    d2 = multidesign::multidesign(
+      X2,
+      data.frame(lbl = labels)
+    )
   ))
 }
 
-with_scalable_option <- function(value, expr) {
-  old <- getOption("kema.scalable_mode")
-  on.exit(options(kema.scalable_mode = old), add = TRUE)
-  options(kema.scalable_mode = value)
-  force(expr)
-}
+test_that("operator KEMA matches the full matrix backend on a toy oracle", {
+  skip_if_not_installed("eigencore", minimum_version = "1.0.3")
 
-test_that("scalable KEMA matches baseline on toy data", {
-  if (!"package:tibble" %in% search()) {
-    suppressPackageStartupMessages(library(tibble))
-  }
-  hd <- make_toy_hyperdesign()
+  hd <- make_operator_kema_fixture()
+  common <- list(
+    data = hd,
+    ncomp = 2,
+    knn = 4,
+    sigma = 0.5,
+    lambda = 1e-3
+  )
 
-  baseline <- with_scalable_option(FALSE, {
-    manifoldalign::kema(hd, y = lbl, solver = "exact", ncomp = 2, knn = 3,
-         sigma = 0.6, lambda = 1e-3, dweight = 1, rweight = 0)
-  })
+  full <- rlang::inject(manifoldalign::kema(
+    !!!common,
+    y = lbl,
+    backend = "full_exact"
+  ))
+  operator <- rlang::inject(manifoldalign::kema(
+    !!!common,
+    y = lbl,
+    backend = "operator_exact"
+  ))
 
-  scalable <- with_scalable_option(TRUE, {
-    manifoldalign::kema(hd, y = lbl, solver = "exact", ncomp = 2, knn = 3,
-         sigma = 0.6, lambda = 1e-3, dweight = 1, rweight = 0)
-  })
+  expect_true(full$fidelity$passed)
+  expect_true(operator$fidelity$passed)
+  expect_lte(full$fidelity$max_rel_residual, 1e-6)
+  expect_lte(operator$fidelity$max_rel_residual, 1e-6)
+  expect_equal(
+    operator$eigenvalues$values,
+    full$eigenvalues$values,
+    tolerance = 1e-7
+  )
 
-  expect_true(all(is.finite(scalable$eigenvalues$values)))
-  expect_equal(dim(scalable$s), dim(baseline$s))
-  expect_true(all(is.finite(as.matrix(scalable$s))))
-  if (!is.null(scalable$coef)) {
-    expect_true(all(is.finite(as.matrix(scalable$coef))))
-  }
+  Q_full <- qr.Q(qr(as.matrix(full$s)))
+  Q_operator <- qr.Q(qr(as.matrix(operator$s)))
+  correlations <- svd(
+    crossprod(Q_full, Q_operator),
+    nu = 0,
+    nv = 0
+  )$d
+  expect_gt(min(correlations), 1 - 1e-7)
 })

@@ -42,7 +42,11 @@ global_geo_align(data, ...)
 
 \item{correspondences}{Optional data.frame with columns domain_i/index_i/domain_j/index_j}
 
-\item{feature_correspondence}{Optional list specifying spatial anchor basis settings}
+\item{feature_correspondence}{Optional list specifying spatial anchor basis
+settings. Its `smoothness` entry builds an undirected-union kNN graph of
+the anchors. Anchors with no neighbor within `3 * sigma` receive zero
+smoothness penalty; the fitted object reports this policy and the number
+of such isolates.}
 
 \item{preproc}{Preprocessing function or list. Default: multivarious::center()}
 

@@ -1,7 +1,7 @@
 library(testthat)
 
 test_that("assess_ssma returns core diagnostics for reduced solver", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
 
@@ -43,7 +43,7 @@ test_that("assess_ssma returns core diagnostics for reduced solver", {
 })
 
 test_that("assess_ssma reports subspace distance when both solvers succeed", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
   skip_if_not_installed("RSpectra")

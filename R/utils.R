@@ -21,7 +21,7 @@
 #' Examples of good candidates:
 #' \itemize{
 #'   \item Eigenvalue computations: \code{safe_compute(PRIMME::eigs_sym(...), "Eigenvalue computation failed")}
-#'   \item Graph construction: \code{safe_compute(neighborweights::graph_weights(...), "Graph construction failed")}
+#'   \item Graph construction: \code{safe_compute(adjoin::graph_weights(...), "Graph construction failed")}
 #'   \item Matrix operations: \code{safe_compute(solve(A), "Matrix solve failed")}
 #' }
 

@@ -8,9 +8,11 @@
 #' the class structure across domains. It supports semi-supervised learning 
 #' with missing labels (NA values).
 #'
-#' Current behavior routes `kema()` to a paper-faithful implementation
-#' (`kema_orig`) of the original Tuia & Camps-Valls generalized eigenproblems.
-#' Legacy extension arguments are still accepted for compatibility.
+#' `kema()` is the sole supported public entry point for the original Tuia &
+#' Camps-Valls generalized eigenproblems. Every returned fit must pass explicit
+#' generalized-eigen residual and B-orthogonality gates. The duplicate
+#' `kema_orig()` entry point is deprecated, and formerly ignored extension
+#' controls are rejected.
 #'
 #' @param data Input data object. Can be a hyperdesign object (for 
 #'   \code{kema.hyperdesign}) or a multidesign object (for 

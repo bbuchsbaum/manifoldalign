@@ -609,7 +609,7 @@ resolve_ssma_align_control <- function(control = NULL) {
   sigma_use <- if (is.null(sigma)) choose_sigma(X_graph) else sigma
 
   gw <- safe_compute(
-    neighborweights::graph_weights(
+    adjoin::graph_weights(
       X_graph,
       k = k_use,
       weight_mode = "heat",
@@ -619,7 +619,7 @@ resolve_ssma_align_control <- function(control = NULL) {
     "Within-domain graph construction failed in ssma_align()."
   )
 
-  A <- neighborweights::adjacency(gw)
+  A <- adjoin::adjacency(gw)
   A <- (A + Matrix::t(A)) / 2
   Matrix::diag(A) <- 0
   A <- Matrix::drop0(methods::as(A, "CsparseMatrix"))
@@ -958,7 +958,7 @@ resolve_ssma_align_control <- function(control = NULL) {
 #' Semi-Supervised Manifold Alignment (SSMA)
 #'
 #' Baseline SSMA implementation based on Wang et al. feature-level manifold
-#' alignment (`Z^T L Z f = \lambda Z^T D Z f`) solved in a reduced-rank space.
+#' alignment (`Z^T L Z f = λ Z^T D Z f`) solved in a reduced-rank space.
 #'
 #' @param data A `hyperdesign` object or list of matrices.
 #' @param ... Additional arguments passed to methods.

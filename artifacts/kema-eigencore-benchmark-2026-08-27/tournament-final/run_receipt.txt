@@ -1,0 +1,144 @@
+tournament_version: 2.0.0-tournament.1
+profile: final
+started_or_resumed: 2026-08-27T20:12:07-0400
+manifest_hash: 2f79e4b34867edba288239fbc427a437
+git_commit: 5a02dfc2087e8905cc5450a8381c61b2926c083e
+case_count: 42
+method_count: 1
+result_count: 42
+validation_problem_count: 0
+regeneration_command:
+Rscript inst/benchmarks/run_alignment_tournament.R --profile=final --output=artifacts/kema-eigencore-benchmark-2026-08-27/tournament-final --resume=true
+git_status:
+ M .Rbuildignore
+ M .github/workflows/R-CMD-check.yaml
+ M .gitignore
+ M CLAUDE.md
+ M DESCRIPTION
+ M NAMESPACE
+ M NEWS.md
+ M R/adapters_grasp.R
+ M R/align_framework.R
+ M R/all_generic.R
+ M R/cone_align.R
+ M R/coupled_diagonalization.R
+ M R/fpgw.R
+ M R/fpgw_methods.R
+ M R/global_geo_align.R
+ M R/gpca_align.R
+ M R/graph_alignment_benchmark.R
+ M R/graph_benchmark_registry.R
+ M R/grasp.R
+ M R/kema-validation.R
+ M R/kema.R
+ M R/kema_orig.R
+ M R/linear_sim_embed.R
+ M R/mma_align_multiple.R
+ M R/multiscale_manifold_align.R
+ M R/parrot.R
+ M R/rapid_ma_benchmark.R
+ M R/spectral_mnn_align.R
+ M R/ssma_align.R
+ M R/token_ot_graph_align.R
+ M R/utils.R
+ M README.md
+ M dev-scripts/benchmarks/benchmark_global_geo_vs_kema_lra.R
+ M man/aligner_capabilities.Rd
+ M man/benchmark_graph_alignment_methods.Rd
+ M man/benchmark_rapid_ma.Rd
+ M man/cone_align.Rd
+ D man/extract_kema_eigenvalues.Rd
+ M man/fpgw.Rd
+ M man/fw_fpgw.Rd
+ M man/generate_spiral_validation_data.Rd
+ M man/global_geo_align.Rd
+ M man/gpca_align.hyperdesign.Rd
+ M man/kema.Rd
+ M man/kema_orig.Rd
+ M man/latent_dim.Rd
+ M man/linear_sim_embed.Rd
+ M man/mma_align_multiple.hyperdesign.Rd
+ M man/multiscale_manifold_align.Rd
+ M man/multiscale_manifold_align_control.Rd
+ M man/pair_loss.Rd
+ M man/partial_ot_tv.Rd
+ M man/rapid_ma.Rd
+ M man/rapid_ma_aligner.Rd
+ M man/rapid_ma_control.Rd
+ M man/rapid_ma_match.Rd
+ D man/rapid_ma_oos.Rd
+ M man/rapid_ma_semisup.Rd
+ M man/rapid_ma_semisup_control.Rd
+ M man/relative_transform.Rd
+ M man/run_kema_validation_suite.Rd
+ M man/safe_compute.Rd
+ M man/sanitize_labels_for_similarity.Rd
+ M man/ssma_align.Rd
+ M man/validate_kema_eigenvalues.Rd
+ M man/validate_out_of_sample_reconstruction.Rd
+ M src/linear_sim_embed.cpp
+ M tests/testthat/ALIGNMENT_TEST_MATRIX.yml
+ M tests/testthat/helper-alignment.R
+ M tests/testthat/test-assess-ssma.R
+ M tests/testthat/test-coupled_diag_mathematical.R
+ M tests/testthat/test-cv-alignment-rows.R
+ M tests/testthat/test-fpgw-validation.R
+ M tests/testthat/test-fpgw.R
+ M tests/testthat/test-global_geo_align.R
+ M tests/testthat/test-gpca_align.R
+ M tests/testthat/test-graph-benchmark-registry.R
+ M tests/testthat/test-grasp-regressions.R
+ M tests/testthat/test-kema-numerical-validation.R
+ M tests/testthat/test-kema-orig.R
+ M tests/testthat/test-kema-scalable-smoke.R
+ M tests/testthat/test-kema.R
+ M tests/testthat/test-multiscale-manifold-align-control.R
+ M tests/testthat/test-ssma-align.R
+ M tests/testthat/test-token-ot-graph-align-contracts.R
+ M tests/testthat/test-toy-manifold-benchmarks-fast.R
+ M tests/testthat/test_linear_sim_embed_consistency.R
+ M vignettes/kema-overview.Rmd
+ M vignettes/performance-overview.Rmd
+ M vignettes/quickstart-hyperdesign.Rmd
+?? .github/workflows/alignment-evidence.yaml
+?? .mote/
+?? AGENTS.md
+?? R/alignment_lifecycle.R
+?? R/alignment_registry.R
+?? R/alignment_tournament.R
+?? R/real_alignment_benchmarks.R
+?? artifacts/
+?? docs/ALIGNMENT_LIFECYCLE.md
+?? docs/ALIGNMENT_METHOD_SUNSET_REVIEW.md
+?? docs/BENCHMARK_PROTOCOL.md
+?? docs/METHOD_COMPARISON_TABLE.md
+?? docs/ORACLE_CI_POLICY.md
+?? docs/REAL_DATA_BENCHMARKS.md
+?? docs/evidence/
+?? docs/rapid-ma-scaling-summary.csv
+?? docs/rapid-ma-validation-summary.csv
+?? inst/benchmarks/extract_so2sat_ci_fixture.R
+?? inst/benchmarks/graph_alignment_v2_development_manifest.csv
+?? inst/benchmarks/graph_alignment_v2_final_manifest.csv
+?? inst/benchmarks/prepare_real_alignment_data.R
+?? inst/benchmarks/real_alignment_artifacts.csv
+?? inst/benchmarks/real_alignment_manifest.csv
+?? inst/benchmarks/run_alignment_tournament.R
+?? inst/benchmarks/run_real_alignment_benchmarks.R
+?? inst/extdata/
+?? man/alignment_lifecycle_policy.Rd
+?? man/alignment_method_registry.Rd
+?? man/fit_pair.rapid_ma_aligner.Rd
+?? man/oos_predict.rapid_ma.Rd
+?? man/rapid_ma_benchmark_fixture.Rd
+?? tests/TESTING_STRATEGY.md
+?? tests/testthat/test-alignment-lifecycle.R
+?? tests/testthat/test-alignment-method-registry.R
+?? tests/testthat/test-alignment-oracle-ci.R
+?? tests/testthat/test-alignment-tournament.R
+?? tests/testthat/test-coupled-diagonalization-oracle.R
+?? tests/testthat/test-fpgw-oracle.R
+?? tests/testthat/test-real-alignment-benchmarks.R
+?? tools/
+?? vignettes/benchmark-guidance.Rmd
+?? vignettes/method-selection-guide.Rmd

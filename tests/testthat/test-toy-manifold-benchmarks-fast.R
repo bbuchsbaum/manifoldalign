@@ -10,7 +10,7 @@
 #  KEY OPTIMIZATIONS:
 #  - Reduced dataset sizes: 15-25 samples (vs 40-100)
 #  - Fewer iterations: 10 (vs 25)
-#  - KEMA: sample_frac=0.2, ncomp=2, solver="regression"
+#  - KEMA: sample_frac=0.2, ncomp=2, reduced exact backend
 #  - Only ONE assignment test (GRASP)
 #  - Adjusted thresholds for smaller data
 # ==============================================================
@@ -186,13 +186,13 @@ test_that("[FAST] KEMA on isometric manifolds (optimized)", {
 
   hd <- toy_to_hyperdesign(iso_data_2d, use_true_labels = TRUE)
 
-  # OPTIMIZED: regression solver, reduced sample_frac, fewer components
+  # OPTIMIZED: reduced-rank KEMA with fewer components
   result <- kema(hd, y = "label",
                  kernel = kernlab::rbfdot(sigma = 1.0),
                  preproc = multivarious::center(),
                  ncomp = 2,  # Reduced from 3
-                 solver = "regression",  # Faster than exact
-                 auto_retry_exact = FALSE,  # Skip retry for speed
+                 solver = "exact",
+                 backend = "reduced_exact",
                  sigma = 1.0,
                  sample_frac = 0.2)  # Reduced from 0.4
 

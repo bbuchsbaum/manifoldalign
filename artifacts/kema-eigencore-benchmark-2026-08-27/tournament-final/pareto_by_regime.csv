@@ -1,0 +1,7 @@
+"tier","family","overlap_regime","method_id","n_intended","completion_rate","intent_top1","median_runtime_sec","median_peak_rss_mb","pareto"
+"oracle","geometric","closed_world","kema",2,1,0.291666666666667,0.1525,259.1328125,TRUE
+"oracle","sbm","closed_world","kema",2,1,0.291666666666667,0.195,251,TRUE
+"oracle","scale_free","closed_world","kema",2,1,0.25,0.161,267.2265625,TRUE
+"small_accuracy","geometric","closed_world","kema",2,1,0.00416666666666667,0.2725,356.8203125,TRUE
+"small_accuracy","sbm","closed_world","kema",2,1,0.0166666666666667,0.2485,307.9765625,TRUE
+"small_accuracy","scale_free","closed_world","kema",2,1,0.0166666666666667,0.2235,312.1484375,TRUE

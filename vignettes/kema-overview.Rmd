@@ -1,8 +1,10 @@
 ---
 title: Kernel Manifold Alignment with kema
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{Kernel Manifold Alignment with kema} %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Kernel Manifold Alignment with kema}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
   preset: homage
@@ -35,10 +37,13 @@ if (requireNamespace("ggplot2", quietly = TRUE) && requireNamespace("albersdown"
 where both manifold geometry and class structure are preserved.  The function
 supports:
 
-- **Full KEMA** (exact or regression solver) on the complete kernel matrices
+- **Full KEMA** on the complete kernel matrices, with every returned component
+  required to pass generalized-eigen residual and B-orthogonality checks
 - **REKEMA** landmark approximations via `sample_frac`
-- A scalable path (enabled with `options(kema.scalable_mode = TRUE)`) that
-  replaces dense label graphs and block-diagonal kernels by compact operators
+- A legacy operator backend name that requests eigencore's certified partial
+  quotient solver, with a dense fallback for small uncertified problems. The
+  current implementation materializes the reduced quotient matrices and is not
+  a linear-memory large-data method
 
 This vignette demonstrates each mode on the shared
 `alignment_benchmark` dataset so that comparisons across alignment methods are
@@ -97,57 +102,19 @@ rms_alignment <- function(scores, sizes, group_names) {
 }
 ```
 
-## Full KEMA (Regression Solver)
+## Full KEMA (Fidelity-Gated Solver)
 
-The regression solver is the default.  It solves an eigenproblem on graph
-Laplacians and follows with a ridge-regression step to recover kernel
-coefficients.  Because the domains have different feature dimensions we use
+KEMA solves the original generalized eigenproblem after removing numerical
+kernel-null directions and exact graph-component null modes. Small quotient
+problems use eigencore's certified full solver; larger and operator requests use
+its constrained generalized LOBPCG solver. A fit is returned only when its
+selected positive eigenpairs meet both eigencore's certificate and KEMA's
+independent residual and B-orthogonality gates.
+Because the domains have different feature dimensions we use
 `multivarious::pass()` (no preprocessing) to avoid broadcasting a shared
 preprocessor across incompatible shapes.
 
-```{r kema-regression}
-reg_fit <- kema(
-  hd,
-  y = condition,
-  ncomp = 2,
-  knn = 3,
-  sigma = 0.8,
-  solver = "regression",
-  preproc = multivarious::pass()
-)
-
-str(reg_fit, max.level = 1)
-```
-
-```{r kema-reg-metrics}
-rms_alignment(as.matrix(reg_fit$s), domain_sizes, domain_names)
-```
-
-We plot z-scored aligned scores (each component standardized across all domains);
-this keeps the visual scale comparable while preserving class separation.
-
-```{r reg-plot, fig.width = 6, fig.height = 4}
-score_tbl <- as_tibble(zscore_columns(as.matrix(reg_fit$s)), .name_repair = "minimal")
-colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
-
-reg_scores <- score_tbl %>%
-  mutate(
-    domain = rep(domain_names, times = domain_sizes),
-    condition = replicated_labels
-  )
-
-ggplot(reg_scores, aes(x = comp1, y = comp2, colour = condition, shape = domain)) +
-  geom_point(size = 2.2, alpha = 0.85) +
-  labs(title = "KEMA regression solver", x = "Component 1", y = "Component 2") +
-  theme_minimal()
-```
-
-## Full KEMA (Exact Solver)
-
-The exact solver tackles the generalized eigenvalue problem directly.  It is
-more faithful but slower on very large kernels.
-
-```{r kema-exact}
+```{r kema-full}
 exact_fit <- kema(
   hd,
   y = condition,
@@ -158,16 +125,36 @@ exact_fit <- kema(
   preproc = multivarious::pass()
 )
 
-exact_fit$eigenvalues$values
+exact_fit$fidelity[c("passed", "max_rel_residual", "max_b_orth_offdiag")]
 ```
 
-```{r kema-exact-metrics}
+```{r kema-full-metrics}
 rms_alignment(as.matrix(exact_fit$s), domain_sizes, domain_names)
 ```
 
-A quick sanity check compares the subspaces recovered by the two solvers.
+We plot z-scored aligned scores (each component standardized across all domains);
+this keeps the visual scale comparable while preserving class separation.
 
-```{r compare-solvers}
+```{r full-plot, fig.width = 6, fig.height = 4}
+score_tbl <- as_tibble(zscore_columns(as.matrix(exact_fit$s)), .name_repair = "minimal")
+colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
+
+exact_scores <- score_tbl %>%
+  mutate(
+    domain = rep(domain_names, times = domain_sizes),
+    condition = replicated_labels
+  )
+
+ggplot(exact_scores, aes(x = comp1, y = comp2, colour = condition, shape = domain)) +
+  geom_point(size = 2.2, alpha = 0.85) +
+  labs(title = "Fidelity-gated KEMA", x = "Component 1", y = "Component 2") +
+  theme_minimal()
+```
+
+The helper below compares score subspaces without assuming component signs or
+bases are identifiable.
+
+```{r subspace-helper}
 subspace_similarity <- function(A, B) {
   A <- as.matrix(A)
   B <- as.matrix(B)
@@ -175,8 +162,6 @@ subspace_similarity <- function(A, B) {
   Qb <- qr.Q(qr(B))
   svd(t(Qa) %*% Qb, nu = 0, nv = 0)$d
 }
-
-subspace_similarity(reg_fit$s[, 1:2], exact_fit$s[, 1:2])
 ```
 
 ## REKEMA (Landmark Approximation)
@@ -185,6 +170,7 @@ Sampling landmarks via `sample_frac` reduces the kernel size.  Here we keep 50%
 of the samples per domain and run the exact solver on the reduced system.
 
 ```{r rekema}
+set.seed(2024)
 rekema_fit <- kema(
   hd,
   y = condition,
@@ -209,37 +195,41 @@ Even with landmarks the subspace remains close to the full exact solution.
 subspace_similarity(exact_fit$s[, 1:2], rekema_fit$s[, 1:2])
 ```
 
-## Scalable Mode (Operator-Based)
+## Operator Backend
 
-Enabling `kema.scalable_mode` activates the low-rank label-factor and
-matrix-free kernel path introduced in the accompanying refactor.  This keeps the
-API identical while avoiding dense `n \times n` intermediates.
+`backend = "operator_exact"` is retained for compatibility and requests the
+constrained partial eigencore path. Small quotient problems fall back to the
+certified dense solver if the partial result is not certified. With
+`sample_frac < 1`, it operates on landmark coefficients. The current
+implementation materializes the nullspace-reduced quotient matrices as well as
+the graph and kernel blocks, so it is not a claim of end-to-end linear scaling.
 
-```{r scalable-mode}
-old_opts <- options(kema.scalable_mode = TRUE)
-on.exit(options(old_opts), add = TRUE)
-
-scalable_fit <- kema(
+```{r operator-backend}
+set.seed(2024)
+operator_fit <- kema(
   hd,
   y = condition,
   ncomp = 2,
   knn = 3,
   sigma = 0.8,
   solver = "exact",
+  sample_frac = 0.5,
+  backend = "operator_exact",
   preproc = multivarious::pass()
 )
 
-scalable_fit$eigenvalues$solver
+operator_fit$fidelity[c("passed", "eigensolver", "max_rel_residual")]
 ```
 
-```{r kema-scalable-metrics}
-rms_alignment(as.matrix(scalable_fit$s), domain_sizes, domain_names)
+```{r kema-operator-metrics}
+rms_alignment(as.matrix(operator_fit$s), domain_sizes, domain_names)
 ```
 
-The scalable path should agree closely with the baseline exact solution.
+Because the same landmark seed is used, the matrix and operator reduced
+backends should recover the same score subspace up to numerical indeterminacy.
 
-```{r compare-scalable}
-subspace_similarity(exact_fit$s[, 1:2], scalable_fit$s[, 1:2])
+```{r compare-operator}
+subspace_similarity(rekema_fit$s[, 1:2], operator_fit$s[, 1:2])
 ```
 
 ## Tuning Key Parameters
@@ -265,7 +255,7 @@ grid_summary <- parameter_grid %>%
           knn = knn,
           sigma = sigma,
           u = u,
-          solver = "regression",
+          solver = "exact",
           preproc = multivarious::pass()
         )
 
@@ -292,7 +282,7 @@ collect_scores <- function(cfg, tag) {
     knn = cfg$knn[[1]],
     sigma = cfg$sigma[[1]],
     u = cfg$u[[1]],
-    solver = "regression",
+    solver = "exact",
     preproc = multivarious::pass()
   )
 
@@ -328,13 +318,14 @@ In general, tighter kernels (`sigma = 0.5`) with modest neighbourhoods (`knn = 3
 
 ## Summary
 
-- Use the **regression solver** for quick prototypes; switch to **exact** if the
-  approximation quality is insufficient.
+- Treat KEMA as a fidelity-gated reference method: a returned fit has passed
+  the configured generalized-eigen checks, while a numerically unresolved fit
+  raises an error.
 - **REKEMA** (`sample_frac < 1`) reduces the computational burden when full
   kernels are too large.
-- Toggle `options(kema.scalable_mode = TRUE)` to engage the new low-rank
-  operator path.
-- The RMS alignment tables highlight how closely each solver agrees across domains;
+- Use `backend = "operator_exact"` to avoid explicit generalized A/B matrices;
+  it does not eliminate graph and kernel storage.
+- The RMS alignment tables highlight how closely each backend agrees across domains;
   lower values correspond to tighter alignment.
 
 These examples are deliberately small for clarity—swap in your own domains and

@@ -316,7 +316,7 @@ test_that("benchmark_graph_alignment_methods runs (fpgw only)", {
 })
 
 test_that("benchmark_graph_alignment_methods runs (ssma only)", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
 
@@ -343,7 +343,7 @@ test_that("benchmark_graph_alignment_methods runs (ssma only)", {
 })
 
 test_that("benchmark SSMA procrustes decode is opt-in", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
   skip_if_not_installed("clue")

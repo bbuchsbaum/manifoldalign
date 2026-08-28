@@ -13,7 +13,7 @@ suppressPackageStartupMessages({
   library(manifoldalign)
   library(multidesign)
   library(multivarious)
-  library(neighborweights)
+  library(adjoin)
   library(dplyr)
 })
 
@@ -773,14 +773,14 @@ run_one <- function(method,
         manifoldalign::kema(
           hd, y = id,
           preproc = multivarious::center(),
-          ncomp = ncomp, knn = 5, solver = "regression",
+          ncomp = ncomp, knn = 5, solver = "exact",
           sample_frac = 0.8, lambda = 1e-3
         )
       } else if (supervision == "condition") {
         manifoldalign::kema(
           hd, y = condition_train,
           preproc = multivarious::center(),
-          ncomp = ncomp, knn = 5, solver = "regression",
+          ncomp = ncomp, knn = 5, solver = "exact",
           sample_frac = 0.8, lambda = 1e-3
         )
       } else {
@@ -792,14 +792,14 @@ run_one <- function(method,
         manifoldalign::lowrank_align(
           hd, y = id,
           ncomp = ncomp,
-          simfun = neighborweights::binary_label_matrix,
+          simfun = adjoin::binary_label_matrix,
           solver = "operator", sv_thresh = 1, lambda = 1e-2
         )
       } else if (supervision == "condition") {
         manifoldalign::lowrank_align(
           hd, y = condition_train,
           ncomp = ncomp,
-          simfun = neighborweights::binary_label_matrix,
+          simfun = adjoin::binary_label_matrix,
           solver = "operator", sv_thresh = 1, lambda = 1e-2
         )
       } else {
@@ -1076,14 +1076,14 @@ run_one <- function(method,
 
       compute_desc <- function(X) {
         sigma_use <- tryCatch(manifoldalign::choose_sigma(as.matrix(X)), error = function(e) 0.5)
-        gw <- neighborweights::graph_weights(
+        gw <- adjoin::graph_weights(
           as.matrix(X),
           k = min(knn_struct, nrow(X) - 1L),
           weight_mode = "heat",
           sigma = sigma_use,
           neighbor_mode = "knn"
         )
-        A <- neighborweights::adjacency(gw)
+        A <- adjoin::adjacency(gw)
         A <- (A + Matrix::t(A)) / 2
         manifoldalign::compute_hks_from_adjacency(
           A,

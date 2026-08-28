@@ -90,7 +90,7 @@ library(testthat)
 test_that("cv_alignment_rows scores synchronized SSMA row holdouts", {
   skip_if_not_installed("multidesign")
   skip_if_not_installed("multivarious")
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
 
   fixture <- .make_cv_alignment_fixture(seed = 20260402)
 
@@ -133,7 +133,7 @@ test_that("cv_alignment_rows scores synchronized SSMA row holdouts", {
 test_that("cv_alignment_rows supports one-sided holdouts against analysis targets", {
   skip_if_not_installed("multidesign")
   skip_if_not_installed("multivarious")
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
 
   fixture <- .make_cv_alignment_fixture(seed = 20260403)
 
@@ -162,7 +162,7 @@ test_that("cv_alignment_rows supports one-sided holdouts against analysis target
 test_that("cv_alignment_rows treats target_pool = both like analysis for one-sided folds", {
   skip_if_not_installed("multidesign")
   skip_if_not_installed("multivarious")
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
 
   fixture <- .make_cv_alignment_fixture(seed = 20260405)
   rows <- list(
@@ -764,7 +764,7 @@ test_that("cv_alignment_rows scores degrade when target features are shuffled", 
 test_that("cv_alignment_rows errors for one-sided assessment-only target pools", {
   skip_if_not_installed("multidesign")
   skip_if_not_installed("multivarious")
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
 
   fixture <- .make_cv_alignment_fixture(seed = 20260412)
 

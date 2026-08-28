@@ -9,7 +9,7 @@
   y,
   preproc = center(),
   ncomp = 2,
-  simfun = neighborweights::binary_label_matrix,
+  simfun = adjoin::binary_label_matrix,
   u = 0.5,
   lambda = 0.1,
   row_metric_scale = 1,

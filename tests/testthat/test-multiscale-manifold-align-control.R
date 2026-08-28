@@ -37,7 +37,7 @@ test_that("resolve_multiscale_manifold_align_control merges and rejects unknown 
 })
 
 test_that("multiscale_manifold_align spectral backend returns valid alignment", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
 
@@ -99,7 +99,7 @@ test_that("multiscale randomized backend approximates the reduced diffusion spec
 })
 
 test_that("multiscale randomized backend yields matched cross-domain neighbors", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
 
@@ -149,7 +149,7 @@ test_that("multiscale randomized backend yields matched cross-domain neighbors",
 })
 
 test_that("multiscale_manifold_align retains preprocessors for high-dimensional OOS projection", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
   skip_if_not_installed("Matrix")
 
@@ -201,7 +201,7 @@ test_that("multiscale_manifold_align retains preprocessors for high-dimensional 
 })
 
 test_that("multiscale_manifold_align accepts unquoted label columns", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
 
   set.seed(20260215)
@@ -239,7 +239,7 @@ test_that("multiscale_manifold_align accepts unquoted label columns", {
 })
 
 test_that("multiscale_manifold_align can tune core diffusion controls", {
-  skip_if_not_installed("neighborweights")
+  skip_if_not_installed("adjoin")
   skip_if_not_installed("multivarious")
 
   set.seed(303)

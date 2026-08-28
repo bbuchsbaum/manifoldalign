@@ -21,12 +21,12 @@ kema(data, y, ...)
   kernel = coskern(),
   sample_frac = 1,
   use_laplacian = TRUE,
-  solver = "regression",
+  solver = "exact",
   backend = "auto",
   backend_control = NULL,
   dweight = 0.1,
   rweight = 0,
-  simfun = neighborweights::binary_label_matrix,
+  simfun = adjoin::binary_label_matrix,
   disfun = NULL,
   lambda = 1e-04,
   centre_kernel = FALSE,
@@ -44,12 +44,12 @@ kema(data, y, ...)
   kernel = NULL,
   sample_frac = 1,
   use_laplacian = TRUE,
-  solver = "regression",
+  solver = "exact",
   backend = "auto",
   backend_control = NULL,
   dweight = 0.1,
   rweight = 0,
-  simfun = neighborweights::binary_label_matrix,
+  simfun = adjoin::binary_label_matrix,
   disfun = NULL,
   lambda = 1e-04,
   centre_kernel = FALSE,
@@ -64,7 +64,7 @@ kema(data, y, ...)
 \item{y}{Name of the label variable to use for alignment (can contain NA 
 for unlabeled samples)}
 
-\item{...}{Additional arguments (currently unused)}
+\item{...}{No additional arguments are accepted; unknown arguments error.}
 
 \item{subject}{Name of the subject variable that defines the domains/strata}
 
@@ -85,30 +85,29 @@ center())}
 \item{sample_frac}{Fraction of samples to use for kernel approximation 
 (default: 1)}
 
-\item{use_laplacian}{Deprecated compatibility argument; ignored.}
+\item{use_laplacian}{Withdrawn compatibility argument. Supplying it now
+errors because previous releases silently ignored it.}
 
-\item{solver}{Deprecated compatibility argument; accepted values are
-`"regression"` and `"exact"`, but both currently route to the original
-KEMA solver.}
+\item{solver}{Eigensolver contract. Only `"exact"` is supported. The former
+`"regression"` value never selected a distinct implementation and is now
+rejected.}
 
 \item{backend}{Backend for the original eigensolver. One of `"auto"`,
-`"full_exact"`, `"reduced_exact"`, or `"operator_exact"`.}
+`"full_exact"`, `"reduced_exact"`, or `"operator_exact"`. The legacy
+`"operator_exact"` name requests the certified partial quotient solver,
+with a certified dense fallback for small quotients; the quotient matrices
+are currently materialized.}
 
 \item{backend_control}{Optional list controlling auto backend thresholds and
 fidelity checks (passed through to `kema_orig()`).}
 
-\item{dweight}{Deprecated compatibility argument; ignored.}
+\item{dweight, rweight, simfun, disfun}{Withdrawn compatibility arguments.
+Supplying any of them errors because they were previously ignored.}
 
-\item{rweight}{Deprecated compatibility argument; ignored.}
+\item{lambda}{Strictly positive Tikhonov regularization for the generalized
+metric (default: 0.0001).}
 
-\item{simfun}{Deprecated compatibility argument; ignored.}
-
-\item{disfun}{Deprecated compatibility argument; ignored.}
-
-\item{lambda}{Regularization parameter for matrix conditioning 
-(default: 0.0001)}
-
-\item{centre_kernel}{Deprecated compatibility argument; ignored.}
+\item{centre_kernel}{Withdrawn compatibility argument. Supplying it errors.}
 }
 \value{
 A \code{multiblock_biprojector} object containing:
@@ -142,9 +141,11 @@ representation that preserves both the intrinsic geometry of each domain and
 the class structure across domains. It supports semi-supervised learning 
 with missing labels (NA values).
 
-Current behavior routes `kema()` to a paper-faithful implementation
-(`kema_orig`) of the original Tuia & Camps-Valls generalized eigenproblems.
-Legacy extension arguments are still accepted for compatibility.
+`kema()` is the sole supported public entry point for the original Tuia &
+Camps-Valls generalized eigenproblems. Every returned fit must pass explicit
+generalized-eigen residual and B-orthogonality gates. The duplicate
+`kema_orig()` entry point is deprecated, and formerly ignored extension
+controls are rejected.
 
 
 KEMA solves the original paper objective:
@@ -155,8 +156,8 @@ and its reduced-rank REKEMA counterpart when `sample_frac < 1`.
 the original generalized eigenproblems from Tuia & Camps-Valls (2016),
 including the reduced-rank REKEMA form when `sample_frac < 1`.
 
-Legacy extension arguments remain in the API for backward compatibility but
-are ignored by the current implementation.
+Legacy extension arguments remain temporarily in the function signature so
+callers receive an actionable error. They are not silently ignored.
 }
 \examples{
 \donttest{

@@ -10,7 +10,7 @@ library(dplyr)
 library(multidesign)
 library(multivarious)
 library(manifoldalign)
-library(neighborweights)
+library(adjoin)
 
 set.seed(42)
 

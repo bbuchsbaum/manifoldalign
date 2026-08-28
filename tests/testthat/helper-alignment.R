@@ -25,7 +25,7 @@ create_multi_alignment_hyperdesign <- function(mats) {
 }
 
 skip_if_missing_cd_deps <- function() {
-  for (pkg in c("multidesign", "multivarious", "neighborweights", "tibble")) {
+  for (pkg in c("multidesign", "multivarious", "adjoin", "tibble")) {
     testthat::skip_if_not_installed(pkg)
   }
 }

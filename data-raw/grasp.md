@@ -340,7 +340,7 @@ Based on analysis of existing manifoldalign package patterns (KEMA, GPCA, lowran
 - Standard structure: `v` (loadings), `s` (scores), `sdev` (standard deviations)
 
 ### 5. Graph Construction
-- Use `neighborweights::graph_weights` and `neighborweights::adjacency`
+- Use `adjoin::graph_weights` and `adjoin::adjacency`
 - Pattern from KEMA: separate `compute_local_similarity` functions
 - Sparse graph representations throughout
 
@@ -380,7 +380,7 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
     stop("strata must be a non-empty list", call. = FALSE)
   }
   
-  # Construct adjacency matrices using neighborweights pattern
+  # Construct adjacency matrices using adjoin pattern
   graphs <- lapply(strata, function(stratum) {
     # Use igraph for graph construction, then convert to Matrix
     adj_matrix <- # ... construct from stratum$x
@@ -760,21 +760,21 @@ grasp <- function(data, ...) {
 
 **Epic Goal:** Extend GRASP to handle arbitrary number of domains following hub-and-spoke pattern, consistent with package multiset handling approaches.
 
-### Ticket #8: [TASK] Enhanced Descriptors (Following neighborweights integration patterns)
+### Ticket #8: [TASK] Enhanced Descriptors (Following adjoin integration patterns)
 
-**Description:** Add PPR descriptors using `neighborweights` functions already imported by the package.
+**Description:** Add PPR descriptors using `adjoin` functions already imported by the package.
 
 **Implementation Requirements:**
-1. Use existing `neighborweights::graph_weights` for consistency
+1. Use existing `adjoin::graph_weights` for consistency
 2. Follow package's graph construction patterns
 3. Add `descriptor_method` parameter to main function
 
 ```r
 compute_ppr_descriptors <- function(strata, q_descriptors, sigma = 0.73) {
-  # Use neighborweights pattern from KEMA
+  # Use adjoin pattern from KEMA
   descriptors <- lapply(strata, function(stratum) {
     # Construct graph using package patterns
-    graph_weights <- neighborweights::graph_weights(
+    graph_weights <- adjoin::graph_weights(
       stratum$x,
       weight_mode = "normalized",
       neighbor_mode = "knn", 
@@ -784,7 +784,7 @@ compute_ppr_descriptors <- function(strata, q_descriptors, sigma = 0.73) {
     )
     
     # Extract adjacency matrix
-    adj_matrix <- neighborweights::adjacency(graph_weights)
+    adj_matrix <- adjoin::adjacency(graph_weights)
     
     # Compute PPR descriptors using igraph
     # ... (PPR computation following package efficiency patterns)

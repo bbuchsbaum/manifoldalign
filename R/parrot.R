@@ -391,13 +391,13 @@ extract_parrot_networks <- function(strata) {
     x <- stratum$x
     n <- nrow(x)
     
-    # Build adjacency matrix using neighborweights (following KEMA/GRASP/CONE-Align pattern)
+    # Build adjacency matrix using adjoin (following KEMA/GRASP/CONE-Align pattern)
     # Use adaptive k based on data size (KEMA pattern)
     knn <- min(10, max(3, floor(sqrt(n))))
     
-    # Use neighborweights::graph_weights (consistent with other methods)
+    # Use adjoin::graph_weights (consistent with other methods)
     graph_weights <- tryCatch({
-      neighborweights::graph_weights(
+      adjoin::graph_weights(
         x,
         weight_mode = "normalized",
         neighbor_mode = "knn", 
@@ -410,7 +410,7 @@ extract_parrot_networks <- function(strata) {
     })
     
     # Extract adjacency matrix
-    A <- neighborweights::adjacency(graph_weights)
+    A <- adjoin::adjacency(graph_weights)
     
     # Row-normalize to get transition matrix (PARROT requirement)
     deg <- Matrix::rowSums(A)
