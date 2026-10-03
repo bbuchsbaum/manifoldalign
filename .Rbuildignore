@@ -49,3 +49,5 @@
 ^repomix-output\.txt$
 ^manifoldalign\.Rcheck$
 ^manifoldalign_.*\.tar\.gz$
+^pkgdown$
+^\.albersdown\.bak$
