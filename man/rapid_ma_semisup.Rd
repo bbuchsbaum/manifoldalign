@@ -2,7 +2,7 @@
 % Please edit documentation in R/rapid_ma_semisup.R
 \name{rapid_ma_semisup}
 \alias{rapid_ma_semisup}
-\title{Refine a RAPID-MA Fit with Guarded Class-Balanced Pseudo-Labels}
+\title{Refine a RAPID-MA fit with guarded class-balanced pseudo-labels}
 \usage{
 rapid_ma_semisup(
   fit,
@@ -15,36 +15,28 @@ rapid_ma_semisup(
 )
 }
 \arguments{
-\item{fit}{A fitted \code{rapid_ma} object.}
+\item{fit}{A fitted `rapid_ma` object.}
 
 \item{labels}{Optional training-label vectors. In inductive mode, labels
-outside \code{train_mask} are discarded before any statistic is computed.}
+outside `train_mask` are discarded before any statistic is computed.}
 
 \item{train_mask}{Optional logical vectors identifying training rows.}
 
-\item{mode}{Either \code{"transductive"} or \code{"inductive"}.}
+\item{mode}{`"transductive"` or `"inductive"`.}
 
 \item{initial_probabilities}{Optional named-class probability matrices, one
-per domain. A supervised downstream classifier can seed the sparse relation
-teacher without providing additional labels.}
+per domain. This permits a supervised downstream classifier to seed the
+sparse relation teacher without exposing any additional labels.}
 
-\item{validation_probabilities}{Optional out-of-fold probability matrices used
-when relation validation is enabled. Values at observed label rows must be
-produced without training on those rows.}
+\item{validation_probabilities}{Optional out-of-fold probability matrices
+used only when `control$relation_validation = TRUE`. Values at observed
+label rows must be produced without training on those rows.}
 
-\item{control}{Settings returned by \code{rapid_ma_semisup_control()}.}
+\item{control}{Settings from [rapid_ma_semisup_control()].}
 }
 \value{
-The updated \code{rapid_ma} object with refined probabilities and a
-\code{semisup} provenance record.
+The updated `rapid_ma` object with a `semisup` provenance record.
 }
 \description{
-Combines learned sparse relation propagation with class-balanced confidence,
-margin, uncertainty, and neighbour-agreement guards. Accepted pseudo-labels
-update sparse node-to-prototype transport; any score increase is rolled back.
-}
-\details{
-Observed labels are fixed throughout refinement. In inductive mode, held-out
-label values are removed before thresholds, selection, or diagnostics are
-computed, and pseudo-labels are restricted to training rows.
+Refine a RAPID-MA fit with guarded class-balanced pseudo-labels
 }

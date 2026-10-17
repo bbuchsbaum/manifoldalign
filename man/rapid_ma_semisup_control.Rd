@@ -2,7 +2,7 @@
 % Please edit documentation in R/rapid_ma_semisup.R
 \name{rapid_ma_semisup_control}
 \alias{rapid_ma_semisup_control}
-\title{Control RAPID-MA Semi-Supervised Teacher Refinement}
+\title{Control RAPID-MA semi-supervised teacher refinement}
 \usage{
 rapid_ma_semisup_control(
   rounds = 3L,
@@ -31,7 +31,7 @@ rapid_ma_semisup_control(
 \arguments{
 \item{rounds}{Maximum pseudo-label refresh rounds.}
 
-\item{ema_decay}{Teacher retention in \code{[0, 1)}.}
+\item{ema_decay}{EMA teacher retention in `[0, 1)`.}
 
 \item{confidence_threshold}{Base class confidence threshold.}
 
@@ -47,16 +47,16 @@ rapid_ma_semisup_control(
 
 \item{min_weight}{Minimum accepted pseudo-label weight.}
 
-\item{relation_consistency}{Whether candidates must agree with trusted relation neighbours.}
+\item{relation_consistency}{Require agreement with trusted relation neighbours.}
 
-\item{relation_validation}{Whether explicitly supplied out-of-fold
-probabilities guard against misleading relation channels.}
+\item{relation_validation}{Use explicitly supplied out-of-fold probabilities
+to guard against misleading relation channels.}
 
 \item{relation_validation_margin}{Minimum balanced-accuracy improvement over
 the full relation set before selecting a safer subset.}
 
 \item{relation_validation_max_relations}{Maximum highest-weight relations
-used to construct bounded single and pair candidates.}
+considered when constructing bounded single and pair candidates.}
 
 \item{propagation_steps}{Fixed number of sparse relation-propagation steps.}
 
@@ -68,14 +68,13 @@ used to construct bounded single and pair candidates.}
 
 \item{label_weight_multiplier}{Multiplier for pseudo-label transport costs.}
 
-\item{consistency_weight,relation_weight}{Nonnegative refinement score weights.}
+\item{consistency_weight, relation_weight}{Nonnegative refinement score weights.}
 
 \item{rollback_tolerance}{Allowed score increase before rollback.}
 }
 \value{
-A \code{rapid_ma_semisup_control} object.
+A `rapid_ma_semisup_control` object.
 }
 \description{
-Controls deterministic relation propagation, class-balanced guarded
-pseudo-label selection, EMA teacher updates, and rollback.
+Control RAPID-MA semi-supervised teacher refinement
 }
