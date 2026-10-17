@@ -2,25 +2,12 @@
 % Please edit documentation in R/rapid_ma_benchmark.R
 \name{benchmark_rapid_ma}
 \alias{benchmark_rapid_ma}
-\alias{rapid_ma_benchmark_fixture}
-\title{Reproducible RAPID-MA Accuracy and Package Comparison}
+\title{Compare RAPID-MA with related package methods on identical splits}
 \usage{
-rapid_ma_benchmark_fixture(
-  n_common = 120L,
-  extra_target = 24L,
-  source_features = 24L,
-  target_features = 10L,
-  labels_per_class = 4L,
-  seed = 1L
-)
-
 benchmark_rapid_ma(
   fixture = rapid_ma_benchmark_fixture(),
-  methods = c(
-    "target_centroid", "rapid_ma", "rapid_ma_native",
-    "rapid_ma_semisup", "lema", "ssma", "kema", "multiscale",
-    "spectral_mnn", "token_ot"
-  ),
+  methods = c("target_centroid", "rapid_ma", "rapid_ma_native", "rapid_ma_semisup",
+    "lema", "ssma", "kema", "multiscale", "spectral_mnn", "token_ot"),
   ncomp = 8L,
   seed = 1L,
   controls = list(),
@@ -28,46 +15,28 @@ benchmark_rapid_ma(
 )
 }
 \arguments{
-\item{n_common}{Number of corresponding nodes shared by the two domains.}
+\item{fixture}{A list from [rapid_ma_benchmark_fixture()], or a compatible
+list containing `data`, `truth`, `labels`, optional `positions` and
+`attributes`, and optional source-to-target `correspondence`.}
 
-\item{extra_target}{Number of target-only nodes.}
-
-\item{source_features, target_features}{Modality-specific feature widths.}
-
-\item{labels_per_class}{Paired observed labels retained per class.}
-
-\item{seed}{Deterministic fixture or method seed.}
-
-\item{fixture}{A fixture from \code{rapid_ma_benchmark_fixture()}, or a
-compatible two-domain list.}
-
-\item{methods}{Character vector of supported comparison methods.}
+\item{methods}{Methods to run. Supported values are `target_centroid`,
+`rapid_ma`, `rapid_ma_native`, `rapid_ma_semisup`, `lema`, `ssma`,
+`kema`, `multiscale`, `spectral_mnn`, and `token_ot`. Embedding methods
+use one shared nearest-centroid head; explicitly named RAPID native and
+semi-supervised rows retain their own prediction heads.}
 
 \item{ncomp}{Shared requested embedding width.}
 
+\item{seed}{Deterministic method seed.}
+
 \item{controls}{Optional named per-method control lists.}
 
-\item{keep_fits}{Whether to retain fitted objects.}
+\item{keep_fits}{Retain fitted objects in the result.}
 }
 \value{
-\code{rapid_ma_benchmark_fixture()} returns generated data, held-out truth,
-observed labels, positions, attributes, correspondences, and provenance.
-\code{benchmark_rapid_ma()} returns a \code{rapid_ma_benchmark} list with
-same-split accuracy, calibration, matching, runtime, memory lower bounds,
-failures, and split provenance.
+A `rapid_ma_benchmark` list containing a same-split results table,
+  failures, split/provenance metadata, and optionally fits.
 }
 \description{
-Builds a deterministic imbalanced cross-modality land-cover fixture and
-compares RAPID-MA with LeMA and related package methods. Embedding methods use
-the same nearest-centroid prediction head. Native UOT and sparse relation
-teacher rows are named explicitly so their accuracy is not conflated with
-embedding quality.
-}
-\details{
-Held-out truth is used only after fitting. The bundled LeMA implementation is
-an independent dense equation-level benchmark oracle and is not available as a
-production backend. Reported endpoint RSS is a lower bound rather than a
-sampled peak; evidence scripts should measure process peak RSS separately.
-Hits@1 uses exact nearest-neighbour retrieval. MRR is a bounded MRR@100 lower
-bound; true matches outside the first 100 candidates contribute zero.
+Compare RAPID-MA with related package methods on identical splits
 }

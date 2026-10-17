@@ -4,7 +4,7 @@
 \alias{rapid_ma}
 \alias{rapid_ma.list}
 \alias{rapid_ma.hyperdesign}
-\title{Scalable Structure-Aware Manifold Alignment}
+\title{Scalable structure-aware manifold alignment}
 \usage{
 rapid_ma(data, ...)
 
@@ -31,39 +31,27 @@ rapid_ma(data, ...)
 )
 }
 \arguments{
-\item{data}{A list of numeric domain matrices or a \code{hyperdesign}.}
+\item{data}{A list of numeric domain matrices or a `hyperdesign`.}
 
 \item{...}{Method-specific arguments.}
 
-\item{labels}{Optional list of partially observed label vectors. Missing labels
-may be represented by \code{NA}.}
+\item{labels}{Optional list of partially observed label vectors.}
 
-\item{relations}{Optional list containing custom named sparse relations for
-each domain.}
+\item{relations}{Optional list of custom named sparse relations per domain.}
 
-\item{positions}{Optional list of spatial coordinate matrices, one per domain.}
+\item{positions}{Optional list of spatial coordinate matrices per domain.}
 
-\item{attributes}{Optional list of mixed attribute data frames, one per domain.}
+\item{attributes}{Optional list of mixed attribute data.frames per domain.}
 
-\item{ncomp}{Positive shared embedding dimension.}
+\item{ncomp}{Shared embedding dimension.}
 
-\item{control}{Settings returned by \code{rapid_ma_control()}.}
+\item{control}{Settings from [rapid_ma_control()].}
 
-\item{y}{For a \code{hyperdesign}, an unquoted or string label column present
-in every domain design.}
+\item{y}{Optional unquoted or string label column in each domain design.}
 }
 \value{
-A \code{rapid_ma} object containing per-domain scores, shared prototypes,
-sparse node-to-prototype couplings, relation barycenters, predictions, dropped
-mass, and objective/convergence diagnostics.
+A `rapid_ma` embedding result with sparse couplings and diagnostics.
 }
 \description{
-Fits a scalable multi-domain alignment using bounded sparse relation diffusion,
-class-aware shared prototypes, sparse unbalanced transport, and
-prototype-level relation matching.
-}
-\details{
-RAPID-MA is an embedding method rather than a linear feature projector. Its
-result therefore does not contain artificial feature loadings. Out-of-sample
-application uses the fitted RAPID-MA adapter and preprocessing state.
+Scalable structure-aware manifold alignment
 }

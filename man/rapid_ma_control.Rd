@@ -2,7 +2,7 @@
 % Please edit documentation in R/rapid_ma_control.R
 \name{rapid_ma_control}
 \alias{rapid_ma_control}
-\title{Control RAPID-MA Optimization and Bounded Sparse Components}
+\title{Control RAPID-MA optimization and bounded sparse components}
 \usage{
 rapid_ma_control(
   max_iter = 8L,
@@ -38,29 +38,29 @@ rapid_ma_control(
 
 \item{max_backtracks}{Maximum damped retries after an objective increase.}
 
-\item{backtrack_factor}{Multiplicative step reduction in \code{(0, 1)}.}
+\item{backtrack_factor}{Multiplicative step reduction in `(0, 1)`.}
 
-\item{map_type}{Shared-coordinate map: \code{"ridge"},
-\code{"orthogonal"}, or \code{"identity"}.}
+\item{map_type}{Shared-coordinate map: `"ridge"`, `"orthogonal"`, or
+`"identity"`.}
 
 \item{map_ridge}{Positive ridge penalty for small latent map solves.}
 
-\item{map_step, prototype_step}{Initial update fractions in \code{(0, 1]}.}
+\item{map_step}{Initial map update fraction in `(0, 1]`.}
+
+\item{prototype_step}{Initial prototype update fraction in `(0, 1]`.}
 
 \item{uot_weight, structure_weight, supervised_weight}{Nonnegative objective
 component weights.}
 
-\item{relation, diffusion, prototype, uot, relmatch}{Optional named nested
-control lists for the corresponding RAPID-MA components.}
+\item{relation, diffusion, prototype, uot, relmatch}{Named nested control lists.}
 
 \item{seed}{Nonnegative deterministic seed.}
 
-\item{verbose}{Whether to emit iteration progress.}
+\item{verbose}{Emit iteration progress.}
 }
 \value{
-A \code{rapid_ma_control} object.
+A `rapid_ma_control` object.
 }
 \description{
-Validates the alternating solver settings and resolves all nested sparse graph,
-diffusion, prototype, transport, and relation-matching controls.
+Control RAPID-MA optimization and bounded sparse components
 }
