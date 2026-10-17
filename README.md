@@ -25,6 +25,7 @@
 | **Spectral MNN** | `spectral_mnn_align()` | Mutual nearest neighbor spectral alignment |
 | **Token-OT Graph** | `token_ot_graph_align()` | Token-level OT with graph structure |
 | **SSMA** | `ssma_align()` | Semi-Supervised Manifold Alignment |
+| **RAPID-MA** | `rapid_ma()`, `rapid_ma_feature_scores()` | Scalable structure-aware alignment of many unmatched domains with custom sparse relations; feature-side (dual) coordinates via barycentres |
 
 ## Installation
 
@@ -58,6 +59,22 @@ result <- kema(hd, ncomp = 5)
 
 # Or align with Generalized Procrustes
 result <- generalized_procrustes(hd, ncomp = 5)
+```
+
+## Dual (feature-side) coordinates
+
+Embedding methods place samples in the shared latent space. For RAPID-MA, which
+is not a linear projector and therefore has no loadings, `rapid_ma_feature_scores()`
+places each feature column (for example an activation map over voxels) at the
+weighted barycentre of the samples it loads on, so features from different domains
+can be compared in the same space:
+
+```r
+fit  <- rapid_ma(X, relations = relations, ncomp = 16)
+dual <- rapid_ma_feature_scores(fit, X)
+dual$scores$domain1   # feature x component coordinates for one domain
+dual$pooled           # equal-weight mean across domains
+dual$dispersion       # how consistently each feature is placed across domains
 ```
 
 ## Unified Aligner Interface
