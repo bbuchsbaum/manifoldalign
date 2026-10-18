@@ -35,7 +35,11 @@ token_ot_graph_aligner <- function() {
 #' @param control Control settings from token_ot_graph_align_control().
 #' @param ... Additional arguments (unused).
 #' @return An object of class token_ot_graph_pair_fit with fields transport
-#'   (sparse coupling), assignment, objective, and dimensions.
+#'   (sparse coupling), assignment, objective, and dimensions. `objective` (also
+#'   returned by [pair_loss()]) is the transport cost `sum(W * C)` on the
+#'   original, unscaled candidate costs, so it is comparable across the edges
+#'   of [align_many()]; the solver-internal median-scaled value is kept in
+#'   `diagnostics$objective_scaled`.
 #' @export
 fit_pair.token_ot_graph_aligner <- function(algo, X_i, X_j, links = NULL,
                                            ncomp = 20L,
@@ -72,9 +76,11 @@ fit_pair.token_ot_graph_aligner <- function(algo, X_i, X_j, links = NULL,
     ctrl = ctrl
   )
 
+  # Report the unscaled transport cost: the scaled objective divides by a
+  # per-pair median cost and is not comparable across pairs.
   objective <- NA_real_
-  if (!is.null(fit$diagnostics$objective_scaled)) {
-    objective <- as.numeric(fit$diagnostics$objective_scaled)
+  if (!is.null(fit$diagnostics$objective)) {
+    objective <- as.numeric(fit$diagnostics$objective)
   }
 
   structure(

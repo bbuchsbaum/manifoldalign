@@ -220,6 +220,7 @@ ot_procrustes_aligner <- function() {
     loss_trace = loss_trace[seq_len(trace_len)],
     epsilon_trace = eps_trace[seq_len(trace_len)],
     converged = converged,
+    epsilon_floor_reached = trace_len > 0L && eps_trace[trace_len] <= epsilon_min + 1e-15,
     iterations = trace_len,
     transport = last_pi
   )
@@ -318,9 +319,17 @@ ot_procrustes_aligner <- function() {
 #'   orthogonal restarts. The best run (lowest loss) is returned.
 #' @param seed Optional seed for reproducible initialization. When called via
 #'   [align_many()], the internal `i` and `j` indices are used to derive a
-#'   per-edge seed from this value.
-#' @param max_iter Maximum number of outer (alternating) iterations.
+#'   per-edge seed from this value. The caller's RNG state is restored
+#'   afterwards.
+#' @param max_iter Maximum number of outer (alternating) iterations. The
+#'   default (100) lets the default annealing schedule (`epsilon0 = 1`,
+#'   `decay = 0.95`) reach `epsilon_min = 0.05` after 60 iterations and leaves
+#'   room to converge there.
 #' @param tol Convergence tolerance on max entrywise change in the rotation.
+#'   A run is reported as `converged` only once the annealing schedule has
+#'   reached `epsilon_min` and the rotation changed by less than `tol`; a
+#'   schedule that cannot reach `epsilon_min` within `max_iter` iterations
+#'   therefore never reports convergence.
 #' @param sinkhorn_max_iter Maximum number of Sinkhorn iterations.
 #' @param sinkhorn_tol Sinkhorn convergence tolerance.
 #' @param stabilized Logical; use log-domain stabilization in Sinkhorn (slower
@@ -335,8 +344,9 @@ ot_procrustes_aligner <- function() {
 #' @param verbose Logical; print basic progress information.
 #' @param ... Additional arguments (unused).
 #' @return An object of class `ot_procrustes_pair_fit` containing the learned
-#'   rotation (i->j), loss, convergence diagnostics, and optionally the final
-#'   transport plan.
+#'   rotation (i->j), loss, convergence diagnostics (`converged`,
+#'   `iterations`, `epsilon_floor_reached`, `loss_trace`, `epsilon_trace`), and
+#'   optionally the final transport plan.
 #' @examples
 #' \donttest{
 #' set.seed(1)
@@ -356,7 +366,7 @@ fit_pair.ot_procrustes_aligner <- function(algo, X_i, X_j, links = NULL,
                                            decay = 0.95,
                                            n_init = 1L,
                                            seed = NULL,
-                                           max_iter = 50,
+                                           max_iter = 100,
                                            tol = 1e-6,
                                            sinkhorn_max_iter = 200,
                                            sinkhorn_tol = 1e-6,
@@ -420,12 +430,13 @@ fit_pair.ot_procrustes_aligner <- function(algo, X_i, X_j, links = NULL,
   a <- .ot_procrustes_normalize_marginal(a, n1, "a")
   b <- .ot_procrustes_normalize_marginal(b, n2, "b")
 
+  init_seed <- NULL
   if (!is.null(seed)) {
     ii <- suppressWarnings(as.integer(i %||% 0L))
     jj <- suppressWarnings(as.integer(j %||% 0L))
     if (!is.finite(ii)) ii <- 0L
     if (!is.finite(jj)) jj <- 0L
-    set.seed(as.integer(seed) + 1000L * ii + jj)
+    init_seed <- as.integer(seed) + 1000L * ii + jj
   }
 
   best <- NULL
@@ -435,63 +446,69 @@ fit_pair.ot_procrustes_aligner <- function(algo, X_i, X_j, links = NULL,
   n_init <- as.integer(n_init)
   R_sig <- NULL
   R0_list <- vector("list", n_init)
-  for (k in seq_len(n_init)) {
-    R0_list[[k]] <- if (init == "identity") {
-      if (k == 1L) {
+  # Only the random restarts draw from the RNG; with `seed` they run under
+  # a local seed and the caller's RNG state is restored afterwards.
+  build_inits <- function() {
+    for (k in seq_len(n_init)) {
+      R0_list[[k]] <- if (init == "identity") {
+        if (k == 1L) {
+          diag(d)
+        } else if (k == 2L) {
+          if (is.null(R_sig)) {
+            R_sig <- tryCatch(
+              .ot_procrustes_signature_init_rotation(
+                X_i = X_i,
+                X_j = X_j,
+                a = a,
+                b = b,
+                epsilon0 = epsilon0,
+                epsilon_min = epsilon_min,
+                sinkhorn_max_iter = sinkhorn_max_iter,
+                sinkhorn_tol = sinkhorn_tol,
+                stabilized = stabilized,
+                cost_scale = cost_scale,
+                force_SO = force_SO
+              ),
+              error = function(e) NULL
+            )
+          }
+          if (is.null(R_sig)) diag(d) else R_sig
+        } else {
+          .ot_procrustes_random_orthogonal(d, force_SO = force_SO)
+        }
+      } else if (init == "signature") {
+        if (k == 1L) {
+          if (is.null(R_sig)) {
+            R_sig <- tryCatch(
+              .ot_procrustes_signature_init_rotation(
+                X_i = X_i,
+                X_j = X_j,
+                a = a,
+                b = b,
+                epsilon0 = epsilon0,
+                epsilon_min = epsilon_min,
+                sinkhorn_max_iter = sinkhorn_max_iter,
+                sinkhorn_tol = sinkhorn_tol,
+                stabilized = stabilized,
+                cost_scale = cost_scale,
+                force_SO = force_SO
+              ),
+              error = function(e) NULL
+            )
+          }
+          if (is.null(R_sig)) diag(d) else R_sig
+        } else {
+          .ot_procrustes_random_orthogonal(d, force_SO = force_SO)
+        }
+      } else if (init == "random_orthogonal") {
+        .ot_procrustes_random_orthogonal(d, force_SO = force_SO)
+      } else {
         diag(d)
-      } else if (k == 2L) {
-        if (is.null(R_sig)) {
-          R_sig <- tryCatch(
-            .ot_procrustes_signature_init_rotation(
-              X_i = X_i,
-              X_j = X_j,
-              a = a,
-              b = b,
-              epsilon0 = epsilon0,
-              epsilon_min = epsilon_min,
-              sinkhorn_max_iter = sinkhorn_max_iter,
-              sinkhorn_tol = sinkhorn_tol,
-              stabilized = stabilized,
-              cost_scale = cost_scale,
-              force_SO = force_SO
-            ),
-            error = function(e) NULL
-          )
-        }
-        if (is.null(R_sig)) diag(d) else R_sig
-      } else {
-        .ot_procrustes_random_orthogonal(d, force_SO = force_SO)
       }
-    } else if (init == "signature") {
-      if (k == 1L) {
-        if (is.null(R_sig)) {
-          R_sig <- tryCatch(
-            .ot_procrustes_signature_init_rotation(
-              X_i = X_i,
-              X_j = X_j,
-              a = a,
-              b = b,
-              epsilon0 = epsilon0,
-              epsilon_min = epsilon_min,
-              sinkhorn_max_iter = sinkhorn_max_iter,
-              sinkhorn_tol = sinkhorn_tol,
-              stabilized = stabilized,
-              cost_scale = cost_scale,
-              force_SO = force_SO
-            ),
-            error = function(e) NULL
-          )
-        }
-        if (is.null(R_sig)) diag(d) else R_sig
-      } else {
-        .ot_procrustes_random_orthogonal(d, force_SO = force_SO)
-      }
-    } else if (init == "random_orthogonal") {
-      .ot_procrustes_random_orthogonal(d, force_SO = force_SO)
-    } else {
-      diag(d)
     }
+    R0_list
   }
+  R0_list <- if (is.null(init_seed)) build_inits() else .with_local_seed(init_seed, build_inits())
 
   # When using the common two-start pattern (identity + signature), do a short
   # warm-up run for each and only continue the better one when clearly better.
@@ -628,6 +645,7 @@ fit_pair.ot_procrustes_aligner <- function(algo, X_i, X_j, links = NULL,
       loss_trace = best$loss_trace,
       epsilon_trace = best$epsilon_trace,
       converged = best$converged,
+      epsilon_floor_reached = isTRUE(best$epsilon_floor_reached),
       iterations = best$iterations,
       n1 = n1,
       n2 = n2,

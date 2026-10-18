@@ -1,5 +1,7 @@
 #include <RcppArmadillo.h>
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include "ot_common.h"
 
 // [[Rcpp::depends(RcppArmadillo)]]
@@ -7,15 +9,193 @@
 using namespace Rcpp;
 using namespace arma;
 
+namespace {
+
+struct SinkhornResult {
+  arma::mat P;
+  arma::vec log_u;
+  arma::vec log_v;
+  int iterations;
+  bool converged;
+  double marginal_error;
+};
+
+void validate_sinkhorn_inputs(const arma::mat& cost,
+                              const arma::vec& a,
+                              const arma::vec& b,
+                              double epsilon,
+                              int max_iter,
+                              double tol) {
+  check_marginals(a, b);
+  if (cost.n_rows != a.n_elem || cost.n_cols != b.n_elem) {
+    Rcpp::stop("Sinkhorn: cost must be length(a) x length(b).");
+  }
+  if (!std::isfinite(epsilon) || epsilon <= 0.0) {
+    Rcpp::stop("Sinkhorn: epsilon must be a finite positive number.");
+  }
+  if (max_iter < 1) {
+    Rcpp::stop("Sinkhorn: max_iter must be >= 1.");
+  }
+  if (!std::isfinite(tol) || tol <= 0.0) {
+    Rcpp::stop("Sinkhorn: tol must be a finite positive number.");
+  }
+  if (!cost.is_finite()) {
+    Rcpp::stop("Sinkhorn: cost matrix contains non-finite values.");
+  }
+}
+
+// Column-wise log-sum-exp of (log_K + log_u 1^T); returns a length-m vector.
+arma::vec lse_cols(const arma::mat& log_K, const arma::vec& log_u, arma::mat& tmp) {
+  tmp = log_K;
+  tmp.each_col() += log_u;
+  arma::rowvec mx = arma::max(tmp, 0);
+  mx.replace(-arma::datum::inf, 0.0);
+  tmp.each_row() -= mx;
+  arma::rowvec s = arma::sum(arma::exp(tmp), 0);
+  return (mx + arma::log(s)).t();
+}
+
+// Row-wise log-sum-exp of (log_K + 1 log_v^T); returns a length-n vector.
+arma::vec lse_rows(const arma::mat& log_K, const arma::vec& log_v, arma::mat& tmp) {
+  tmp = log_K;
+  tmp.each_row() += log_v.t();
+  arma::vec mx = arma::max(tmp, 1);
+  mx.replace(-arma::datum::inf, 0.0);
+  tmp.each_col() -= mx;
+  arma::vec s = arma::sum(arma::exp(tmp), 1);
+  return mx + arma::log(s);
+}
+
+double marginal_residual(const arma::mat& P, const arma::vec& a, const arma::vec& b) {
+  double row_err = arma::abs(arma::sum(P, 1) - a).max();
+  double col_err = arma::abs(arma::sum(P, 0).t() - b).max();
+  double err = std::max(row_err, col_err);
+  if (!std::isfinite(err)) err = std::numeric_limits<double>::infinity();
+  return err;
+}
+
+// Balanced entropic OT:  min <C, P> + epsilon * sum P (log P - 1)  s.t. P1 = a, P^T1 = b.
+//
+// Both paths share one convention: the Gibbs kernel is exp(-cost / epsilon) on
+// the raw (unscaled) cost, P = diag(exp(log_u)) K diag(exp(log_v)), and the
+// iteration stops when the marginal residual max(|P1 - a|, |P^T 1 - b|) is
+// below `tol`.  Each sweep updates v (columns exact) and then u (rows exact),
+// so the residual is the column error, which is available for free from the
+// next sweep's column log-sum-exp.  No post-hoc rebalancing is applied: the
+// returned plan is exactly the plan implied by the returned potentials, and
+// `converged` reports whether the tolerance was reached within max_iter.
+SinkhornResult sinkhorn_core(const arma::mat& cost,
+                             const arma::vec& a,
+                             const arma::vec& b,
+                             double epsilon,
+                             int max_iter,
+                             double tol,
+                             bool stabilized,
+                             const arma::vec* log_u0,
+                             const arma::vec* log_v0) {
+  validate_sinkhorn_inputs(cost, a, b, epsilon, max_iter, tol);
+
+  const arma::uword n = a.n_elem;
+  const arma::uword m = b.n_elem;
+
+  SinkhornResult out;
+  out.converged = false;
+  out.iterations = 0;
+  out.log_u = log_u0 ? *log_u0 : arma::vec(n, arma::fill::zeros);
+  out.log_v = log_v0 ? *log_v0 : arma::vec(m, arma::fill::zeros);
+
+  if (stabilized) {
+    const arma::vec log_a = arma::log(a);
+    const arma::vec log_b = arma::log(b);
+    const arma::mat log_K = -cost / epsilon;
+    arma::mat tmp(n, m, arma::fill::none);
+
+    for (int iter = 0; iter < max_iter; ++iter) {
+      arma::vec lc = lse_cols(log_K, out.log_u, tmp);
+      if (iter > 0) {
+        // Rows are exact after the previous u-update; check the columns.
+        double col_err = arma::abs(arma::exp(out.log_v + lc) - b).max();
+        if (std::isfinite(col_err) && col_err < tol) {
+          out.converged = true;
+          break;
+        }
+      }
+      out.log_v = log_b - lc;
+      arma::vec lr = lse_rows(log_K, out.log_v, tmp);
+      out.log_u = log_a - lr;
+      out.iterations = iter + 1;
+    }
+
+    tmp = log_K;
+    tmp.each_col() += out.log_u;
+    tmp.each_row() += out.log_v.t();
+    out.P = arma::exp(tmp);
+  } else {
+    const arma::mat K = arma::exp(-cost / epsilon);
+    arma::vec u = arma::ones(n);
+    arma::vec v = arma::ones(m);
+    if (log_u0) u = arma::exp(out.log_u - out.log_u.max());
+    if (log_v0) v = arma::exp(out.log_v - out.log_v.max());
+
+    for (int iter = 0; iter < max_iter; ++iter) {
+      arma::vec KTu = K.t() * u;
+      if (iter > 0) {
+        double col_err = arma::abs(v % KTu - b).max();
+        if (std::isfinite(col_err) && col_err < tol) {
+          out.converged = true;
+          break;
+        }
+      }
+      v = b / (KTu + 1e-300);
+      u = a / (K * v + 1e-300);
+      out.iterations = iter + 1;
+    }
+
+    out.P = arma::diagmat(u) * K * arma::diagmat(v);
+    out.log_u = arma::log(u);
+    out.log_v = arma::log(v);
+  }
+
+  // Report convergence from the plan actually returned.
+  out.marginal_error = marginal_residual(out.P, a, b);
+  out.converged = out.marginal_error < tol;
+  return out;
+}
+
+arma::vec nullable_to_vec(const Rcpp::Nullable<Rcpp::NumericVector>& x,
+                          arma::uword expected,
+                          const char* what) {
+  Rcpp::NumericVector v(x);
+  if (static_cast<arma::uword>(v.size()) != expected) {
+    Rcpp::stop("%s has the wrong length.", what);
+  }
+  arma::vec out = Rcpp::as<arma::vec>(v);
+  if (!out.is_finite()) {
+    Rcpp::stop("%s must be finite.", what);
+  }
+  return out;
+}
+
+} // namespace
+
 //' Unified Sinkhorn algorithm with optional log-domain stabilization
-//' 
+//'
+//' Solves balanced entropic OT with Gibbs kernel \code{exp(-cost / epsilon)}
+//' on the raw cost. With \code{stabilized = TRUE} the iterations run in the
+//' log domain for every \code{epsilon}; with \code{stabilized = FALSE} they
+//' use plain kernel scaling, which underflows when \code{cost / epsilon} is
+//' large. Iterations stop when the marginal residual is below \code{tol}. The
+//' plan is returned as computed (no post-hoc rebalancing); use
+//' \code{sinkhorn_unified_potentials()} to obtain the convergence flag and
+//' marginal residual.
+//'
 //' @param cost Cost matrix (n x m)
 //' @param a Source marginal (n x 1)
 //' @param b Target marginal (m x 1)
 //' @param epsilon Entropic regularization parameter
 //' @param max_iter Maximum iterations
-//' @param tol Convergence tolerance
-//' @param stabilized Use log-domain stabilization for numerical stability
+//' @param tol Convergence tolerance on the marginal residual
+//' @param stabilized Use log-domain iterations
 //' @return Transport plan matrix
 // [[Rcpp::export]]
 arma::mat sinkhorn_unified(const arma::mat& cost,
@@ -25,108 +205,16 @@ arma::mat sinkhorn_unified(const arma::mat& cost,
                            int max_iter = 1000,
                            double tol = 1e-9,
                            bool stabilized = true) {
-  
-  // Check marginals
-  check_marginals(a, b);
-  
-  int n = a.n_elem;
-  int m = b.n_elem;
-  
-  if (stabilized && epsilon < 0.1) {
-    // Use log-domain stabilization for small epsilon
-    
-    // Initialize log-potentials
-    arma::vec log_u(n, arma::fill::zeros);
-    arma::vec log_v(m, arma::fill::zeros);
-    const arma::vec log_a = arma::log(a);
-    const arma::vec log_b = arma::log(b);
-    
-    // Pre-compute log-kernel
-    arma::mat log_K = -cost / epsilon;
-    double max_log_K = log_K.max();
-    log_K -= max_log_K;  // Improve numerical stability
-    
-    arma::mat tmp(n, m, arma::fill::none);
-
-    // Sinkhorn iterations in log domain
-    for (int iter = 0; iter < max_iter; ++iter) {
-      arma::vec log_u_prev = log_u;
-      
-      // Update log_v
-      tmp = log_K;
-      tmp.each_col() += log_u;
-      arma::rowvec maxv = arma::max(tmp, 0);
-      tmp.each_row() -= maxv;
-      tmp = arma::exp(tmp);
-      arma::rowvec sumexp_v = arma::sum(tmp, 0);
-      sumexp_v += 1e-300;
-      arma::vec log_sum_u_K = (maxv + arma::log(sumexp_v)).t();
-      log_v = log_b - log_sum_u_K;
-      
-      // Update log_u
-      tmp = log_K;
-      tmp.each_row() += log_v.t();
-      arma::colvec maxu = arma::max(tmp, 1);
-      tmp.each_col() -= maxu;
-      tmp = arma::exp(tmp);
-      arma::colvec sumexp_u = arma::sum(tmp, 1);
-      sumexp_u += 1e-300;
-      arma::vec log_sum_v_KT = maxu + arma::log(sumexp_u);
-      log_u = log_a - log_sum_v_KT;
-      
-      // Check convergence
-      if (arma::max(arma::abs(log_u - log_u_prev)) < tol) {
-        break;
-      }
-    }
-    
-    // Reconstruct transport plan
-    tmp = log_K;
-    tmp.each_col() += log_u;
-    tmp.each_row() += log_v.t();
-    arma::mat P = arma::exp(tmp);
-    
-    // Ensure exact marginal constraints
-    P = normalize_doubly_stochastic(P, a, b, tol/10, 20);
-    
-    return P;
-    
-  } else {
-    // Use standard Sinkhorn for large epsilon or when not stabilized
-    
-    // Gibbs kernel
-    arma::mat K = arma::exp(-cost / epsilon);
-    
-    // Initialize scaling factors
-    arma::vec u = arma::ones(n);
-    arma::vec v = arma::ones(m);
-    
-    // Sinkhorn iterations
-    for (int iter = 0; iter < max_iter; ++iter) {
-      arma::vec u_old = u;
-      
-      // Update scaling factors
-      u = a / (K * v + 1e-20);
-      v = b / (K.t() * u + 1e-20);
-      
-      // Check convergence
-      double err = arma::norm(u - u_old, "inf");
-      if (err < tol) {
-        break;
-      }
-    }
-    
-    // Compute transport plan
-    arma::mat P = arma::diagmat(u) * K * arma::diagmat(v);
-    
-    return P;
-  }
+  SinkhornResult res = sinkhorn_core(cost, a, b, epsilon, max_iter, tol,
+                                     stabilized, nullptr, nullptr);
+  return res.P;
 }
 
 //' Unified Sinkhorn algorithm returning dual potentials for warm-starting
 //'
-//' This variant returns both the transport plan and the (log) scaling vectors
-//' that can be reused to warm-start subsequent Sinkhorn solves.
+//' Same solver as \code{sinkhorn_unified()}, additionally returning the log
+//' scaling vectors (\code{pi = exp(-cost/epsilon + log_u + log_v^T)} exactly)
+//' and convergence diagnostics.
 //'
 //' @param cost Cost matrix (n x m)
 //' @param a Source marginal (n x 1)
@@ -135,9 +223,11 @@ arma::mat sinkhorn_unified(const arma::mat& cost,
 //' @param log_u0 Optional warm-start log scaling for rows (length n)
 //' @param log_v0 Optional warm-start log scaling for columns (length m)
 //' @param max_iter Maximum iterations
-//' @param tol Convergence tolerance
-//' @param stabilized Use log-domain stabilization for small epsilon
-//' @return A list with elements pi (plan), log_u, log_v
+//' @param tol Convergence tolerance on the marginal residual
+//' @param stabilized Use log-domain iterations
+//' @return A list with elements \code{pi} (plan), \code{log_u}, \code{log_v},
+//'   \code{converged}, \code{iterations} and \code{marginal_error}
+//'   (max absolute row/column marginal violation of \code{pi}).
 // [[Rcpp::export]]
 Rcpp::List sinkhorn_unified_potentials(const arma::mat& cost,
                                       const arma::vec& a,
@@ -148,127 +238,42 @@ Rcpp::List sinkhorn_unified_potentials(const arma::mat& cost,
                                       int max_iter = 1000,
                                       double tol = 1e-9,
                                       bool stabilized = true) {
-
-  check_marginals(a, b);
-
-  const int n = a.n_elem;
-  const int m = b.n_elem;
-
-  arma::vec log_u(n, arma::fill::zeros);
-  arma::vec log_v(m, arma::fill::zeros);
-
+  arma::vec u0, v0;
+  const arma::vec* pu = nullptr;
+  const arma::vec* pv = nullptr;
   if (log_u0.isNotNull()) {
-    Rcpp::NumericVector u0(log_u0);
-    if (u0.size() != n) Rcpp::stop("log_u0 must have length nrow(cost).");
-    log_u = Rcpp::as<arma::vec>(u0);
+    u0 = nullable_to_vec(log_u0, cost.n_rows, "log_u0");
+    pu = &u0;
   }
   if (log_v0.isNotNull()) {
-    Rcpp::NumericVector v0(log_v0);
-    if (v0.size() != m) Rcpp::stop("log_v0 must have length ncol(cost).");
-    log_v = Rcpp::as<arma::vec>(v0);
+    v0 = nullable_to_vec(log_v0, cost.n_cols, "log_v0");
+    pv = &v0;
   }
 
-  arma::mat P;
-
-  if (stabilized && epsilon < 0.1) {
-    // Log-domain stabilization
-    const arma::vec log_a = arma::log(a);
-    const arma::vec log_b = arma::log(b);
-
-    arma::mat log_K = -cost / epsilon;
-    double max_log_K = log_K.max();
-    log_K -= max_log_K;
-
-    arma::mat tmp(n, m, arma::fill::none);
-
-    for (int iter = 0; iter < max_iter; ++iter) {
-      arma::vec log_u_prev = log_u;
-
-      // Update log_v
-      tmp = log_K;
-      tmp.each_col() += log_u;
-      arma::rowvec maxv = arma::max(tmp, 0);
-      tmp.each_row() -= maxv;
-      tmp = arma::exp(tmp);
-      arma::rowvec sumexp_v = arma::sum(tmp, 0);
-      sumexp_v += 1e-300;
-      arma::vec log_sum_u_K = (maxv + arma::log(sumexp_v)).t();
-      log_v = log_b - log_sum_u_K;
-
-      // Update log_u
-      tmp = log_K;
-      tmp.each_row() += log_v.t();
-      arma::colvec maxu = arma::max(tmp, 1);
-      tmp.each_col() -= maxu;
-      tmp = arma::exp(tmp);
-      arma::colvec sumexp_u = arma::sum(tmp, 1);
-      sumexp_u += 1e-300;
-      arma::vec log_sum_v_KT = maxu + arma::log(sumexp_u);
-      log_u = log_a - log_sum_v_KT;
-
-      if (arma::max(arma::abs(log_u - log_u_prev)) < tol) {
-        break;
-      }
-    }
-
-    // Reconstruct plan
-    tmp = log_K;
-    tmp.each_col() += log_u;
-    tmp.each_row() += log_v.t();
-    P = arma::exp(tmp);
-
-    // Enforce marginals (important for downstream usage)
-    P = normalize_doubly_stochastic(P, a, b, tol / 10, 20);
-
-  } else {
-    // Standard Sinkhorn scaling (optionally warm-started via log_u/log_v)
-    arma::mat K = arma::exp(-cost / epsilon);
-
-    arma::vec u = arma::ones(n);
-    arma::vec v = arma::ones(m);
-
-    if (log_u0.isNotNull()) {
-      double s = log_u.max();
-      u = arma::exp(log_u - s);
-    }
-    if (log_v0.isNotNull()) {
-      double s = log_v.max();
-      v = arma::exp(log_v - s);
-    }
-
-    for (int iter = 0; iter < max_iter; ++iter) {
-      arma::vec u_old = u;
-      u = a / (K * v + 1e-20);
-      v = b / (K.t() * u + 1e-20);
-      if (arma::norm(u - u_old, "inf") < tol) {
-        break;
-      }
-    }
-
-    P = arma::diagmat(u) * K * arma::diagmat(v);
-
-    log_u = arma::log(u + 1e-300);
-    log_v = arma::log(v + 1e-300);
-  }
+  SinkhornResult res = sinkhorn_core(cost, a, b, epsilon, max_iter, tol,
+                                     stabilized, pu, pv);
 
   return Rcpp::List::create(
-    Rcpp::_["pi"] = P,
-    Rcpp::_["log_u"] = log_u,
-    Rcpp::_["log_v"] = log_v
+    Rcpp::_["pi"] = res.P,
+    Rcpp::_["log_u"] = res.log_u,
+    Rcpp::_["log_v"] = res.log_v,
+    Rcpp::_["converged"] = res.converged,
+    Rcpp::_["iterations"] = res.iterations,
+    Rcpp::_["marginal_error"] = res.marginal_error
   );
 }
 
 // Maintain backward compatibility - redirect old functions to unified version
 
 // [[Rcpp::export]]
-arma::mat solve_sinkhorn_stabilized_cpp(const arma::mat& C_in, double tau, 
+arma::mat solve_sinkhorn_stabilized_cpp(const arma::mat& C_in, double tau,
                                         int max_iter, double tol) {
-  // For backward compatibility with parrot code
+  // Uniform marginals, log-domain iterations on the raw cost.
   int n = C_in.n_rows;
   int m = C_in.n_cols;
   arma::vec mu(n, arma::fill::value(1.0 / std::max(1, n)));
   arma::vec nu(m, arma::fill::value(1.0 / std::max(1, m)));
-  
+
   return sinkhorn_unified(C_in, mu, nu, tau, max_iter, tol, true);
 }
 
@@ -279,12 +284,11 @@ Rcpp::NumericMatrix sinkhorn_ot_cpp(Rcpp::NumericMatrix cost_r,
                                     double epsilon,
                                     int max_iter = 1000,
                                     double tol = 1e-9) {
-  // For backward compatibility with FPGW code
   arma::mat cost = Rcpp::as<arma::mat>(cost_r);
   arma::vec a = Rcpp::as<arma::vec>(a_r);
   arma::vec b = Rcpp::as<arma::vec>(b_r);
-  
-  arma::mat P = sinkhorn_unified(cost, a, b, epsilon, max_iter, tol, epsilon < 0.1);
-  
+
+  arma::mat P = sinkhorn_unified(cost, a, b, epsilon, max_iter, tol, true);
+
   return Rcpp::wrap(P);
 }

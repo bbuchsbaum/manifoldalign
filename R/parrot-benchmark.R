@@ -23,7 +23,8 @@ NULL
 benchmark_parrot_scalability <- function(sizes = c(50, 100, 200, 500, 1000),
                                        n_reps = 3,
                                        sparse_graph = TRUE) {
-  
+  .require_multidesign("benchmark_parrot_scalability()")
+
   results <- list()
   result_idx <- 1
   
@@ -155,15 +156,16 @@ benchmark_parrot_scalability <- function(sizes = c(50, 100, 200, 500, 1000),
 #' }
 #' @export
 profile_parrot_memory <- function(n_nodes = 100) {
-  
-  if (!requireNamespace("pryr", quietly = TRUE)) {
-    warning("pryr package not available for memory profiling")
-    return(NULL)
+  .require_multidesign("profile_parrot_memory()")
+
+  # Memory in use by R (bytes), from base gc(); no extra dependency needed.
+  mem_used <- function() {
+    g <- gc()
+    sum(g[, 2]) * 1024^2
   }
-  
+
   # Initial memory
-  gc()
-  mem_start <- pryr::mem_used()
+  mem_start <- mem_used()
   
   # Generate test data
   angles <- 2 * pi * (1:n_nodes) / n_nodes
@@ -189,18 +191,17 @@ profile_parrot_memory <- function(n_nodes = 100) {
   hd <- multidesign::hyperdesign(list(domain1 = md1, domain2 = md2))
   
   # Memory after data creation
-  mem_data <- pryr::mem_used()
+  mem_data <- mem_used()
   
   # Run PARROT
   result <- parrot(hd, anchors = anchors, max_iter = 10)
   
   # Peak memory
-  mem_peak <- pryr::mem_used()
+  mem_peak <- mem_used()
   
   # Clean up and final memory
   rm(result)
-  gc()
-  mem_final <- pryr::mem_used()
+  mem_final <- mem_used()
   
   list(
     n_nodes = n_nodes,
@@ -386,17 +387,13 @@ generate_parrot_performance_report <- function(output_file = "parrot_performance
   cat("2. MEMORY USAGE ANALYSIS\n")
   cat("------------------------\n")
   
-  if (requireNamespace("pryr", quietly = TRUE)) {
-    mem_results <- list()
-    for (n in c(50, 100, 200)) {
-      mem_results[[length(mem_results) + 1]] <- profile_parrot_memory(n)
-    }
-    
-    mem_df <- do.call(rbind, lapply(mem_results, as.data.frame))
-    print(mem_df[, c("n_nodes", "memory_peak", "memory_algorithm", "theoretical_transport_plan")])
-  } else {
-    cat("Memory profiling requires 'pryr' package\n")
+  mem_results <- list()
+  for (n in c(50, 100, 200)) {
+    mem_results[[length(mem_results) + 1]] <- profile_parrot_memory(n)
   }
+
+  mem_df <- do.call(rbind, lapply(mem_results, as.data.frame))
+  print(mem_df[, c("n_nodes", "memory_peak", "memory_algorithm", "theoretical_transport_plan")])
   
   cat("\n")
   
@@ -417,4 +414,14 @@ generate_parrot_performance_report <- function(output_file = "parrot_performance
   sink()
   
   cat("\nPerformance report saved to:", output_file, "\n")
+}
+
+# multidesign (Suggests) builds the hyperdesign inputs of the PARROT
+# benchmark and validation helpers.
+.require_multidesign <- function(caller) {
+  if (!requireNamespace("multidesign", quietly = TRUE)) {
+    stop(caller, " requires the 'multidesign' package (listed in Suggests); ",
+         "please install it.", call. = FALSE)
+  }
+  invisible(TRUE)
 }

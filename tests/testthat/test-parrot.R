@@ -126,7 +126,7 @@ test_that("PARROT basic functionality and return structure validation", {
   test_case <- create_aligned_networks(n_nodes, n_features = 2, noise_level = 0.05)
   
   # Run PARROT with default parameters
-  result <- parrot(test_case$hyperdesign, anchors = anchors, ncomp = 5, max_iter = 20)
+  result <- parrot(test_case$hyperdesign, anchors = anchors, ncomp = 5, max_iter = 1000)
   
   # Test return structure (multiblock_biprojector pattern)
   expect_true(inherits(result, "multiblock_biprojector"))
@@ -233,7 +233,7 @@ test_that("PARROT respects anchor constraints", {
   
   # Run PARROT with strong anchor influence and optimal parameters
   result <- parrot(hd, anchors = anchors, lambda = 0.5, lambda_p = 2.0, 
-           alpha = 0.1, tau = 0.001, max_iter = 100)
+           alpha = 0.1, tau = 0.001, max_iter = 1000)
   
   # Check that anchors have high transport mass
   transport_plan <- result$transport_plan
@@ -262,18 +262,16 @@ test_that("PARROT solver methods work correctly", {
   
   # Test Sinkhorn solver (default)
   result_sinkhorn <- parrot(test_case$hyperdesign, anchors = anchors, 
-           ncomp = 4, solver = "sinkhorn", tau = 0.05, max_iter = 30)
+           ncomp = 4, solver = "sinkhorn", tau = 0.05, max_iter = 1000)
   
   expect_true(inherits(result_sinkhorn, "parrot"))
   expect_equal(dim(result_sinkhorn$transport_plan), c(n_nodes, n_nodes))
   
-  # Exact solver currently unsupported in proximal loop; ensure informative error
+  # The exact solver is not implemented and is rejected up front
   expect_error(
     parrot(test_case$hyperdesign, anchors = anchors, ncomp = 4, solver = "exact", max_iter = 30),
-    "supports sinkhorn solver only"
+    "not implemented"
   )
-  
-  message("Solver methods test passed - both Sinkhorn and exact solvers work")
 })
 
 # -------------------------------------------------------------------------
@@ -355,7 +353,7 @@ test_that("PARROT transport plan has correct mathematical properties", {
   
   for (tau in tau_values) {
     result <- parrot(test_case$hyperdesign, anchors = anchors, 
-             tau = tau, lambda = 0.1, max_iter = 50)
+             tau = tau, lambda = 0.1, max_iter = 1000)
     
     transport_plan <- result$transport_plan
     
@@ -425,7 +423,7 @@ test_that("PARROT achieves good performance on aligned networks", {
     # Run PARROT with stronger structural weighting and smaller tau for concentration
     result <- parrot(hd, anchors = anchors, 
              ncomp = 8, sigma = 0.2, lambda = 0.2, alpha = 0.1, tau = 0.005,
-             solver = "sinkhorn", max_iter = 100, tol = 1e-6)
+             solver = "sinkhorn", max_iter = 1000, tol = 1e-6)
 
     # Evaluate performance
     eval_result <- evaluate_transport_plan(result$transport_plan, permutation)
@@ -462,14 +460,14 @@ test_that("PARROT handles edge cases gracefully", {
   X_small2 <- matrix(rnorm(n_small * 2), n_small, 2)
   hd_small <- create_test_hyperdesign_anchors(X_small1, X_small2, cbind(1:2, 1:2))
   
-  result_small <- parrot(hd_small, anchors = anchors, ncomp = 2, max_iter = 10)
+  result_small <- parrot(hd_small, anchors = anchors, ncomp = 2, max_iter = 1000)
   
   expect_s3_class(result_small, "parrot")
   
   # Test 2: Single anchor
   hd_single <- create_test_hyperdesign_anchors(X_small1, X_small2, cbind(1, 1))
   
-  result_single <- parrot(hd_single, anchors = anchors, ncomp = 2, max_iter = 10)
+  result_single <- parrot(hd_single, anchors = anchors, ncomp = 2, max_iter = 1000)
   
   expect_s3_class(result_single, "parrot")
   
@@ -479,7 +477,7 @@ test_that("PARROT handles edge cases gracefully", {
   X2 <- matrix(rnorm(n_nodes * 2, 0, 5), n_nodes, 2)  # Very different
   hd_noise <- create_test_hyperdesign_anchors(X1, X2)
   
-  result_noise <- parrot(hd_noise, anchors = anchors, tau = 0.1, max_iter = 20)
+  result_noise <- parrot(hd_noise, anchors = anchors, tau = 0.1, max_iter = 1000)
   
   expect_s3_class(result_noise, "parrot")
   
@@ -494,7 +492,7 @@ test_that("PARROT handles edge cases gracefully", {
     params <- param_combinations[[i]]
     result <- parrot(hd_small, anchors = anchors, 
              tau = params$tau, lambda = params$lambda,
-             max_iter = 50, tol = 1e-4)
+             max_iter = 1000, tol = 1e-4)
     
     expect_s3_class(result, "parrot")
   }
@@ -515,13 +513,13 @@ test_that("PARROT works with different preprocessing options", {
   
   # Test with center preprocessing (default) - simplified test
   result_center <- parrot(hd, anchors = anchors, preproc = multivarious::center(), 
-           ncomp = 2, max_iter = 10, tau = 0.1)
+           ncomp = 2, max_iter = 1000, tau = 0.1)
   
   expect_true(inherits(result_center, "parrot"))
   
   # Test with NULL preprocessing - simplified test
   result_null <- parrot(hd, anchors = anchors, preproc = NULL, 
-           ncomp = 2, max_iter = 10, tau = 0.1)
+           ncomp = 2, max_iter = 1000, tau = 0.1)
   
   expect_true(inherits(result_null, "parrot"))
   
@@ -542,7 +540,7 @@ test_that("PARROT consistency regularization affects results appropriately", {
   
   for (lambda in lambda_values) {
     result <- parrot(test_case$hyperdesign, anchors = anchors,
-             lambda = lambda, tau = 0.05, max_iter = 30)
+             lambda = lambda, tau = 0.05, max_iter = 1000)
     
     results[[as.character(lambda)]] <- result
   }

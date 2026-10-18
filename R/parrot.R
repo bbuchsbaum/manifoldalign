@@ -12,46 +12,52 @@
 #'
 #' @param data Input data object containing network domains
 #' @param anchors Name of anchor/correspondence variable for semi-supervised alignment
-#' @param ... Additional arguments passed to specific methods. See 
-#'   \code{\link{parrot.hyperdesign}} for details on method-specific parameters 
-#'   such as \code{preproc}, \code{ncomp}, \code{sigma}, \code{lambda}, 
-#'   \code{tau}, \code{solver}, \code{max_iter}, \code{tol}, and \code{use_cpp}
+#' @param ... Additional arguments passed to specific methods. See
+#'   \code{\link{parrot.hyperdesign}} for details on method-specific parameters
+#'   such as \code{preproc}, \code{ncomp}, \code{sigma}, \code{lambda},
+#'   \code{tau}, \code{solver}, \code{max_iter}, \code{max_outer}, \code{tol},
+#'   and \code{use_cpp}
 #'
 #' @details
 #' PARROT operates through the following algorithmic components:
 #' \itemize{
 #'   \item \strong{Position-Aware Features}: Compute RWR descriptors
 #'     capturing network position
-#'   \item \strong{Cross-Network Cost}: Build transport cost matrix between
-#'     networks
-#'   \item \strong{Consistency Regularization}: Add structural similarity
-#'     constraints
-#'   \item \strong{Optimal Transport}: Solve regularized transport problem via
-#'     Sinkhorn
+#'   \item \strong{Cross-Network Cost}: Build the position-aware cost
+#'     \eqn{C_{rwr}} from RWR and attribute cosine costs via a Sylvester
+#'     iteration
+#'   \item \strong{Consistency Regularization}: Edge, neighborhood and anchor
+#'     prior terms
+#'   \item \strong{Optimal Transport}: Minimise the regularized objective over
+#'     transport plans with a KL proximal-gradient loop whose steps are
+#'     log-domain Sinkhorn solves
 #' }
 #'
-#' The algorithm minimizes the objective:
-#' \deqn{L(S) = \langle C, S \rangle + \lambda_1 \Omega_1(S) + \lambda_2 \Omega_2(S) + \tau H(S)}
-#'
-#' where \eqn{C} is the position-aware cost matrix, \eqn{\Omega_1, \Omega_2} are consistency
-#' regularizers, and \eqn{H(S)} is the entropy regularization term with parameter \eqn{\tau}.
+#' The algorithm minimizes, over plans \eqn{S} with uniform marginals,
+#' \deqn{F(S) = \langle C_{rwr}, S \rangle + \lambda_e L_e(S) +
+#'   \lambda_n KL(S \| W_1^T S W_2) + \lambda_p KL(S \| H)}
+#' where \eqn{L_e} is the edge-consistency term and \eqn{H} the anchor prior.
+#' Each outer step solves an entropic OT problem with proximal weight
+#' \eqn{\tau_t \ge \tau}; a step is accepted only if it does not increase
+#' \eqn{F}, so \code{objective_history} is non-increasing.
 #'
 #' Key parameters:
 #' \itemize{
-#'   \item \code{sigma}: RWR restart probability and diffusion parameter
+#'   \item \code{sigma}: RWR restart probability
 #'   \item \code{lambda}: Consistency regularization weights
-#'   \item \code{tau}: Entropy regularization parameter for Sinkhorn
-#'   \item \code{solver}: Transport solver ("sinkhorn" or "exact")
+#'   \item \code{tau}: Proximal (KL) step weight of the outer loop
+#'   \item \code{solver}: Transport solver (only \code{"sinkhorn"})
 #' }
 #'
 #' @return A \code{multiblock_biprojector} object containing:
 #' \itemize{
-#'   \item \code{s}: Aligned network embeddings 
-#'   \item \code{v}: Primal vectors for out-of-sample projection
+#'   \item \code{s}: Node embeddings of both networks from the SVD of the plan
+#'   \item \code{v}: Descriptive feature loadings; not a projector (PARROT is
+#'     transductive), see \code{\link{parrot.hyperdesign}}
 #'   \item \code{alignment_matrix}: Soft alignment/transport plan between networks
 #'   \item \code{transport_plan}: Dense transport matrix S
-#'   \item \code{sdev}: Standard deviations of aligned components
-#'   \item Additional metadata for reconstruction and validation
+#'   \item \code{objective_history}, \code{convergence}: solver diagnostics
+#'   \item \code{sdev}: Standard deviations of the embedding columns
 #' }
 #'
 #' @examples
@@ -111,25 +117,59 @@ parrot <- function(data, anchors, ...) {
 #'
 #' @param data A hyperdesign object containing multiple network domains
 #' @param anchors Name of the anchor/correspondence variable for semi-supervised alignment
-#' @param preproc Preprocessing function to apply to the data (default: center())
-#' @param ncomp Number of latent dimensions for barycenter (default: NULL, auto-determine)
-#' @param sigma RWR restart probability and diffusion parameter (default: 0.15)
-#' @param lambda Overall consistency regularization weight (default: 0.1). Can also specify
-#'   lambda_e, lambda_n, lambda_p separately for fine control
-#' @param lambda_e Edge consistency weight (default: lambda * 0.5)
-#' @param lambda_n Neighborhood consistency weight (default: lambda * 0.5)  
-#' @param lambda_p Anchor prior weight (default: lambda * 0.1)
-#' @param tau Entropy regularization parameter for Sinkhorn (default: 0.01)
-#' @param alpha Weight for feature vs RWR cost in Sylvester equation (default: 0.5)
-#' @param gamma Cross-graph mixing parameter for Sylvester iteration (default: 0.1)
-#' @param solver Transport solver: "sinkhorn" for entropic (default), "exact" for unregularized
-#' @param max_iter Maximum number of iterations (default: 100)
-#' @param tol Convergence tolerance (default: 1e-6)
-#' @param use_cpp Whether to use C++ optimizations (default: FALSE)
+#' @param preproc Preprocessing applied to each domain before graph construction
+#'   (default: \code{multivarious::center()}). A \code{prepper}/\code{pre_processor}
+#'   is fitted separately on each domain and the fitted pre-processors are stored
+#'   in the result; a plain function is applied to each domain's matrix; a list
+#'   gives one entry per domain; \code{NULL} disables preprocessing.
+#' @param ncomp Number of embedding dimensions taken from the SVD of the transport
+#'   plan (default: \code{NULL}, i.e. \code{min(10, min(n1, n2) - 1)})
+#' @param sigma RWR restart probability (\eqn{\beta} in the paper; default: 0.15)
+#' @param lambda Overall consistency regularization weight (default: 0.1). Used to
+#'   derive \code{lambda_e}, \code{lambda_n} and \code{lambda_p} when those are
+#'   not given.
+#' @param lambda_e Edge consistency weight (default: \code{lambda * 0.5})
+#' @param lambda_n Neighborhood consistency (KL) weight (default: \code{lambda * 0.5})
+#' @param lambda_p Anchor prior (KL) weight (default: \code{lambda})
+#' @param tau Proximal (KL) step weight of the outer loop (default: 0.05). Each
+#'   inner Sinkhorn solve uses entropic regularization
+#'   \code{tau_t + lambda_n + lambda_p}, where \code{tau_t >= tau} is increased
+#'   automatically when a step would not decrease the objective.
+#' @param alpha Weight of the attribute (feature) cosine cost in the node cost;
+#'   the RWR positional cost gets weight \code{1 - alpha}:
+#'   \code{C_node = (1 - alpha) * cost_rwr + alpha * cost_attr} (default: 0.2)
+#' @param gamma Cross-graph discount factor of the Sylvester iteration (default: 0.1)
+#' @param solver Transport solver. Only \code{"sinkhorn"} (entropic, log-domain)
+#'   is implemented; \code{"exact"} is rejected with an error.
+#' @param max_iter Maximum number of iterations for the RWR power iteration and for
+#'   each inner Sinkhorn solve (default: 1000). It is never raised internally; a
+#'   final Sinkhorn solve that does not reach \code{tol} triggers a warning and is
+#'   reported in \code{convergence}.
+#' @param max_outer Maximum number of outer proximal steps (default: 10)
+#' @param tol Convergence tolerance for RWR, for the Sinkhorn marginal residual,
+#'   and for the largest entrywise plan change between outer steps (default: 1e-6)
+#' @param use_cpp Whether to use the compiled kernels (default: FALSE). Both
+#'   backends solve the same problem.
 #' @param verbose Logical flag to print progress information during fitting
 #' @param ... Additional arguments (currently unused)
 #'
-#' @return A multiblock_biprojector object containing the PARROT alignment results
+#' @return A \code{multiblock_biprojector} object (subclass \code{"parrot"}) with
+#' \itemize{
+#'   \item \code{s}: embeddings of the nodes of both networks (rows of domain 1,
+#'     then domain 2) from the leading singular vectors of the transport plan
+#'   \item \code{v}: per-domain feature loadings \eqn{X_i^T U_i}, where
+#'     \eqn{U_i} are the domain's rows of \code{s}. These are descriptive only:
+#'     PARROT is transductive and \code{v} is \emph{not} a projector, so
+#'     \code{project()} does not reproduce \code{s} or embed new nodes.
+#'   \item \code{transport_plan}, \code{alignment_matrix}: the transport plan S
+#'   \item \code{objective_history}: objective at the initial product plan and
+#'     after each accepted outer step (non-increasing)
+#'   \item \code{convergence}: list with \code{converged}, \code{status},
+#'     \code{outer_iterations}, \code{backtracks} and the final Sinkhorn
+#'     diagnostics (\code{sinkhorn_converged}, \code{sinkhorn_iterations},
+#'     \code{sinkhorn_marginal_error})
+#'   \item \code{anchors}: the anchor vector used
+#' }
 #'
 #' @rdname parrot
 #' @method parrot hyperdesign
@@ -151,8 +191,9 @@ parrot.hyperdesign <- function(data,
                               tau = 0.05,
                               alpha = 0.2,
                               gamma = 0.1,
-                              solver = c("sinkhorn", "exact"),
-                              max_iter = 100,
+                              solver = "sinkhorn",
+                              max_iter = 1000,
+                              max_outer = 10,
                               tol = 1e-6,
                               use_cpp = FALSE,
                               verbose = FALSE,
@@ -176,7 +217,9 @@ parrot.hyperdesign <- function(data,
   chk::chk_true(max_iter > 0)
   chk::chk_number(tol)
   chk::chk_true(tol > 0)
-  
+  chk::chk_number(max_outer)
+  chk::chk_true(max_outer >= 1)
+
   # FIX3-07: Set default lambda components if not provided
   if (is.null(lambda_e)) lambda_e <- lambda * 0.5
   if (is.null(lambda_n)) lambda_n <- lambda * 0.5
@@ -190,9 +233,15 @@ parrot.hyperdesign <- function(data,
   chk::chk_number(lambda_p)
   chk::chk_true(lambda_p >= 0)
   
-  # Validate solver parameter (following KEMA/GRASP pattern)
-  solver <- match.arg(solver)
-  
+  # Only the entropic Sinkhorn solver is implemented.
+  if (identical(solver, "exact")) {
+    stop("solver = \"exact\" is not implemented for PARROT; use solver = \"sinkhorn\".",
+         call. = FALSE)
+  }
+  if (!is.character(solver) || length(solver) != 1L || !identical(solver, "sinkhorn")) {
+    stop("'solver' should be one of \"sinkhorn\".", call. = FALSE)
+  }
+
   # Validate input data (following package pattern)
   if (!is.list(data) || length(data) == 0) {
     stop("data must be a non-empty list of hyperdesign objects", call. = FALSE)
@@ -223,48 +272,33 @@ parrot.hyperdesign <- function(data,
             n_total, " total nodes")
   }
   
-  # Preprocess data (following CONE-Align simplified pattern)
-  pdata <- lapply(data, function(domain) {
-    x_preprocessed <- safe_compute(
-      if (is.function(preproc)) preproc(domain$x) else domain$x,
+  # Preprocess each domain. A prepper/pre_processor (the default center()) is
+  # fitted on each domain and the fitted pre-processors are kept; a plain
+  # function is applied to each domain's matrix.
+  if (is.function(preproc)) {
+    pdata <- lapply(data, function(domain) {
+      x <- safe_compute(
+        preproc(as.matrix(domain$x)),
+        "Data preprocessing failed. Check preprocessing function or data format."
+      )
+      list(x = as.matrix(x), design = domain$design)
+    })
+    proc <- NULL
+  } else {
+    pre <- safe_compute(
+      .apply_preproc_domains_spectral_mnn(unclass(data), preproc = preproc),
       "Data preprocessing failed. Check preprocessing function or data format."
     )
-    list(x = x_preprocessed, design = domain$design)
-  })
-  
-  # Debug: Check if preprocessing made a difference
-    if (verbose) {
-      if (is.function(preproc)) {
-        orig_mean <- mean(unlist(lapply(data, function(d) mean(d$x))))
-        proc_mean <- mean(unlist(lapply(pdata, function(d) mean(d$x))))
-        if (abs(orig_mean - proc_mean) > 1e-10) {
-          message("Preprocessing changed data mean from ", round(orig_mean, 4),
-                  " to ", round(proc_mean, 4))
-        }
-      }
-    }
-  
-  # Block indices computation (following package pattern)
-  # Create proper preprocessing structure
-  # Store the original preproc for later use
-  original_preproc <- preproc
-  
-  if (!is.null(preproc)) {
-    if (inherits(preproc, "pre_processor")) {
-      proc <- preproc
-    } else {
-      # For prepper, functions, or other objects that don't work with multiblock_biprojector
-      # use the manual result construction
-      proc <- NULL
-    }
-  } else {
-    proc <- NULL
+    pdata <- lapply(seq_along(data), function(i) {
+      list(x = as.matrix(pre$pdata[[i]]$x), design = data[[i]]$design)
+    })
+    proc <- pre$proc
   }
-  
-  # Call PARROT fitting function - pass original data and preproc for flexible application
-  parrot_fit(pdata, proc, anchor_data, ncomp, sigma, lambda_e, lambda_n, lambda_p, tau, 
-            alpha, gamma, solver, max_iter, tol, use_cpp, feature_block_indices(pdata), 
-            original_preproc, data, verbose = verbose)
+  names(pdata) <- names(data)
+
+  parrot_fit(pdata, proc, anchor_data, ncomp, sigma, lambda_e, lambda_n, lambda_p, tau,
+             alpha, gamma, solver, max_iter, tol, use_cpp, feature_block_indices(pdata),
+             verbose = verbose, max_outer = max_outer)
 }
 
 #' @rdname parrot
@@ -285,9 +319,9 @@ parrot.default <- function(data, anchors, ...) {
 }
 
 #' @keywords internal
-parrot_fit <- function(strata, proc, anchor_data, ncomp, sigma, lambda_e, lambda_n, lambda_p, tau, 
-                      alpha, gamma, solver, max_iter, tol, use_cpp, feature_blocks, 
-                      original_preproc = NULL, original_data = NULL, verbose = FALSE) {
+parrot_fit <- function(strata, proc, anchor_data, ncomp, sigma, lambda_e, lambda_n, lambda_p, tau,
+                      alpha, gamma, solver, max_iter, tol, use_cpp, feature_blocks,
+                      verbose = FALSE, max_outer = 10) {
   
   # Extract network structures 
   # Use preprocessed data (strata) by default, but for v computation we may need original data
@@ -320,10 +354,12 @@ parrot_fit <- function(strata, proc, anchor_data, ncomp, sigma, lambda_e, lambda
   rwr_features <- compute_parrot_rwr(networks, anchor_info, sigma, max_iter, tol, use_cpp)
   
   # Solve optimal transport problem with proximal method
-  transport_result <- solve_parrot_transport(networks, rwr_features, anchor_info, 
-                                           lambda_e, lambda_n, lambda_p, 
-                                           tau, alpha, sigma, gamma, solver, max_iter, tol = tol, use_cpp = use_cpp)
-  
+  transport_result <- solve_parrot_transport(networks, rwr_features, anchor_info,
+                                           lambda_e, lambda_n, lambda_p,
+                                           tau, alpha, sigma, gamma, solver, max_iter,
+                                           max_outer = max_outer, tol = tol, use_cpp = use_cpp)
+  convergence <- .parrot_convergence_report(transport_result, max_iter, tol)
+
   # Debug: Check transport plan properties
   tp <- transport_result$transport_plan
   if (verbose) {
@@ -370,15 +406,38 @@ parrot_fit <- function(strata, proc, anchor_data, ncomp, sigma, lambda_e, lambda
     extras = list(
       alignment_matrix = transport_result$transport_plan,
       transport_plan = transport_result$transport_plan,
-      anchors = anchor_data
+      anchors = anchor_data,
+      objective_history = transport_result$objective_history,
+      convergence = convergence
     )
   )
 
-  if (is.null(proc) && !is.null(original_preproc)) {
-    result$preproc <- original_preproc
-  }
-
   result
+}
+
+# Summarise solver diagnostics and warn when the returned plan comes from a
+# Sinkhorn solve that did not reach the requested tolerance.
+.parrot_convergence_report <- function(transport_result, max_iter, tol) {
+  sk <- transport_result$sinkhorn %||% list()
+  report <- list(
+    converged = isTRUE(transport_result$converged),
+    status = transport_result$status %||% NA_character_,
+    outer_iterations = transport_result$outer_iterations %||% NA_integer_,
+    backtracks = transport_result$backtracks %||% NA_integer_,
+    sinkhorn_converged = sk$converged %||% NA,
+    sinkhorn_iterations = sk$iterations %||% NA_integer_,
+    sinkhorn_marginal_error = sk$marginal_error %||% NA_real_
+  )
+  if (identical(report$sinkhorn_converged, FALSE)) {
+    warning(
+      "PARROT: the final Sinkhorn solve did not reach tol = ", signif(tol, 3),
+      " within max_iter = ", max_iter, " iterations (marginal error ",
+      signif(report$sinkhorn_marginal_error, 3),
+      "). Increase max_iter or tau.",
+      call. = FALSE
+    )
+  }
+  report
 }
 
 #' Extract Network Structures for PARROT
@@ -579,8 +638,8 @@ compute_parrot_rwr <- function(networks, anchor_info, sigma, max_iter, tol, use_
 #' @param tol Convergence tolerance
 #' @return List with transport plan and related matrices
 #' @keywords internal
-solve_parrot_transport <- function(networks, rwr_features, anchor_info, 
-                                  lambda_e, lambda_n, lambda_p, tau, alpha, sigma, gamma, solver, 
+solve_parrot_transport <- function(networks, rwr_features, anchor_info,
+                                  lambda_e, lambda_n, lambda_p, tau, alpha, sigma, gamma, solver,
                                   max_iter, max_outer = 10, tol, use_cpp = FALSE) {
   
   # AUDIT-03: Use proper proximal point method implementation
@@ -678,13 +737,13 @@ solve_sylvester_rwr <- function(W1, W2T, Cnode, beta = 0.15, gamma = 0.1,
 #' Compute Position-Aware Cost Matrix (R implementation)
 #' 
 #' Follows the two-stage process from the paper:
-#' 1. Compute C_node = alpha * cost_RWR + (1-alpha) * cost_attr (Eq. 3)
+#' 1. Compute C_node = (1 - alpha) * cost_RWR + alpha * cost_attr (Eq. 3)
 #' 2. Solve Sylvester equation for C_rwr (Eq. 4)
 #' 
 #' @param networks List of network structures
 #' @param rwr_features List of RWR descriptor matrices
 #' @param anchor_info List with anchor information for both networks
-#' @param alpha Weight for RWR vs attribute cost (default: 0.5)
+#' @param alpha Weight of the attribute cost; the RWR cost gets \code{1 - alpha}
 #' @param sigma RWR restart probability (beta in paper)
 #' @param gamma Cross-graph discount factor for Sylvester equation
 #' @return Position-aware cost matrix C_rwr
@@ -723,6 +782,9 @@ compute_parrot_cost_r <- function(networks, rwr_features, anchor_info, alpha = 0
   W1 <- networks[[1]]$transition  # Row-stochastic
   W2T <- t(networks[[2]]$transition)
   C_rwr <- solve_sylvester_rwr(W1, W2T, C_node, beta = sigma, gamma = gamma)
+
+  # Same type as the compiled path: a base matrix.
+  C_rwr <- as.matrix(C_rwr)
 
   # Ensure strictly positive costs for downstream logarithms
   C_rwr_min <- min(C_rwr)
@@ -785,32 +847,14 @@ compute_edge_consistency <- function(networks, transport_plan, lambda_e) {
     return(matrix(0, nrow(transport_plan), ncol(transport_plan)))
   }
 
-  A1 <- networks[[1]]$adjacency
-  A2 <- networks[[2]]$adjacency
-  X1 <- networks[[1]]$features
-  X2 <- networks[[2]]$features
+  C1 <- .parrot_edge_cost(networks[[1]]$adjacency, networks[[1]]$features)
+  C2 <- .parrot_edge_cost(networks[[2]]$adjacency, networks[[2]]$features)
 
-  if (inherits(A1, "Matrix")) A1 <- as.matrix(A1)
-  if (inherits(A2, "Matrix")) A2 <- as.matrix(A2)
+  C1_sq <- Matrix::rowSums(C1^2)
+  C2_sq <- Matrix::rowSums(C2^2)
 
-  row_normalize <- function(M) {
-    norms <- sqrt(rowSums(M^2))
-    norms[norms < 1e-12] <- 1e-12
-    M / norms
-  }
-
-  X1n <- row_normalize(X1)
-  X2n <- row_normalize(X2)
-
-  C1 <- (1 - X1n %*% t(X1n)) * (A1 != 0)
-  C2 <- (1 - X2n %*% t(X2n)) * (A2 != 0)
-
-  C1_sq <- rowSums(C1^2)
-  C2_sq <- rowSums(C2^2)
-
-  L_base <- outer(C1_sq, rep(1, length(C2_sq))) +
-    outer(rep(1, length(C1_sq)), C2_sq) -
-    2 * (C1 %*% transport_plan %*% t(C2))
+  L_base <- outer(C1_sq, C2_sq, "+") -
+    2 * as.matrix(C1 %*% as.matrix(transport_plan) %*% Matrix::t(C2))
 
   lambda_e * L_base
 }
@@ -855,8 +899,7 @@ compute_neighborhood_consistency <- function(networks, transport_plan, lambda_n)
 #' @return Transport plan matrix
 #' @keywords internal
 solve_sinkhorn_transport <- function(cost_matrix, tau, max_iter, tol) {
-  # Just delegate to the stabilized version which works correctly
-  solve_sinkhorn_stabilized(cost_matrix, tau, max_iter, tol)
+  solve_sinkhorn_stabilized(cost_matrix, tau, max_iter, tol)$plan
 }
 
 #' Compute Squared Euclidean Distance Matrix (R implementation)
@@ -866,9 +909,15 @@ solve_sinkhorn_transport <- function(cost_matrix, tau, max_iter, tol) {
 #' @return Distance matrix (n1 x n2)
 #' @keywords internal
 compute_squared_distances_r <- function(X1, X2) {
+  X1 <- as.matrix(X1)
+  X2 <- as.matrix(X2)
   X1_sq <- rowSums(X1^2)
   X2_sq <- rowSums(X2^2)
-  outer(X1_sq, X2_sq, "+") - 2 * (X1 %*% t(X2))
+  D <- outer(X1_sq, X2_sq, "+") - 2 * (X1 %*% t(X2))
+  # Same clamp as compute_squared_distances_cpp(): rounding can give tiny
+  # negative values.
+  D[D < 0] <- 0
+  D
 }
 
 #' Compute Squared Euclidean Distance Matrix (Dispatcher)

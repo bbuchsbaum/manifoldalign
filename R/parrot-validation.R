@@ -31,7 +31,8 @@ generate_parrot_validation_data <- function(n_nodes = 100,
                                           permute_fraction = 0.3) {
   
   structure <- match.arg(structure)
-  
+  .require_multidesign("generate_parrot_validation_data()")
+
   # Generate base network structure
   if (structure == "ring") {
     # Ring/circular structure
@@ -88,11 +89,16 @@ generate_parrot_validation_data <- function(n_nodes = 100,
   }
   anchor_idx <- sort(sample(available_anchors, min(n_anchors, length(available_anchors))))
   
+  # Row r of X2 holds node perm[r] of X1, so node i of X1 sits at row
+  # inv_perm[i] of X2. (Anchors drawn from all nodes in the fallback branch
+  # may be permuted nodes, so perm[i] != inv_perm[i] in general.)
+  inv_perm <- order(perm)
+
   # Create anchor vectors
   anchors1 <- rep(NA, n_nodes)
   anchors2 <- rep(NA, n_nodes)
   anchors1[anchor_idx] <- anchor_idx
-  anchors2[perm[anchor_idx]] <- anchor_idx
+  anchors2[inv_perm[anchor_idx]] <- anchor_idx
   
   # Create hyperdesign structure using proper constructors
   design1 <- data.frame(
@@ -118,8 +124,8 @@ generate_parrot_validation_data <- function(n_nodes = 100,
     data = hd,
     ground_truth = list(
       permutation = perm,
-      inverse_perm = order(perm),
-      anchor_indices = list(net1 = anchor_idx, net2 = perm[anchor_idx])
+      inverse_perm = inv_perm,
+      anchor_indices = list(net1 = anchor_idx, net2 = inv_perm[anchor_idx])
     ),
     params = list(
       n_nodes = n_nodes,

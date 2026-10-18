@@ -121,7 +121,7 @@ test_that("PARROT transport is permutation equivariant for domain-2 relabeling",
     lambda = 0.1,
     tau = 0.01,
     alpha = 0.25,
-    max_iter = 60,
+    max_iter = 1000,
     use_cpp = FALSE
   )
   S_base <- as.matrix(fit_base$transport_plan)
@@ -139,7 +139,7 @@ test_that("PARROT transport is permutation equivariant for domain-2 relabeling",
     lambda = 0.1,
     tau = 0.01,
     alpha = 0.25,
-    max_iter = 60,
+    max_iter = 1000,
     use_cpp = FALSE
   )
   S_perm <- as.matrix(fit_perm$transport_plan)
@@ -213,7 +213,7 @@ test_that("PARROT preserves transport invariants across randomized stress fixtur
       lambda = 0.05,
       tau = 0.02,
       alpha = 0.25,
-      max_iter = 40,
+      max_iter = 1000,
       use_cpp = FALSE
     )
 
