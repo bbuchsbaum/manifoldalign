@@ -1,5 +1,18 @@
 # RAPID-MA complete-pipeline scaling
 
+> **Status note (2026-10-18): the reported runtimes and memory need
+> regeneration.** Later fixes change the measured pipeline: undirected
+> random-walk relations no longer get a second (reverse) diffusion channel,
+> prototype updates no longer re-sort all nodes on every candidate, several
+> per-row loops are vectorized, and the validated-teacher pipeline's safety
+> gate now recomputes one probability matrix per observed label
+> (leave-one-label-out folds). Runtime, peak RSS, retained size, the fitted
+> slopes and the 1,000,002-node gate outcome can all move in either
+> direction.
+> These numbers were produced by the code at the time of the frozen run and
+> are kept unchanged here; they must be regenerated with the documented runner
+> before they are cited again.
+
 Status: 220,000-node synthetic run complete; 1,000,002-node completion gate
 failed on the frozen 1,200-second runtime ceiling.
 

@@ -1,5 +1,23 @@
 # RAPID-MA real-scene blocked-inductive validation
 
+> **Status note (2026-10-18): the reported numbers predate evaluation fixes
+> and need regeneration.** Later package fixes change these results:
+> (1) macro-F1 and mIoU now come from the package helper shared with
+> `benchmark_rapid_ma()`: the class universe is the held-out truth classes
+> plus any predicted class, so predictions of classes absent from a test
+> block are charged as false positives, which changes every macro-F1, mIoU,
+> seen-class and gate comparison; (2) the relation-safety gate now uses
+> genuinely out-of-fold (leave-one-label-out) folds, and the diffusion encoder
+> no longer adds reverse channels to undirected relations, so the RAPID-MA
+> rows change; (3) the split sampler no longer substitutes an arbitrary row
+> when a class has a single candidate in a block, so splits containing such
+> a class change; (4) timeouts are now recorded with status `timeout` rather
+> than `failed`, and the `test_labels_read_during_fit` constant is no longer
+> written.
+> These numbers were produced by the code at the time of the frozen run and
+> are kept unchanged here; they must be regenerated with the documented runner
+> before they are cited again.
+
 Status: **accuracy gate failed** on the frozen held-out geographic blocks.
 
 ## Bottom line

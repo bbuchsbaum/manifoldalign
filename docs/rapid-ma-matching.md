@@ -1,5 +1,17 @@
 # RAPID-MA bounded node-matching validation
 
+> **Status note (2026-10-18): the reported numbers predate later fixes and
+> need regeneration.** The diffusion encoder no longer adds reverse channels to
+> undirected random-walk relations, so the RAPID-MA embeddings, prototype
+> supports and every RAPID matching row change. The raw table's constant
+> `dense_pairwise_allocated` column is replaced by a measured
+> `candidate_density`. The benchmark fixture no longer carries row names
+> (target attribute row names previously encoded the hidden permutation; no
+> matcher read them).
+> These numbers were produced by the code at the time of the frozen run and
+> are kept unchanged here; they must be regenerated with the documented runner
+> before they are cited again.
+
 Status: multi-view matcher improvement verified; exact correspondence remains
 an open accuracy problem.
 
