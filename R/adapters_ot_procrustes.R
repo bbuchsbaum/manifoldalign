@@ -18,7 +18,16 @@
 #' aligner_capabilities(algo)
 #' @export
 ot_procrustes_aligner <- function() {
-  new_aligner("ot_procrustes", group = "O", supports_multi = FALSE)
+  new_aligner(
+    "ot_procrustes",
+    group = "O",
+    supports_multi = FALSE,
+    encoder = "linear",
+    supports_predict = FALSE,
+    supports_calibration = FALSE,
+    requires_auxiliary_at_predict = FALSE,
+    invertible = TRUE
+  )
 }
 
 .ot_procrustes_random_orthogonal <- function(d, force_SO = FALSE) {

@@ -47,7 +47,9 @@ test_that("RAPID-MA adapter exposes native pair and multiset semantics", {
   expect_s3_class(algo, "rapid_ma_aligner")
   expect_identical(
     aligner_capabilities(algo),
-    list(group = "perm", supports_multi = TRUE)
+    list(group = "perm", supports_multi = TRUE, encoder = "nonlinear",
+         supports_predict = TRUE, supports_calibration = FALSE,
+         requires_auxiliary_at_predict = FALSE, invertible = FALSE)
   )
   pair <- fit_pair(
     algo, X_a, X_b,

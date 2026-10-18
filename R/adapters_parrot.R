@@ -10,7 +10,16 @@
 #' aligner_capabilities(algo)
 #' @export
 parrot_aligner <- function() {
-  new_aligner("parrot", group = "perm", supports_multi = FALSE)
+  new_aligner(
+    "parrot",
+    group = "perm",
+    supports_multi = FALSE,
+    encoder = "none",
+    supports_predict = FALSE,
+    supports_calibration = FALSE,
+    requires_auxiliary_at_predict = FALSE,
+    invertible = FALSE
+  )
 }
 
 # Normalize rows helper (avoid division by zero)

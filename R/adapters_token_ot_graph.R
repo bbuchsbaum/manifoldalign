@@ -11,7 +11,16 @@
 #' aligner_capabilities(algo)
 #' @export
 token_ot_graph_aligner <- function() {
-  new_aligner("token_ot_graph", group = "perm", supports_multi = FALSE)
+  new_aligner(
+    "token_ot_graph",
+    group = "perm",
+    supports_multi = FALSE,
+    encoder = "none",
+    supports_predict = FALSE,
+    supports_calibration = FALSE,
+    requires_auxiliary_at_predict = FALSE,
+    invertible = FALSE
+  )
 }
 
 .normalize_rows_sparse <- function(M) {

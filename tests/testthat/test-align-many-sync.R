@@ -465,3 +465,17 @@ test_that("iterative and dense top eigenvectors span the same subspace", {
   V_iter <- manifoldalign:::.sync_top_eigenvectors(M, 3, dense_max = 0L)
   expect_equal(V_dense %*% t(V_dense), V_iter %*% t(V_iter), tolerance = 1e-6)
 })
+
+test_that("every exported aligner declares the full capability contract", {
+  fields <- c("group", "supports_multi", "encoder", "supports_predict",
+              "supports_calibration", "requires_auxiliary_at_predict",
+              "invertible")
+  constructors <- grep("_aligner$", getNamespaceExports("manifoldalign"),
+                       value = TRUE)
+  constructors <- setdiff(constructors, "new_aligner")
+  for (ctor in constructors) {
+    caps <- aligner_capabilities(getExportedValue("manifoldalign", ctor)())
+    expect_identical(names(caps), fields, info = ctor)
+    expect_true(caps$encoder %in% c("linear", "nonlinear", "none"), info = ctor)
+  }
+})

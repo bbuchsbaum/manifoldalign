@@ -39,7 +39,16 @@
 #'   multi-domain method returns a `rapid_ma` fit.
 #' @export
 rapid_ma_aligner <- function() {
-  new_aligner("rapid_ma", group = "perm", supports_multi = TRUE)
+  new_aligner(
+    "rapid_ma",
+    group = "perm",
+    supports_multi = TRUE,
+    encoder = "nonlinear",
+    supports_predict = TRUE,
+    supports_calibration = FALSE,
+    requires_auxiliary_at_predict = FALSE,
+    invertible = FALSE
+  )
 }
 
 .rapid_adapter_domains <- function(x, default = c("i", "j")) {
