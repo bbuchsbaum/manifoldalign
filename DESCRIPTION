@@ -1,7 +1,7 @@
 Package: manifoldalign
 Type: Package
 Title: Manifold Alignment for Multi-Domain Data
-Version: 0.1.0
+Version: 0.1.0.9000
 Authors@R: person("Brad", "Buchsbaum", email = "brad.buchsbaum@gmail.com", role = c("aut", "cre"))
 Description: Provides tools for manifold alignment and domain adaptation across multiple data domains. Implements Kernel Manifold Alignment (KEMA) and related algorithms for aligning data manifolds while preserving local structure and class relationships. Features include semi-supervised learning support, efficient sparse matrix operations, and pseudolabeling for unsupervised domain adaptation. The package enables alignment of heterogeneous data types through kernel-based methods while maintaining computational efficiency for large-scale datasets.
 License: MIT + file LICENSE
@@ -9,7 +9,7 @@ Encoding: UTF-8
 Imports:
     Matrix,
     eigencore (>= 1.0.3),
-    PRIMME,
+    Rcpp,
     RSpectra,
     glmnet,
     multivarious,
@@ -37,7 +37,9 @@ Suggests:
     proxy,
     ps,
     rmarkdown,
-    Rcpp,
+    parallel,
+    PRIMME,
+    pryr,
     RcppAnnoy,
     Rnanoflann,
     scales,
@@ -56,10 +58,12 @@ LinkingTo:
     roptim
 URL: https://bbuchsbaum.github.io/manifoldalign/, https://github.com/bbuchsbaum/manifoldalign
 BugReports: https://github.com/bbuchsbaum/manifoldalign/issues
+Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Remotes:
     bbuchsbaum/adjoin,
+    bbuchsbaum/eigencore,
     bbuchsbaum/genpca,
     bbuchsbaum/multidesign,
     bbuchsbaum/albersdown

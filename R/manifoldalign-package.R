@@ -5,6 +5,7 @@
 #' @return NULL
 #' @keywords internal
 #' @useDynLib manifoldalign, .registration = TRUE
+#' @importFrom Rcpp evalCpp
 #' @importFrom graphics axis hist
 #' @importFrom grDevices heat.colors
 #' @importFrom stats aggregate cov IQR lm median model.frame model.matrix model.response prcomp predict runif
