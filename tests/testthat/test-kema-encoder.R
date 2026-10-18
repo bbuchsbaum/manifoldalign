@@ -166,10 +166,14 @@ test_that("KEMA rejects problems whose dense footprint exceeds the guard", {
 })
 
 test_that("block_indices counts rows of sparse matrices", {
+  sparse_block <- methods::as(Matrix::Matrix(matrix(1, 3, 2), sparse = TRUE), "dgCMatrix")
+  expect_s4_class(sparse_block, "dgCMatrix")
   blocks <- list(
-    list(x = Matrix::Matrix(matrix(1, 3, 2), sparse = TRUE)),
-    list(x = matrix(1, 4, 2))
+    list(x = sparse_block),                       # 3 rows, 6 cells
+    list(x = matrix(1, 4, 2)),
+    list(x = data.frame(a = 1:2, b = 3:4))        # 2 rows, 2 columns
   )
   bi <- block_indices(blocks)
-  expect_equal(unname(bi[, "end"]), c(3, 7))
+  expect_equal(unname(bi[, "start"]), c(1, 4, 8))
+  expect_equal(unname(bi[, "end"]), c(3, 7, 9))
 })
