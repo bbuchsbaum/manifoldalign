@@ -194,7 +194,7 @@ test_that("withdrawn KEMA controls are rejected rather than ignored", {
   )
 })
 
-test_that("withdrawn OOS validator cannot fabricate a passing result", {
+test_that("withdrawn OOS validator is defunct and cannot fabricate a result", {
   expect_true(
     "validate_out_of_sample_reconstruction" %in%
       getNamespaceExports("manifoldalign")
@@ -203,22 +203,26 @@ test_that("withdrawn OOS validator cannot fabricate a passing result", {
   set.seed(4102)
   rng_before <- .Random.seed
 
-  expect_warning(
-    result <- try(validate_out_of_sample_reconstruction(), silent = TRUE),
-    regexp = "withdrawn|deprecated"
-  )
-  expect_s3_class(result, "try-error")
-  expect_match(as.character(result), "withdrawn")
+  err <- tryCatch(validate_out_of_sample_reconstruction(), error = function(e) e)
+  expect_s3_class(err, "defunctError")
+  expect_match(conditionMessage(err), "defunct")
+  expect_match(conditionMessage(err), "oos_predict\\(\\).*cv_alignment_rows\\(\\)")
   expect_identical(.Random.seed, rng_before)
 })
 
-test_that("withdrawn paper-eigenvalue validator cannot claim accuracy", {
-  expect_warning(
-    result <- try(validate_kema_eigenvalues(), silent = TRUE),
-    regexp = "withdrawn|deprecated"
-  )
-  expect_s3_class(result, "try-error")
-  expect_match(as.character(result), "invalid|withdrawn")
+test_that("withdrawn paper-eigenvalue validator is defunct", {
+  err <- tryCatch(validate_kema_eigenvalues(), error = function(e) e)
+  expect_s3_class(err, "defunctError")
+  expect_match(conditionMessage(err), "run_kema_validation_suite")
+})
+
+test_that("spiral validation fixture leaves the caller RNG stream unchanged", {
+  set.seed(77)
+  before <- .Random.seed
+  a <- generate_spiral_validation_data(n_per_domain = 10, seed = 3)
+  expect_identical(.Random.seed, before)
+  b <- generate_spiral_validation_data(n_per_domain = 10, seed = 3)
+  expect_identical(a, b)
 })
 
 test_that("KEMA validation suite runs enforced numerical checks only", {
