@@ -50,12 +50,13 @@ test_that("mma_align_multiple achieves high correspondence on rotated domains (r
   ns <- c(nrow(res$posteriors[[1]]), ncol(res$posteriors[[2]]), ncol(res$posteriors[[3]]))
   idx2 <- (ns[1] + 1):(ns[1] + ns[2])
   idx3 <- (ns[1] + ns[2] + 1):(ns[1] + ns[2] + ns[3])
+  # assignment[[g]][j] is the reference row matched to row j of domain g
   E1 <- res$s[seq_len(ns[1]), , drop = FALSE]
-  E2 <- res$s[idx2, , drop = FALSE][assign[[2]], , drop = FALSE]
-  E3 <- res$s[idx3, , drop = FALSE][assign[[3]], , drop = FALSE]
+  E2 <- res$s[idx2, , drop = FALSE]
+  E3 <- res$s[idx3, , drop = FALSE]
 
-  mse12 <- mean((E1 - E2)^2)
-  mse13 <- mean((E1 - E3)^2)
+  mse12 <- mean((E1[assign[[2]], , drop = FALSE] - E2)^2)
+  mse13 <- mean((E1[assign[[3]], , drop = FALSE] - E3)^2)
   expect_lte(mse12, 1e-2)
   expect_lte(mse13, 1e-2)
 })
