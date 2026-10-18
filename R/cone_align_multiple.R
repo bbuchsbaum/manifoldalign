@@ -6,6 +6,16 @@
 #' @param ref_idx Which domain acts as initial reference (default: 1)
 #' @inheritParams cone_align.hyperdesign
 #'
+#' @details The result is a \code{multiblock_biprojector} of class
+#'   \code{cone_align_multiple}. Score rows follow each domain's input row
+#'   order; every domain is rotated into the frame of the reference domain.
+#'   \code{assignment[[g]][i]} is the row of domain \code{g} matched to row
+#'   \code{i} of the reference domain. \code{v} holds least-squares loadings
+#'   from each domain's preprocessed features to its aligned scores (exact only
+#'   for full-row-rank features; otherwise the best linear approximation).
+#'   \code{converged} is a per-domain logical and \code{iterations} the
+#'   largest number of pairwise iterations.
+#'
 #' @rdname cone_align_multiple
 #' @method cone_align_multiple hyperdesign
 #' @export
@@ -18,10 +28,11 @@ cone_align_multiple.hyperdesign <- function(data,
                                           sigma = 0.73,
                                           lambda = 0.1,
                                           use_laplacian = TRUE,
-                                          solver = c("linear", "auction"),
+                                          solver = "linear",
                                           max_iter = 30,
                                           tol = 0.01,
                                           knn = NULL,
+                                          verbose = FALSE,
                                           ...) {
   
   # Validate input
@@ -52,45 +63,21 @@ cone_align_multiple.hyperdesign <- function(data,
   chk::chk_number(tol)
   chk::chk_true(tol > 0)
   
-  solver <- match.arg(solver)
-  
-  # Preprocess each domain (identical to pairwise code)
-  pdata <- lapply(domains, function(domain) {
-    x_preprocessed <- safe_compute(
-      if (is.function(preproc)) preproc(domain$x) else domain$x,
-      "Data preprocessing failed. Check preprocessing function or data format."
-    )
-    
-    # Add data scaling warning
-    if (is.function(preproc) && !inherits(preproc, "scaler")) {
-      warning("Consider scaling data before embedding as sigma parameter is ",
-              "sensitive to data units", call. = FALSE)
-    }
-    
-    list(x = x_preprocessed, design = domain$design)
-  })
-  names(pdata) <- names(domains)
-  
-  # Block indices computation
-  block_indices <- compute_block_indices(pdata)
-  
-  # Create preprocessing structure
-  proc <- if (is.function(preproc)) {
-    proclist <- setNames(rep(list(preproc), length(pdata)), names(pdata))
-    block_indices_list <- split(block_indices, row(block_indices))
-    
-    safe_compute(
-      multivarious::concat_pre_processors(proclist, block_indices_list),
-      "Preprocessing concatenation failed"
-    )
-  } else {
-    NULL
-  }
-  
+  chk::chk_flag(verbose)
+  solver <- .check_lsap_solver(solver)
+
+  # Fit per-domain preprocessing (stored for out-of-sample projection)
+  prepped <- .fit_domain_preproc(
+    lapply(domains, function(domain) list(x = domain$x, design = domain$design)),
+    preproc
+  )
+  pdata <- prepped$pdata
+  proc <- prepped$proc
+
   # Call multi-graph fitting function
   cone_align_multiple_fit(pdata, proc, ref_idx, ncomp, sigma, lambda,
                          use_laplacian, solver, max_iter, tol, knn,
-                         feature_block_indices(pdata))
+                         feature_block_indices(pdata), verbose = verbose)
 }
 
 #' CONE-Align Multiple for List of Matrices
@@ -153,17 +140,20 @@ cone_align_multiple.default <- function(data, ...) {
 # helper: pairwise alignment that returns P/Q ready for multi-graph use
 # Internal helper - not exported, no roxygen documentation needed
 # --------------------------------------------------------------------
-.align_two_embeddings <- function(Eref, Eg, solver, max_iter, tol, lambda) {
+.align_two_embeddings <- function(Eref, Eg, solver, max_iter, tol, lambda,
+                                  verbose = FALSE) {
   pair_res <- cone_align_iterate(
                 list(Eref, Eg),      # what cone_align_iterate expects
                 solver   = solver,
                 max_iter = max_iter,
                 tol      = tol,
-                lambda   = lambda)
+                lambda   = lambda,
+                verbose  = verbose)
 
   list(P = pair_res$P,           # changed from assignment
        Q = pair_res$Q,           # direct mapping
-       iterations = pair_res$iterations)
+       iterations = pair_res$iterations,
+       converged = pair_res$converged)
 }
 
 #' Core Multi-Graph CONE-Align Fitting
@@ -184,13 +174,14 @@ cone_align_multiple.default <- function(data, ...) {
 #' @param tol Convergence tolerance
 #' @param knn Number of nearest neighbors
 #' @param feature_blocks Feature block index structure
+#' @param verbose Logical; report pairwise convergence via message()
 #'
 #' @return multiblock_biprojector object with multi-graph alignment results
 #' @keywords internal
 cone_align_multiple_fit <- function(strata, proc, ref_idx,
                                    ncomp, sigma, lambda, use_laplacian,
                                    solver, max_iter, tol, knn,
-                                   feature_blocks) {
+                                   feature_blocks, verbose = FALSE) {
   
   m <- length(strata)
   
@@ -209,10 +200,11 @@ cone_align_multiple_fit <- function(strata, proc, ref_idx,
     if (g == ref_idx) {
       list(P = seq_len(nrow(embeddings[[g]])),
            Q = diag(ncol(embeddings[[g]])),
-           iterations = 0L)
+           iterations = 0L,
+           converged = TRUE)
     } else {
       .align_two_embeddings(embeddings[[ref_idx]], embeddings[[g]],
-                            solver, max_iter, tol, lambda)
+                            solver, max_iter, tol, lambda, verbose = verbose)
     }
   })
 
@@ -235,23 +227,16 @@ cone_align_multiple_fit <- function(strata, proc, ref_idx,
     }
   })
   
-  # Filter out NULLs before stacking
-  s_list <- s_list[!sapply(s_list, is.null)]
-  
-  # Stack the aligned embeddings
+  # Stack the aligned embeddings (rows keep each domain's input order)
   s <- do.call(rbind, s_list)
 
-  # Compute primal vectors (following cone_align pattern)
-  loadings <- do.call(rbind, lapply(seq_len(m), function(i) {
-    xi <- strata[[i]]$x
-    alpha_i <- embeddings[[i]]
-    Matrix::crossprod(xi, alpha_i)
-  }))
+  # Loadings regress each block's aligned scores on its preprocessed features
+  loadings <- .stack_regression_loadings(strata, s_list)
 
-  # Check for convergence messages
-  iterations <- vapply(alignments, function(x) x$iterations %||% 0, integer(1))
-  if (any(iterations >= max_iter)) {
-      message("Maximum iterations reached in one or more pairwise alignments.")
+  iterations <- vapply(alignments, function(x) as.integer(x$iterations %||% 0L), integer(1))
+  converged <- vapply(alignments, function(x) isTRUE(x$converged), logical(1))
+  if (isTRUE(verbose) && !all(converged)) {
+    message("Maximum iterations reached in one or more pairwise alignments.")
   }
 
   # Construct the final multiblock_biprojector object
@@ -274,7 +259,8 @@ cone_align_multiple_fit <- function(strata, proc, ref_idx,
       rotation = rotations_to_ref,
       n_domains = m,
       ref_idx = ref_idx,
-      iterations = max(iterations)
+      iterations = max(iterations),
+      converged = converged
     )
   )
 }
