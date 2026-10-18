@@ -302,7 +302,10 @@ test_that("Gromov-Wasserstein achieves strong alignment on nearly identical view
   md2 <- multidesign::multidesign(X2, design)
   hd <- multidesign::hyperdesign(list(domain1 = md1, domain2 = md2))
 
-  result <- gromov_wasserstein(hd, epsilon = 0.05, max_iter = 100, verbose = FALSE)
+  # Entropic blur bounds the diagonal mass: on this 40-point curve it is about
+  # 0.17 at epsilon = 0.05 and rises towards 1 as epsilon shrinks, so the
+  # concentration claim is tested at a small epsilon.
+  result <- gromov_wasserstein(hd, epsilon = 0.002, max_iter = 1000, verbose = FALSE)
 
   expect_s3_class(result, "gromov_wasserstein")
   P <- result$transport_plans[[1]]
@@ -310,13 +313,14 @@ test_that("Gromov-Wasserstein achieves strong alignment on nearly identical view
 
   # Transport plan should be approximately doubly stochastic
   target <- rep(1 / n, n)
-  expect_equal(rowSums(P), target, tolerance = 5e-3)
-  expect_equal(colSums(P), target, tolerance = 5e-3)
+  expect_equal(unname(rowSums(P)), target, tolerance = 5e-3)
+  expect_equal(unname(colSums(P)), target, tolerance = 5e-3)
 
   # On nearly identical domains, diagonal mass should be high
   diag_mass <- sum(diag(P))
   expect_true(is.finite(diag_mass))
   expect_gt(diag_mass, 0.5)
+  expect_gt(mean(apply(P, 1, which.max) == seq_len(n)), 0.8)
 })
 
 test_that("FPGW transport concentrates on diagonal for linear views", {
@@ -430,34 +434,34 @@ test_that("GRASP achieves strict assignment accuracy on structured data", {
   skip_benchmarks_unless_enabled()
   message("[toy-benchmarks] GRASP assignment accuracy test")
   set.seed(789)
-  linear_data <- gen_linear_triplet(n = 45, noise = 0.01, seed = 789)
-  
-  # Create hyperdesign with just two views for GRASP
+
+  # GRASP builds row-standardised (correlation) kNN graphs. A linear map of
+  # the features changes those graphs, and with two features every
+  # standardised row is +/-(1, -1)/sqrt(2), so the two-feature linear-affine
+  # views are not isomorphic graphs and GRASP is at chance level on them.
+  # Graph matching is tested where the graphs agree: view 2 is a row-permuted,
+  # slightly noisy copy of a 10-feature view 1.
+  n <- 45
+  view1 <- matrix(rnorm(n * 10), n) %*% matrix(rnorm(100), 10)
+  perm <- sample(n)
+  view2 <- view1[perm, , drop = FALSE] + matrix(rnorm(n * 10, sd = 1e-3), n)
   grasp_data <- list(
-    view1 = linear_data$view1,
-    view2 = linear_data$view2,
-    true_labels = linear_data$true_labels
+    view1 = view1,
+    view2 = view2,
+    true_labels = seq_len(n)
   )
   grasp_hd <- toy_to_hyperdesign(grasp_data, use_true_labels = TRUE)
-  
+
   result <- grasp(grasp_hd, preproc = multivarious::center(), ncomp = 6, q_descriptors = 8)
-  
+
   expect_s3_class(result, "multiblock_biprojector")
   expect_true(all(is.finite(result$s)))
-  
-  # STRICT: Should produce valid assignment with reasonable accuracy
-  if ("assignment" %in% names(result)) {
-    accuracy_result <- evaluate_assignment_accuracy_strict(result$assignment)
-    expect_true(accuracy_result$is_valid_permutation)  # Must be valid permutation
-    
-    # On linear data, GRASP should beat random (but threshold is lenient since it's optimized for manifolds)
-    n <- nrow(linear_data$view1)
-    expected_random_accuracy <- 1/n  # ~0.01 for n=100
-    expect_gt(accuracy_result$accuracy, 1.2 * expected_random_accuracy)  # Beat random with lenient threshold
-    
-    # Basic sanity: should assign at least some nodes correctly
-    expect_gt(accuracy_result$n_correct, 0)  # At least one correct assignment
-  }
+
+  # assignment[i] is the view-2 row matched to view-1 row i.
+  truth <- match(seq_len(n), perm)
+  accuracy_result <- evaluate_assignment_accuracy_strict(result$assignment, truth)
+  expect_true(accuracy_result$is_valid_permutation)
+  expect_gte(accuracy_result$accuracy, 0.9)
 })
 
 test_that("CONE-Align produces valid assignments with strict convergence", {
