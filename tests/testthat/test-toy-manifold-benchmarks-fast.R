@@ -154,14 +154,19 @@ test_that("[FAST] Linear Similarity Embedding on linear data", {
   latent_dist <- as.matrix(dist(linear_data$latent))
   T_sim <- exp(-latent_dist^2 / median(latent_dist^2))
 
-  # Reduced iterations from 25 to 10
-  result_R <- linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE,
-                              maxit = 10, verbose = FALSE)
+  # Reduced iterations from 25 to 10. Ten ADAM updates do not reach the
+  # convergence tolerance, and the result must say so.
+  expect_warning(
+    result_R <- linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE,
+                                maxit = 10, verbose = FALSE),
+    "did not converge within 10 iterations"
+  )
 
   expect_s3_class(result_R, "simembed")
   expect_equal(nrow(result_R$scores), nrow(X1))
   expect_equal(ncol(result_R$scores), 2)
-  expect_true(result_R$convergence$convergence == 0)
+  expect_identical(result_R$convergence$message, "MAXITER_REACHED")
+  expect_equal(result_R$convergence$iterations, 10L)
 
   # Relaxed threshold for smaller data: 0.3 (was 0.2)
   alignment_error <- compute_alignment_error_strict(linear_data$latent, result_R$scores)
@@ -256,11 +261,13 @@ test_that("[FAST] Runtime performance (smoke check)", {
   T_sim <- exp(-latent_dist^2 / median(latent_dist^2))
 
   runtime <- system.time({
-    result <- linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE,
-                              maxit = 10, verbose = FALSE)
+    result <- suppressWarnings(linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE,
+                                                maxit = 10, verbose = FALSE))
   })
 
   # Should be very fast with reduced size
   expect_lt(runtime[["elapsed"]], 1)  # < 1 second for n=25
-  expect_true(result$convergence$convergence == 0)
+  # Ten updates are a smoke-test budget; the status must report it honestly.
+  expect_identical(result$convergence$message, "MAXITER_REACHED")
+  expect_equal(result$convergence$iterations, 10L)
 })

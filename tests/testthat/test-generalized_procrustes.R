@@ -131,17 +131,29 @@ test_that("iterations counter reflects early stopping", {
 })
 
 # -----------------------------------------------------------------------------
-test_that("tightness certificate runs and reports small residuals", {
+test_that("optimality certificate certifies a noiseless global optimum", {
   d <- 3; L <- 5
   template <- matrix(rnorm(d * L), d, L)
   A_list <- lapply(seq_len(3), function(i) rand_O(d) %*% template)
   labels <- replicate(3, seq_len(L), simplify = FALSE)
 
-  out <- capture.output({
-    gp <- generalized_procrustes(A_list, labels, L, max_iter = 80, tol = 1e-6, verbose = TRUE)
-  })
-  expect_true(any(grepl("Tightness certificate", out)))
+  gp <- generalized_procrustes(A_list, labels, L, max_iter = 200, tol = 1e-10)
   expect_true(gp$converged)
+
+  cert <- gp$certificate
+  expect_identical(cert$status, "computed")
+  expect_true(is.finite(cert$stationarity_residual))
+  expect_lt(cert$stationarity_residual, 1e-6)
+  # Lambda - C is PSD with a d-dimensional null space at the optimum.
+  expect_gt(cert$relative_min_eigenvalue, -1e-6)
+  expect_lt(abs(cert$relative_min_eigenvalue), 1e-6)
+  expect_true(cert$certified)
+
+  # verbose mode reports the certificate values, not just a phrase
+  expect_message(
+    generalized_procrustes(A_list, labels, L, max_iter = 200, tol = 1e-10, verbose = TRUE),
+    "Optimality certificate \\(computed\\).*certified = TRUE"
+  )
 })
 
 # -----------------------------------------------------------------------------

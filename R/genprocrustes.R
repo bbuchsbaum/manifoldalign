@@ -65,6 +65,22 @@
 #' \eqn{O_{old}}. For relative tolerance, this difference is scaled by the 
 #' Frobenius norm of the initial \eqn{O} matrices (calculated once).
 #'
+#' \strong{Optimality Certificate}:
+#' The iteration maximises \eqn{tr(O^T C O)} with \eqn{C = D D^T}. At the
+#' returned rotations, \eqn{\Lambda_i = (C O)_i O_i^T} must be symmetric
+#' (first-order stationarity), and \eqn{\Lambda - C \succeq 0} with
+#' \eqn{\Lambda = blkdiag(\Lambda_i)} certifies global optimality (Ling, 2024).
+#' The smallest eigenvalue of \eqn{\Lambda - C} is computed densely when
+#' \eqn{n d \le 1000}; larger problems report stationarity only.
+#'
+#' \strong{Translations}:
+#' The model is rotation-only: \eqn{A_i \approx O_i A_{est}[, tasks_i]}. Inputs
+#' must therefore share a common origin. In particular, centring each subject
+#' over a different subset of tasks introduces subject-specific offsets that
+#' the rotations cannot absorb and biases the consensus; centre all subjects
+#' on a common set of tasks instead (the hyperdesign method does this by
+#' default, see \code{translation}).
+#'
 #' \strong{Final Consensus A_est}:
 #' After convergence, the consensus matrix \eqn{A_{est}} is computed. 
 #' For each task \eqn{j}, we average the transformed data 
@@ -79,8 +95,17 @@
 #'   tasks observed by no subjects will contain \code{NA}.}
 #' \item{iterations}{Number of iterations performed.}
 #' \item{converged}{Logical indicating whether the GPM converged.}
-#' \item{final_diff}{The final difference value (`sqrt(diff_sq)`) used for the 
+#' \item{final_diff}{The Frobenius norm of the change in the rotations at the
+#'   last iteration (`sqrt(diff_sq)`), i.e. the value used for the final
 #'   convergence check.}
+#' \item{certificate}{A list with \code{status} (\code{"computed"},
+#'   \code{"stationarity_only"}, \code{"skipped"} or \code{"failed"}),
+#'   \code{stationarity_residual} (relative asymmetry of the
+#'   \eqn{\Lambda_i}), \code{min_eigenvalue} and
+#'   \code{relative_min_eigenvalue} of \eqn{\Lambda - C} (relative to
+#'   \eqn{\lambda_{max}(C)}), \code{tol}, and \code{certified} (\code{TRUE}
+#'   when both quantities are within \code{tol}; \code{NA} when the
+#'   eigenvalue test was not run).}
 #'
 #' @examples
 #' \donttest{
@@ -347,7 +372,11 @@
       A_est      = matrix(NA_real_, d, L),
       iterations = 0,
       converged  = TRUE,
-      final_diff = 0
+      final_diff = 0,
+      certificate = list(status = "skipped", message = "D has no non-zero entries",
+                         stationarity_residual = NA_real_, min_eigenvalue = NA_real_,
+                         relative_min_eigenvalue = NA_real_, certified = NA,
+                         tol = NA_real_)
     ))
   }
 
@@ -360,9 +389,6 @@
   converged  <- FALSE
   final_diff <- NA_real_
   iter <- 0 # Initialize iter outside loop
-  best_diff <- Inf
-  best_rel  <- Inf
-  best_abs  <- Inf
 
   for (iter in seq_len(max_iter)) {
 
@@ -394,27 +420,20 @@
     if(!isTRUE(all.equal(dim(O_new), dim(O_old)))) stop("Internal error: O_new/O_old dimension mismatch.")
     diff_sq <- sum((O_new - O_old)^2)
     diff_val <- sqrt(diff_sq)
-    best_diff <- min(best_diff, diff_val)
     final_diff <- diff_val # Store last difference value
 
     # --- Check Convergence ---
     converged <- FALSE
     if (tol_type == "relative") {
       rel_val <- diff_val / norm0 # Use frozen norm0
-      if (!is.na(rel_val)) {
-        best_rel <- min(best_rel, rel_val)
-        if (rel_val < tol) converged <- TRUE
-      }
+      if (!is.na(rel_val) && rel_val < tol) converged <- TRUE
       # Avoid string formatting cost if not verbose
       if (verbose && (iter %% 5L == 0L || converged || iter == 1L || iter == max_iter)) {
           message(sprintf("Iter %3d: Diff = %.6e, Rel Diff = %.6e", iter, diff_val, rel_val))
       }
     } else { # Absolute tolerance, scaled by sqrt(n*d)
       abs_val_scaled <- diff_val / (sqrt(n * d) + 1)
-      if (!is.na(abs_val_scaled)) {
-        best_abs <- min(best_abs, abs_val_scaled)
-        if (abs_val_scaled < tol) converged <- TRUE
-      }
+      if (!is.na(abs_val_scaled) && abs_val_scaled < tol) converged <- TRUE
       # Avoid string formatting cost if not verbose
       if (verbose && (iter %% 5L == 0L || converged || iter == 1L || iter == max_iter)) {
           message(sprintf("Iter %3d: Diff = %.6e, Scaled Abs Diff = %.6e", iter, diff_val, abs_val_scaled))
@@ -435,48 +454,23 @@
       message("Maximum iterations reached without meeting convergence criteria.")
   }
 
-  if (!converged) {
-    if (tol_type == "relative") {
-      if (!is.infinite(best_rel) && !is.na(best_rel) && best_rel < tol) {
-        converged <- TRUE
-      }
-    } else {
-      if (!is.infinite(best_abs) && !is.na(best_abs) && best_abs < tol) {
-        converged <- TRUE
-      }
-    }
-  }
-
   O_final <- O_old # Use the last computed O (which has been projected)
 
-  # ---- OPTIONAL: Tightness Certificate Check (Lambda-C test from Ling 2024, eqs. 3.15-3.17) ----
-  # This provides a certificate of global optimality beyond just convergence
+  # ---- Optimality certificate (Lambda - C test, Ling 2024) ----
+  certificate <- tryCatch(
+    .gpa_certificate(D, O_final),
+    error = function(e) {
+      list(status = "failed", message = conditionMessage(e),
+           stationarity_residual = NA_real_, min_eigenvalue = NA_real_,
+           relative_min_eigenvalue = NA_real_, certified = NA, tol = NA_real_)
+    }
+  )
   if (verbose) {
-    tryCatch({
-      C_matrix <- Matrix::tcrossprod(D)
-      O_stack_final <- .stack_rot(O_final)
-      CO_final <- C_matrix %*% O_stack_final
-
-      res2 <- 0
-      CO_norm2 <- sum(CO_final * CO_final)
-      for (i in seq_len(n)) {
-        rows <- ((i - 1L) * d + 1L):(i * d)
-        COi <- as.matrix(CO_final[rows, , drop = FALSE])
-        Oi <- O_final[, , i, drop = FALSE]
-
-        S <- (COi %*% t(COi) + t(COi) %*% COi) / 2
-        ev <- eigen(S, symmetric = TRUE)
-        ev$values[ev$values < 0] <- 0
-        S_half <- ev$vectors %*% diag(sqrt(ev$values), nrow = d) %*% t(ev$vectors)
-
-        R <- COi - S_half %*% Oi
-        res2 <- res2 + sum(R * R)
-      }
-      tightness_error <- sqrt(res2) / max(sqrt(CO_norm2), 1e-12)
-      cat(sprintf("Tightness certificate (blockwise): %.2e\n", tightness_error))
-    }, error = function(e) {
-      cat("Tightness certificate: skipped (", conditionMessage(e), ")\n", sep = "")
-    })
+    message(sprintf(
+      "Optimality certificate (%s): stationarity residual = %.2e, relative min eigenvalue of Lambda - C = %.2e, certified = %s",
+      certificate$status, certificate$stationarity_residual,
+      certificate$relative_min_eigenvalue, format(certificate$certified)
+    ))
   }
 
   # ---- 4. Compute Final Consensus A_est (Vectorized approach) ----
@@ -516,11 +510,12 @@
   })
 
   res <- list(
-    O_mats     = O_mats_list,
-    A_est      = A_est,
-    iterations = iter,
-    converged  = converged,
-    final_diff = if (is.finite(best_diff)) best_diff else final_diff
+    O_mats      = O_mats_list,
+    A_est       = A_est,
+    iterations  = iter,
+    converged   = converged,
+    final_diff  = final_diff,
+    certificate = certificate
   )
   if (verbose) message("Generalized Procrustes finished.")
   return(res)
@@ -530,14 +525,26 @@
 #' @method generalized_procrustes hyperdesign
 #' @param data A hyperdesign object containing multiple data domains
 #' @param y Name of the task/label variable to use for alignment
-#' @param preproc Preprocessing function to apply to the data (default: 
-#'   \code{center()})
+#' @param preproc Preprocessing applied per domain (default:
+#'   \code{center()}): a single preprocessor broadcast to all domains, a list
+#'   with one entry per domain, or \code{NULL} for none. The fitted
+#'   preprocessors are returned in \code{preproc} (one entry per domain,
+#'   \code{NULL} where none was applied).
 #' @param max_iter Maximum number of iterations (default: 100)
 #' @param tol Convergence tolerance (default: 1e-6)
 #' @param tol_type Type of tolerance check (default: "relative")
 #' @param verbose Whether to print progress messages (default: FALSE)
 #' @param svd_method SVD method to use (default: "irlba")
 #' @param svd_opts Options for SVD method (default: empty list)
+#' @param translation How per-domain translations are handled after
+#'   preprocessing. \code{"shared_tasks"} (default) subtracts from every domain
+#'   the mean of its rows on the tasks observed by \emph{all} domains, so that
+#'   domains observing different task subsets share a common origin (per-domain
+#'   centring over different subsets would otherwise bias the consensus). With
+#'   complete designs and \code{center()} preprocessing this is a no-op. If no
+#'   task is shared by all domains, a warning is issued and no translation is
+#'   applied. \code{"none"} uses the preprocessed data as is (rotation-only
+#'   model). The subtracted vectors are returned in \code{translations}.
 #' @param ... Additional arguments (currently unused)
 #' @examples
 #' \donttest{
@@ -573,6 +580,7 @@ generalized_procrustes.hyperdesign <- function(data, y,
                                                verbose = FALSE,
                                                svd_method = c("irlba", "base"),
                                                svd_opts = list(),
+                                               translation = c("shared_tasks", "none"),
                                                ...) {
   
   # Input validation
@@ -582,6 +590,7 @@ generalized_procrustes.hyperdesign <- function(data, y,
   
   tol_type <- match.arg(tol_type)
   svd_method <- match.arg(svd_method)
+  translation <- match.arg(translation)
   
   # Use tidy evaluation for the task variable
   y <- rlang::enquo(y)
@@ -606,10 +615,10 @@ generalized_procrustes.hyperdesign <- function(data, y,
   nb <- length(pdata)
 
   if (is.null(preproc)) {
+    # `proclist[[i]] <- NULL` would delete elements; keep one NULL per domain.
     proclist <- vector("list", nb)
     for (i in seq_len(nb)) {
       pdata[[i]]$x <- as.matrix(pdata[[i]]$x)
-      proclist[[i]] <- NULL
     }
   } else {
     is_preproc_obj <- inherits(preproc, "prepper") || inherits(preproc, "pre_processor")
@@ -636,7 +645,7 @@ generalized_procrustes.hyperdesign <- function(data, y,
 
       if (is.null(pre_i)) {
         pdata[[i]]$x <- Xi
-        proclist[[i]] <- NULL
+        proclist[i] <- list(NULL)
         next
       }
 
@@ -693,6 +702,21 @@ generalized_procrustes.hyperdesign <- function(data, y,
     x$design[[y_char]]
   })
   
+  # Translation step: centre every domain on the tasks shared by all domains.
+  translations <- NULL
+  if (translation == "shared_tasks") {
+    centred <- .gpa_center_on_shared_tasks(pdata, task_labels_list)
+    if (is.null(centred$translations)) {
+      warning("No task is observed by every domain, so per-domain translations ",
+              "cannot be estimated from shared tasks; the data are used as ",
+              "preprocessed. If domains were centred over different task ",
+              "subsets the consensus may be biased.", call. = FALSE)
+    } else {
+      pdata <- centred$pdata
+      translations <- centred$translations
+    }
+  }
+
   # Extract data matrices (transpose to get features x samples for Procrustes)
   A_list <- lapply(pdata, function(x) {
     # Procrustes expects features x tasks, so transpose the samples x features matrix
@@ -762,7 +786,8 @@ generalized_procrustes.hyperdesign <- function(data, y,
   result$task_mapping <- task_to_int
   
   # Add preprocessing information
-  result$preproc <- attr(pdata, "preproc")
+  result$preproc <- proclist
+  result$translations <- translations
   
   if (verbose) message("Generalized Procrustes alignment completed.")
   
@@ -825,4 +850,90 @@ generalized_procrustes.default <- function(data = NULL,
       ...
     )
   }
+}
+
+# Optimality certificate for generalized orthogonal Procrustes.
+#
+# The GPM maximises f(O) = tr(O^T C O) over block-orthogonal O, with
+# C = D D^T and O the (n d x d) stack of the rotations. At a stationary point
+# (C O)_i = Lambda_i O_i with Lambda_i = (C O)_i O_i^T symmetric. If, in
+# addition, Lambda - C is positive semidefinite (Lambda = blkdiag(Lambda_i)),
+# O is a global maximiser (dual certificate of the SDP relaxation; Ling 2024).
+#
+# Returns a list with `status`, `stationarity_residual`, `min_eigenvalue`,
+# `relative_min_eigenvalue` (divided by lambda_max(C)), `tol` and `certified`.
+#' @noRd
+.gpa_certificate <- function(D, O_arr, tol = 1e-6, max_dense = 1000L) {
+  d <- dim(O_arr)[1]
+  n <- dim(O_arr)[3]
+  nd <- n * d
+  O_stack <- aperm(O_arr, c(1, 3, 2))
+  dim(O_stack) <- c(nd, d)
+
+  CO <- as.matrix(D %*% Matrix::crossprod(D, O_stack))
+  co_norm <- max(sqrt(sum(CO * CO)), .Machine$double.eps)
+
+  Lambda <- vector("list", n)
+  asym2 <- 0
+  for (i in seq_len(n)) {
+    rows <- ((i - 1L) * d + 1L):(i * d)
+    Li <- CO[rows, , drop = FALSE] %*% t(matrix(O_arr[, , i], d, d))
+    asym2 <- asym2 + sum((Li - t(Li))^2)
+    Lambda[[i]] <- (Li + t(Li)) / 2
+  }
+  stationarity <- sqrt(asym2) / co_norm
+
+  # lambda_max(C) is the squared spectral norm of D; use the smaller Gram matrix.
+  G <- if (nrow(D) <= ncol(D)) Matrix::tcrossprod(D) else Matrix::crossprod(D)
+  lam_max_C <- max(eigen(as.matrix(G), symmetric = TRUE, only.values = TRUE)$values)
+  lam_max_C <- max(lam_max_C, .Machine$double.eps)
+
+  if (nd > max_dense) {
+    return(list(
+      status = "stationarity_only",
+      stationarity_residual = stationarity,
+      min_eigenvalue = NA_real_,
+      relative_min_eigenvalue = NA_real_,
+      tol = tol,
+      certified = NA
+    ))
+  }
+
+  S <- as.matrix(Matrix::bdiag(Lambda)) - as.matrix(Matrix::tcrossprod(D))
+  S <- (S + t(S)) / 2
+  min_eig <- min(eigen(S, symmetric = TRUE, only.values = TRUE)$values)
+  rel_min <- min_eig / lam_max_C
+
+  list(
+    status = "computed",
+    stationarity_residual = stationarity,
+    min_eigenvalue = min_eig,
+    relative_min_eigenvalue = rel_min,
+    tol = tol,
+    certified = isTRUE(stationarity <= tol && rel_min >= -tol)
+  )
+}
+
+# Subtract from each domain the mean of its rows on the tasks observed by every
+# domain. Under x_ij = R_i a_j + t_i this removes t_i + R_i mean_S(a) with the
+# same task set S for every domain, so the rotation-only Procrustes model
+# applies to the result. Returns the shifted data and the subtracted vectors
+# (NULL translations when no task is shared by all domains).
+#' @noRd
+.gpa_center_on_shared_tasks <- function(pdata, task_labels_list) {
+  task_sets <- lapply(task_labels_list, function(t) unique(as.character(t)))
+  shared <- Reduce(intersect, task_sets)
+  if (!length(shared)) {
+    return(list(pdata = pdata, translations = NULL, shared_tasks = character(0)))
+  }
+  translations <- vector("list", length(pdata))
+  for (i in seq_along(pdata)) {
+    X <- as.matrix(pdata[[i]]$x)
+    rows <- as.character(task_labels_list[[i]]) %in% shared
+    shift <- colMeans(X[rows, , drop = FALSE])
+    pdata[[i]]$x <- sweep(X, 2, shift, `-`)
+    translations[[i]] <- shift
+  }
+  names(translations) <- names(pdata)
+  list(pdata = pdata, translations = translations, shared_tasks = shared)
 }

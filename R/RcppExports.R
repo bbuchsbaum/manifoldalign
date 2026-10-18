@@ -5,6 +5,10 @@ linear_sim_embed_cpp <- function(X, T, M, sigma_P, ncomp, alpha_p, maxit = 500L,
     .Call(`_manifoldalign_linear_sim_embed_cpp`, X, T, M, sigma_P, ncomp, alpha_p, maxit, tol)
 }
 
+lse_objective_gradient_cpp <- function(X, T, M, sigma_P, alpha_p, W) {
+    .Call(`_manifoldalign_lse_objective_gradient_cpp`, X, T, M, sigma_P, alpha_p, W)
+}
+
 network_simplex_ot_cpp <- function(cost_r, a_r, b_r, eps = 1e-9) {
     .Call(`_manifoldalign_network_simplex_ot_cpp`, cost_r, a_r, b_r, eps)
 }

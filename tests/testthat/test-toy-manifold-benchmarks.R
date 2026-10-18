@@ -199,9 +199,10 @@ test_that("Linear Similarity Embedding achieves strict performance on linear dat
   latent_dist <- as.matrix(dist(linear_data$latent))
   T_sim <- exp(-latent_dist^2 / median(latent_dist^2))
   
-  # Test R implementation with strict thresholds
+  # Test R implementation with strict thresholds (ADAM needs its default
+  # budget to meet the convergence tolerance; 25 updates do not)
   result_R <- linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE, 
-                              maxit = 25, verbose = FALSE)
+                              maxit = 500, verbose = FALSE)
   
   expect_s3_class(result_R, "simembed")
   expect_equal(nrow(result_R$scores), nrow(X1))
@@ -510,8 +511,9 @@ test_that("Linear methods fail appropriately on highly non-linear data", {
   grid_dist <- as.matrix(dist(X_grid))
   T_structured <- exp(-grid_dist^2 / median(grid_dist^2)) * 0.2  # Moderate similarities
   
+  # ADAM needs its default budget to meet the convergence tolerance
   result <- linear_sim_embed(X_swiss, T = T_structured, ncomp = 2, 
-                            use_cpp = FALSE, maxit = 25, verbose = FALSE)
+                            use_cpp = FALSE, maxit = 500, verbose = FALSE)
   
   expect_true(result$convergence$convergence == 0)  # Should converge
   
@@ -537,13 +539,15 @@ test_that("Algorithm runtime performance regression checks", {
   T_sim <- exp(-latent_dist^2 / median(latent_dist^2))
   
   runtime <- system.time({
-  result <- linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE, 
-                              maxit = 25, verbose = FALSE)
+  result <- suppressWarnings(linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE, 
+                                              maxit = 25, verbose = FALSE))
   })
   
   # Should complete in reasonable time (prevent O(n^3) regressions)
   expect_lt(runtime[["elapsed"]], 2)  # 2 seconds should be plenty for n=60
-  expect_true(result$convergence$convergence == 0)
+  # 25 updates are a timing budget, not enough to converge; status must say so
+  expect_identical(result$convergence$message, "MAXITER_REACHED")
+  expect_equal(result$convergence$iterations, 25L)
 })
 
 # Remove always-passing summary tests - convert to vignette material

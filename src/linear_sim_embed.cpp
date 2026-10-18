@@ -26,9 +26,6 @@ public:
     n_ = X_.n_rows;
     d_ = X_.n_cols;
     
-    // Allow R to pass a seed rather than hardcoding
-    arma::arma_rng::set_seed_random();
-    
     // Initialize cache variables
     cached_w_.set_size(d_ * ncomp_);
     cached_w_.fill(arma::datum::nan);  // Invalid cache initially
@@ -101,23 +98,26 @@ public:
       P = calculate_P(Y);
     }
     
-    // FIXED: Use correct negative sign and normalization for gradient of Js
-    const double c = -2.0 / sigma_P_;  // Keep negative sign
+    // Js = sum_ij M_ij (P_ij - T_ij)^2 / (2 S), S = sum(M), P_ij = exp(-D2_ij / sigma).
+    // With C_ij = dJs/dD2_ij = M_ij (P_ij - T_ij) (-P_ij / sigma) / S (symmetric
+    // for symmetric M and T), sum_ij C_ij ||y_i - y_j||^2 has gradient
+    // 4 L_C Y in Y, where L_C = diag(rowSums(C)) - C. Hence
+    // dJs/dW = 4 X' L_C Y. Below G = 2 S C, so dJs/dW = 2 X' (D_G - G) Y / S.
+    const double c = -2.0 / sigma_P_;
     arma::mat G = (P - T_) % M_ * c % P;
     
     // Efficiently compute gradient components using matrix operations
-    arma::mat XtGy = X_.t() * (G * Y);                    // d × m
-    arma::vec G_rowsums = arma::sum(G, 1);                 // n × 1
-    arma::mat XtDX_W = (X_.t() * (X_.each_col() % G_rowsums)) * W; // d × m
+    arma::mat XtGy = X_.t() * (G * Y);                    // d x m
+    arma::vec G_rowsums = arma::sum(G, 1);                 // n x 1
+    arma::mat XtDX_W = (X_.t() * (X_.each_col() % G_rowsums)) * W; // d x m
     
-    // FIXED: Use global mask sum for consistent normalization
-    arma::mat grad_Js = (XtGy - XtDX_W) / sum_M_;
+    arma::mat grad_Js = 2.0 * (XtDX_W - XtGy) / sum_M_;
     
-    // FIXED: Correct scale for Jp gradient (1/m² not 2/m²)
+    // Jp = ||W'W - I||_F^2 / (2 m^2)  =>  dJp/dW = 2 W (W'W - I) / m^2
     arma::mat WtW = W.t() * W;
     arma::mat WWmI = WtW;
     WWmI.diag() -= 1.0;
-    arma::mat grad_Jp = (1.0 / (ncomp_ * ncomp_)) * W * WWmI;  // Corrected factor
+    arma::mat grad_Jp = (2.0 / (static_cast<double>(ncomp_) * ncomp_)) * W * WWmI;
     
     // CORRECTED: Use exact same convex combination as objective
     grad = arma::vectorise((1.0 - alpha_p_) * grad_Js + alpha_p_ * grad_Jp);
@@ -186,10 +186,13 @@ Rcpp::List linear_sim_embed_cpp(const arma::mat& X, const arma::mat& T, const ar
   // Create L-BFGS-B optimizer with proper settings
   roptim::Roptim<LinearSimEmbed> opt("L-BFGS-B");
   
-  // Set optimization parameters
+  // Set optimization parameters. L-BFGS-B ignores `reltol`; it stops when the
+  // largest projected-gradient component falls below `pgtol` or when the
+  // relative objective reduction falls below factr * machine epsilon
+  // (factr keeps its default of 1e7). `tol` is therefore passed as pgtol.
   opt.control.maxit = maxit;
-  opt.control.trace = 0;  // We handle progress reporting in the objective function
-  opt.control.reltol = tol;
+  opt.control.trace = 0;
+  opt.control.pgtol = tol;
   opt.control.fnscale = 1.0;  // Ensure proper sign convention
   
   // FIXED: Disable Hessian for L-BFGS
@@ -207,10 +210,35 @@ Rcpp::List linear_sim_embed_cpp(const arma::mat& X, const arma::mat& T, const ar
   // Extract results
   arma::mat optimized_W = arma::reshape(opt.par(), X.n_cols, ncomp);
   
+  // For L-BFGS-B, R's optimizer reports the number of iterations in both
+  // function and gradient counts.
   return Rcpp::List::create(
     Rcpp::Named("W") = optimized_W,
     Rcpp::Named("convergence") = opt.convergence(),
     Rcpp::Named("message") = opt.message(),
-    Rcpp::Named("value") = opt.value()
+    Rcpp::Named("value") = opt.value(),
+    Rcpp::Named("iterations") = opt.fncount()
+  );
+}
+
+// Objective and analytic gradient of the C++ LSE functor at a given W.
+// Internal: used by tests to check the gradient against finite differences.
+// [[Rcpp::export]]
+Rcpp::List lse_objective_gradient_cpp(const arma::mat& X, const arma::mat& T, const arma::mat& M,
+                                      double sigma_P, double alpha_p, const arma::mat& W) {
+  if (X.n_rows != T.n_rows || X.n_rows != M.n_rows || T.n_rows != T.n_cols || M.n_rows != M.n_cols) {
+    Rcpp::stop("Dimension mismatch: X, T, M must have consistent dimensions");
+  }
+  if (W.n_rows != X.n_cols || W.n_cols < 1) {
+    Rcpp::stop("W must have ncol(X) rows and at least one column");
+  }
+  LinearSimEmbed task(X, T, M, sigma_P, static_cast<int>(W.n_cols), alpha_p);
+  arma::vec w = arma::vectorise(W);
+  double value = task(w);
+  arma::vec grad(w.n_elem);
+  task.Gradient(w, grad);
+  return Rcpp::List::create(
+    Rcpp::Named("value") = value,
+    Rcpp::Named("gradient") = arma::mat(arma::reshape(grad, W.n_rows, W.n_cols))
   );
 }

@@ -28,10 +28,11 @@ test_that("R and C++ linear_sim_embed implementations produce consistent results
   maxit <- 50
   tol <- 1e-6
   
-  # Run R implementation
+  # Run R implementation (ADAM takes small steps, so it gets the default
+  # budget; L-BFGS-B keeps maxit = 50)
   result_R <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P, 
                               ncomp = ncomp, alpha_p = alpha_p,
-                              maxit = maxit, tol = tol, use_cpp = FALSE,
+                              maxit = 500, tol = tol, use_cpp = FALSE,
                               verbose = FALSE)
   
   # Run C++ implementation
@@ -94,68 +95,72 @@ test_that("R and C++ linear_sim_embed implementations produce consistent results
                            class_sep_R, class_sep_cpp))
 })
 
-test_that("Gradient computations match between R and C++ (numerical verification)", {
+test_that("R and C++ gradients match central finite differences of the documented objective", {
   skip_if_not_installed("RcppArmadillo")
-  skip_if(!exists("linear_sim_embed_cpp", envir = asNamespace("manifoldalign"), mode = "function"))
-  
+  skip_if(!exists("lse_objective_gradient_cpp", envir = asNamespace("manifoldalign"), mode = "function"))
+  ns <- asNamespace("manifoldalign")
+
   set.seed(123)
-  
-  # Small test case for gradient verification
   n <- 10
-  d <- 3  
+  d <- 3
   ncomp <- 2
-  
-  X <- matrix(rnorm(n * d), n, d)
-  X <- scale(X)
-  
+
+  X <- scale(matrix(rnorm(n * d), n, d))
   T <- matrix(runif(n * n), n, n)
-  T <- 0.5 * (T + t(T))  # Make symmetric
+  T <- 0.5 * (T + t(T))
   diag(T) <- 1
-  
   M <- matrix(1, n, n)
   diag(M) <- 0
-  
-  sigma_P <- 0.5
-  alpha_p <- 0.1
-  
-  # Test with same initial weights
-  W_init <- matrix(rnorm(d * ncomp), d, ncomp)
-  W_init <- qr.Q(qr(W_init))  # Orthogonalize
-  
-  # Helper function to compute objective using R formulation
-  compute_objective_R <- function(W) {
+  sigma_P <- 0.7
+  alpha_p <- 0.3
+
+  # Independent oracle for the documented objective:
+  # (1 - a) * sum_{i<j} M (P - T)^2 / (2K) + a * ||W'W - I||_F^2 / (2 m^2)
+  objective_oracle <- function(W, a = alpha_p) {
     Y <- X %*% W
-    D2 <- outer(rowSums(Y^2), rowSums(Y^2), `+`) - 2 * tcrossprod(Y)
-    D2[D2 < 0] <- 0
-    P <- exp(-D2 / sigma_P)
-    P <- 0.5 * (P + t(P))
-    
-    Js <- sum(M * (P - T)^2) / (2 * sum(M))
-    
-    WtW <- crossprod(W)
-    WtWmI <- WtW
-    diag(WtWmI) <- diag(WtWmI) - 1
-    Jp <- sum(WtWmI^2) / (2 * ncomp^2)
-    
-    (1 - alpha_p) * Js + alpha_p * Jp
+    P <- exp(-as.matrix(dist(Y))^2 / sigma_P)
+    up <- upper.tri(M) & M != 0
+    Js <- sum((P[up] - T[up])^2) / (2 * sum(up))
+    Jp <- sum((crossprod(W) - diag(ncol(W)))^2) / (2 * ncol(W)^2)
+    (1 - a) * Js + a * Jp
   }
-  
-  # Test that initial objectives are similar
-  obj_R <- compute_objective_R(W_init)
-  
-  # Create linear_sim_embed instance to test C++ objective
-  # This is a bit tricky since we can't directly call the C++ objective function
-  # So we'll run a single iteration and check the reported objective
-  
-  result_cpp <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P,
-                                ncomp = ncomp, alpha_p = alpha_p,
-                                maxit = 1, use_cpp = TRUE, verbose = FALSE)
-  
-  # The objectives should be reasonably close
-  # (might not be exact due to initialization differences)
-  expect_true(is.finite(obj_R), info = "R objective should be finite")
-  expect_true(is.finite(result_cpp$convergence$final_value), 
-              info = "C++ objective should be finite")
+  central_diff <- function(f, W, h = 1e-6) {
+    G <- W
+    for (k in seq_along(W)) {
+      Wp <- W; Wm <- W
+      Wp[k] <- Wp[k] + h
+      Wm[k] <- Wm[k] - h
+      G[k] <- (f(Wp) - f(Wm)) / (2 * h)
+    }
+    G
+  }
+
+  # Deliberately non-orthogonal weights so the orthogonality term is active.
+  for (W in list(matrix(rnorm(d * ncomp), d, ncomp),
+                 2.5 * matrix(rnorm(d * ncomp), d, ncomp))) {
+    expect_gt(sum((crossprod(W) - diag(ncomp))^2), 0.1)
+    fd <- central_diff(objective_oracle, W)
+
+    obj_R <- ns$.lse_objective(X, W, T, M, sigma_P, alpha_p)$objective
+    expect_equal(obj_R, objective_oracle(W), tolerance = 1e-12)
+    grad_R <- (1 - alpha_p) * ns$grad_Js(X, W, T, M, sigma_P, sum(M)) +
+      alpha_p * ns$grad_Jp(W)
+    expect_equal(unname(as.matrix(grad_R)), fd, tolerance = 1e-6)
+
+    cpp <- ns$lse_objective_gradient_cpp(X, T, M, sigma_P, alpha_p, W)
+    expect_equal(cpp$value, objective_oracle(W), tolerance = 1e-12)
+    expect_equal(cpp$gradient, fd, tolerance = 1e-6)
+  }
+
+  # Each term separately (alpha = 0: similarity only; alpha = 1: orthogonality only)
+  W <- matrix(rnorm(d * ncomp), d, ncomp)
+  for (a in c(0, 1)) {
+    fd_a <- central_diff(function(W) objective_oracle(W, a), W)
+    cpp_a <- ns$lse_objective_gradient_cpp(X, T, M, sigma_P, a, W)
+    expect_equal(cpp_a$gradient, fd_a, tolerance = 1e-6)
+    grad_a <- if (a == 0) ns$grad_Js(X, W, T, M, sigma_P, sum(M)) else ns$grad_Jp(W)
+    expect_equal(unname(as.matrix(grad_a)), fd_a, tolerance = 1e-6)
+  }
 })
 
 test_that("Alpha parameter scaling works consistently", {
@@ -184,9 +189,11 @@ test_that("Alpha parameter scaling works consistently", {
   alpha_values <- c(0.01, 0.1, 0.5, 0.9)
   
   for (alpha in alpha_values) {
+    # ADAM takes small steps; it is given its default budget, while L-BFGS-B
+    # keeps the 30-iteration budget.
     result_R <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P,
                                 ncomp = ncomp, alpha_p = alpha,
-                                maxit = maxit, use_cpp = FALSE, verbose = FALSE)
+                                maxit = 500, use_cpp = FALSE, verbose = FALSE)
     
     result_cpp <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P,
                                   ncomp = ncomp, alpha_p = alpha,
@@ -197,6 +204,11 @@ test_that("Alpha parameter scaling works consistently", {
                  info = sprintf("R should converge with alpha=%.2f", alpha))
     expect_equal(result_cpp$convergence$convergence, 0,
                  info = sprintf("C++ should converge with alpha=%.2f", alpha))
+
+    # Both backends minimise the same objective and reach the same value
+    expect_equal(result_R$convergence$final_value, result_cpp$convergence$final_value,
+                 tolerance = 1e-3,
+                 info = sprintf("Final objectives differ with alpha=%.2f", alpha))
     
     # Orthogonality should increase with higher alpha
     WtW_R <- crossprod(result_R$weights)

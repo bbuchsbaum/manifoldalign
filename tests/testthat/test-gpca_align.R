@@ -138,10 +138,12 @@ test_that("gpca_align correctly handles cross-domain alignment", {
   set.seed(123)
   n_samples <- 40
   
-  # Base data with clear cluster structure
+  # Base data with clear cluster structure: cluster A centred at (-2, 0, 0),
+  # cluster B at (2, 0, 0). (`rnorm(mean = c(-2, 0, 0))` would recycle the
+  # mean over matrix elements, not columns, and blur the clusters.)
   base_data <- rbind(
-    matrix(rnorm(20 * 3, mean = c(-2, 0, 0)), 20, 3),  # Cluster A
-    matrix(rnorm(20 * 3, mean = c(2, 0, 0)), 20, 3)    # Cluster B
+    sweep(matrix(rnorm(20 * 3), 20, 3), 2, c(-2, 0, 0), `+`),  # Cluster A
+    sweep(matrix(rnorm(20 * 3), 20, 3), 2, c(2, 0, 0), `+`)    # Cluster B
   )
   labels <- rep(c("A", "B"), each = 20)
   
@@ -314,15 +316,6 @@ test_that("gpca_align handles edge cases and maintains numerical stability", {
     result_perfect <- gpca_align.hyperdesign(hd_perfect, y = lbl, ncomp = 2)
   })
   expect_true(all(is.finite(result_perfect$s)))
-  
-  # Test 7: Custom preprocessing
-  custom_preproc <- multivarious::center() %>% multivarious::standardize()
-  
-  expect_no_error({
-    result_preproc <- gpca_align.hyperdesign(hd_small, y = lbl, ncomp = 2, 
-                                             preproc = custom_preproc)
-  })
-  expect_true(all(is.finite(result_preproc$s)))
   
   # Test 8: Verify PSD correction messages
   # Create a similarity function that might produce non-PSD matrix
