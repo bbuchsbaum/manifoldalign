@@ -158,3 +158,41 @@ test_that("ot_procrustes_aligner integrates with align_many()", {
   expect_lt(mean((Z1 - Z2)^2), 0.5)
   expect_lt(mean((Z1 - Z3)^2), 0.5)
 })
+
+test_that("ot_procrustes_aligner reports convergence with default settings", {
+  set.seed(303)
+  X <- matrix(rnorm(150), 50, 3)
+  algo <- ot_procrustes_aligner()
+
+  # Defaults: the annealing schedule reaches epsilon_min and the rotation settles.
+  fit <- fit_pair(algo, X, X)
+  expect_true(fit$epsilon_floor_reached)
+  expect_true(fit$converged)
+  expect_lt(fit$iterations, 100)
+  expect_equal(min(fit$epsilon_trace), 0.05)
+
+  # A budget too small for the schedule to reach epsilon_min never reports
+  # convergence, even though the rotation does not move.
+  short <- fit_pair(algo, X, X, max_iter = 20)
+  expect_false(short$epsilon_floor_reached)
+  expect_false(short$converged)
+  expect_identical(short$iterations, 20L)
+})
+
+test_that("ot_procrustes_aligner seeding is reproducible and restores the caller's RNG", {
+  set.seed(404)
+  X <- matrix(rnorm(90), 30, 3)
+  Y <- X %*% qr.Q(qr(matrix(rnorm(9), 3, 3)))
+  algo <- ot_procrustes_aligner()
+
+  set.seed(99)
+  ref <- runif(2)
+  set.seed(99)
+  f1 <- fit_pair(algo, X, Y, n_init = 3L, init = "random_orthogonal", seed = 7,
+                 max_iter = 30)
+  expect_identical(runif(2), ref)
+
+  f2 <- fit_pair(algo, X, Y, n_init = 3L, init = "random_orthogonal", seed = 7,
+                 max_iter = 30)
+  expect_identical(f1$rotation, f2$rotation)
+})
