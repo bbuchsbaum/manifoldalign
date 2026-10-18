@@ -6,6 +6,54 @@
 #' @name utils-ot
 NULL
 
+# Reject arguments that would otherwise vanish silently into `...`.
+.ot_reject_dots <- function(dots, fun) {
+  if (length(dots)) {
+    nms <- names(dots)
+    if (is.null(nms)) nms <- rep("", length(dots))
+    nms[!nzchar(nms)] <- "<unnamed>"
+    stop(fun, "() got unused argument(s): ", paste(nms, collapse = ", "),
+         call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+# Estimated bytes of the dense objects held by the pairwise OT solvers
+# (gromov_wasserstein(), fpgw()): one n_i x n_j plan per domain pair, one
+# n_i x n_i distance matrix per domain, and about six n_i x n_j working
+# matrices for the largest pair.
+.ot_dense_bytes <- function(n_samples) {
+  n <- as.numeric(n_samples)
+  pair_cells <- (sum(n)^2 - sum(n^2)) / 2
+  work <- if (length(n) >= 2) {
+    o <- sort(n, decreasing = TRUE)
+    6 * o[1] * o[2]
+  } else {
+    0
+  }
+  8 * (pair_cells + sum(n^2) + work)
+}
+
+# Refuse problems whose dense plans would not fit the configured budget.
+.ot_check_dense_memory <- function(n_samples, method) {
+  bytes <- .ot_dense_bytes(n_samples)
+  limit <- getOption("manifoldalign.ot_max_dense_bytes", 4e9)
+  if (!is.numeric(limit) || length(limit) != 1L || is.na(limit) || limit <= 0) {
+    stop("getOption('manifoldalign.ot_max_dense_bytes') must be a positive number",
+         call. = FALSE)
+  }
+  if (bytes > limit) {
+    stop(sprintf(paste0(
+      "%s() stores dense pairwise transport plans: %d domains with %s rows ",
+      "need about %.2f GB, above getOption('manifoldalign.ot_max_dense_bytes') ",
+      "= %.2f GB. Reduce the number or size of domains, or raise the option ",
+      "if the memory is available."),
+      method, length(n_samples), paste(range(n_samples), collapse = "-"),
+      bytes / 1e9, limit / 1e9), call. = FALSE)
+  }
+  invisible(bytes)
+}
+
 #' Compute Distance Matrix
 #'
 #' Memory-efficient distance computation that avoids creating full distance matrix

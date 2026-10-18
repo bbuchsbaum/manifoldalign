@@ -383,8 +383,9 @@ uot_kl_logpi2_meanF_sparse_cpp <- function(row_ptr, col_idx, cost, n_rows, n_col
 #' @param F Optional source features (n x D).
 #' @param G Optional template features (m x D).
 #' @param lambda_feat Weight for feature distance-squared term.
-#' @param max_dist Optional maximum distance threshold; edges with
-#'   `nn_dists > max_dist` are dropped.
+#' @param max_dist Maximum distance threshold; edges with
+#'   `nn_dists > max_dist` are dropped. The default `NA` (like `Inf`) keeps
+#'   all edges.
 #' @param extra_i Optional 1-based row indices for additional edges.
 #' @param extra_j Optional 1-based column indices for additional edges.
 #' @param extra_dists Optional distances for additional edges (aligned to
@@ -398,9 +399,12 @@ uot_kl_logpi2_meanF_sparse_cpp <- function(row_ptr, col_idx, cost, n_rows, n_col
 #' @param prior_sigma Optional positive scale (in the units of `Y_template`).
 #'   When finite, the prior penalty uses `||y_j - y_pref||^2 / prior_sigma^2`.
 #' @return A list with CSR fields `row_ptr`, `col_idx`, `cost` and CSC fields
-#'   `col_ptr`, `row_idx`, `cost_csc`, plus dimensions.
+#'   `col_ptr`, `row_idx`, `cost_csc`, plus dimensions. Within each row the
+#'   edges are sorted by column; duplicate `(i, j)` edges (for example a kNN
+#'   edge that is also supplied through `extra_i`/`extra_j`) are merged into a
+#'   single edge that keeps the smallest cost.
 #' @export
-uot_build_sparse_cost_knn_cpp <- function(nn_idx, nn_dists, n_cols, lambda_coord = 1.0, F = NULL, G = NULL, lambda_feat = 0.0, max_dist, extra_i = NULL, extra_j = NULL, extra_dists = NULL, Y_template = NULL, prior_map = NULL, lambda_prior = 0.0, prior_sigma = NA_real_) {
+uot_build_sparse_cost_knn_cpp <- function(nn_idx, nn_dists, n_cols, lambda_coord = 1.0, F = NULL, G = NULL, lambda_feat = 0.0, max_dist = NA_real_, extra_i = NULL, extra_j = NULL, extra_dists = NULL, Y_template = NULL, prior_map = NULL, lambda_prior = 0.0, prior_sigma = NA_real_) {
     .Call(`_manifoldalign_uot_build_sparse_cost_knn_cpp`, nn_idx, nn_dists, n_cols, lambda_coord, F, G, lambda_feat, max_dist, extra_i, extra_j, extra_dists, Y_template, prior_map, lambda_prior, prior_sigma)
 }
 

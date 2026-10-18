@@ -35,18 +35,19 @@ test_that("fpgw works with basic hyperdesign input", {
   
   # Check basic properties
   expect_s3_class(result, "fpgw")
-  expect_s3_class(result, "multiblock_biprojector")
-  
+  # Not a projector: it has no s/v/sdev/preproc/block_indices fields.
+  expect_false(inherits(result, "multiblock_biprojector"))
+
   # Check transport plan
   expect_length(result$transport_plans, 1)
   P <- result$transport_plans[[1]]
   expect_equal(dim(P), c(n, n))
-  
-  # For classical FGW (lambda=0, rho=NULL), transport plan should be doubly stochastic
-  # But due to numerical precision, allow some tolerance
-  expect_equal(sum(P), 1, tolerance = 0.1)  # Relaxed tolerance
-  expect_equal(as.vector(rowSums(P)), rep(1/n, n), tolerance = 0.1)
-  expect_equal(as.vector(colSums(P)), rep(1/n, n), tolerance = 0.1)
+
+  # Classical FGW (lambda=0, rho=NULL): the plan has exactly uniform marginals
+  expect_true(all(P >= 0))
+  expect_lt(abs(sum(P) - 1), 1e-12)
+  expect_lt(max(abs(rowSums(P) - 1/n)), 1e-12)
+  expect_lt(max(abs(colSums(P) - 1/n)), 1e-12)
   
   # Check distance matrix
   expect_equal(dim(result$distances), c(2, 2))
@@ -74,9 +75,12 @@ test_that("fpgw handles mass-constrained variant", {
   rho <- 0.8
   result <- fpgw(hd, omega1 = 0.1, rho = rho, verbose = FALSE)
   
-  # Check that transported mass equals rho
+  # Transported mass equals rho and the marginal bounds hold
   P <- result$transport_plans[[1]]
-  expect_equal(sum(P), rho, tolerance = 1e-3)
+  expect_lt(abs(sum(P) - rho), 1e-10)
+  expect_true(all(P >= 0))
+  expect_lte(max(rowSums(P) - 1/n), 1e-12)
+  expect_lte(max(colSums(P) - 1/n), 1e-12)
   
   # Check metadata
   expect_equal(result$rho, rho)
@@ -98,15 +102,24 @@ test_that("fpgw handles TV-penalized variant", {
   
   # Run with TV penalty
   lambda <- 0.1
-  result <- fpgw(hd, omega1 = 0.3, lambda = lambda, verbose = FALSE)
-  
+  expect_warning(
+    result <- fpgw(hd, omega1 = 0.3, lambda = lambda, verbose = FALSE),
+    "experimental"
+  )
+
   # Check metadata
   expect_equal(result$lambda, lambda)
   expect_null(result$rho)
-  
-  # Transport plan should have reduced mass due to penalty
+
+  # The plan is a sub-coupling: non-negative with row/column sums bounded by
+  # the marginals. With this small lambda the mass penalty cannot pay for
+  # transporting everything, so mass is strictly partial.
   P <- result$transport_plans[[1]]
-  expect_lt(sum(P), 1)
+  expect_true(all(P >= 0))
+  expect_lte(max(rowSums(P) - 1/n), 1e-12)
+  expect_lte(max(colSums(P) - 1/n), 1e-12)
+  expect_lt(sum(P), 0.99)
+  expect_true(result$converged[1, 2])
 })
 
 test_that("fpgw validates mutually exclusive parameters", {

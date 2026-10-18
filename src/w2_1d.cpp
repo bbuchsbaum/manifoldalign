@@ -1,6 +1,7 @@
 // [[Rcpp::depends(Rcpp)]]
 #include <Rcpp.h>
 #include <algorithm>
+#include <vector>
 using namespace Rcpp;
 
 struct SortedVec {
@@ -8,19 +9,17 @@ struct SortedVec {
   std::vector<double> w;
 };
 
+// Sort the values of one column ascending, carrying the (validated) weights.
 static inline SortedVec sort_with_weights(const NumericVector &vals, const NumericVector &weights) {
   int n = vals.size();
   std::vector<int> idx(n);
   for (int i = 0; i < n; ++i) idx[i] = i;
-  // Pair comparator ascending by value (NA/Inf treated as 0)
-  auto getv = [&](int i){ double v = vals[i]; return R_finite(v) ? v : 0.0; };
-  std::sort(idx.begin(), idx.end(), [&](int a, int b){ return getv(a) < getv(b); });
+  std::stable_sort(idx.begin(), idx.end(), [&](int a, int b){ return vals[a] < vals[b]; });
   SortedVec out; out.x.resize(n); out.w.resize(n);
   for (int k = 0; k < n; ++k) {
     int i = idx[k];
-    double ww = weights[i];
-    out.x[k] = getv(i);
-    out.w[k] = (R_finite(ww) && ww > 0) ? ww : 0.0;
+    out.x[k] = vals[i];
+    out.w[k] = weights[i];
   }
   return out;
 }
@@ -48,6 +47,28 @@ static inline double w2_pair_sorted(const std::vector<double> &xa, const std::ve
   return res;
 }
 
+// Validate a weight vector (finite, non-negative, positive total) and
+// normalise it to sum to one.
+static NumericVector normalised_weights(const NumericVector &w, const char *name) {
+  double s = 0.0;
+  for (R_xlen_t i = 0; i < w.size(); ++i) {
+    double v = w[i];
+    if (!R_finite(v)) stop("%s contains non-finite values", name);
+    if (v < 0) stop("%s must be non-negative", name);
+    s += v;
+  }
+  if (!(s > 0)) stop("%s must have a positive sum", name);
+  NumericVector out = clone(w);
+  for (R_xlen_t i = 0; i < out.size(); ++i) out[i] /= s;
+  return out;
+}
+
+static void check_finite_matrix(const NumericMatrix &M, const char *name) {
+  for (R_xlen_t i = 0; i < M.size(); ++i) {
+    if (!R_finite(M[i])) stop("%s contains non-finite values (NA, NaN or Inf)", name);
+  }
+}
+
 // [[Rcpp::export]]
 Rcpp::List w2_cost_matrix_1d(Rcpp::NumericMatrix Uref,
                              Rcpp::NumericMatrix Ug,
@@ -59,14 +80,12 @@ Rcpp::List w2_cost_matrix_1d(Rcpp::NumericMatrix Uref,
   if (Ug.ncol() != K) stop("Ug must have same number of columns as Uref");
   if (w_ref.size() != n1) stop("w_ref length mismatch");
   if (w_g.size() != n2) stop("w_g length mismatch");
+  check_finite_matrix(Uref, "Uref");
+  check_finite_matrix(Ug, "Ug");
 
   // Normalize weights to sum to 1
-  double s1 = 0.0, s2 = 0.0;
-  for (int i = 0; i < n1; ++i) { double v = R_finite(w_ref[i]) ? w_ref[i] : 0.0; if (v > 0) s1 += v; }
-  for (int i = 0; i < n2; ++i) { double v = R_finite(w_g[i])   ? w_g[i]   : 0.0; if (v > 0) s2 += v; }
-  if (s1 <= 0) s1 = 1.0; if (s2 <= 0) s2 = 1.0;
-  NumericVector wr = clone(w_ref); for (int i = 0; i < n1; ++i) wr[i] = ((R_finite(wr[i]) && wr[i] > 0) ? wr[i] : 0.0) / s1;
-  NumericVector wg = clone(w_g);   for (int i = 0; i < n2; ++i) wg[i] = ((R_finite(wg[i]) && wg[i] > 0) ? wg[i] : 0.0) / s2;
+  NumericVector wr = normalised_weights(w_ref, "w_ref");
+  NumericVector wg = normalised_weights(w_g, "w_g");
 
   // Pre-sort each column
   std::vector<SortedVec> Rsorted(K);
@@ -104,4 +123,3 @@ Rcpp::List w2_cost_matrix_1d(Rcpp::NumericMatrix Uref,
     Rcpp::Named("sign") = sign
   );
 }
-

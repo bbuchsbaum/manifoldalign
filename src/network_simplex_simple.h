@@ -54,7 +54,12 @@
 #endif
 //#include "core.h"
 //#include "lmath.h"
+// manifoldalign: OpenMP is optional. Compilers without OpenMP support (for
+// example Apple clang without libomp) ignore the pragmas below; the runtime
+// calls are guarded so that the solver falls back to a single thread.
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <cmath>
 
 
@@ -233,6 +238,8 @@ namespace lemon {
 			INF(std::numeric_limits<Value>::has_infinity ?
 				std::numeric_limits<Value>::infinity() : MAX)
 		{
+			// Must be set before reset(), whose parallel loops read it.
+			_omp_threads = 1;
 			// Reset data structures
 			reset();
 			max_iter = maxiters;
@@ -281,6 +288,25 @@ namespace lemon {
 		};
 
 
+
+	public:
+		// manifoldalign: number of OpenMP threads used by the parallel loops
+		// (pivot search and initialisation). Defaults to 1: a parallel region
+		// per pivot block costs far more than it saves on the small and medium
+		// problems solved here, and on an oversubscribed machine spinning
+		// threads make every solve orders of magnitude slower. Without OpenMP
+		// support the value is ignored and the solver is single-threaded.
+		NetworkSimplexSimple& numThreads(int n) {
+#ifdef _OPENMP
+			int max_t = omp_get_max_threads();
+			_omp_threads = (n < 1) ? 1 : ((n > max_t) ? max_t : n);
+#else
+			(void) n;
+			_omp_threads = 1;
+#endif
+			return *this;
+		}
+		int _omp_threads;
 
 	private:
 		size_t max_iter;
@@ -466,7 +492,9 @@ namespace lemon {
 			bool findEnteringArc() {
 				Cost min_val = 0;
 
-				ArcsType N = omp_get_max_threads();
+				// manifoldalign: the thread count is set by numThreads()
+				// (default 1); see the note at the declaration of _omp_threads.
+				ArcsType N = _ns._omp_threads;
 				std::vector<Cost> minArray(N, 0);
 				std::vector<ArcsType> arcId(N);
 				ArcsType bs = (ArcsType)ceil(_block_size / (double)N);
@@ -475,9 +503,13 @@ namespace lemon {
 
 					ArcsType e;
 					ArcsType j;
-#pragma omp parallel
+#pragma omp parallel num_threads((int) N) if(N > 1)
 					{
+#ifdef _OPENMP
 						int t = omp_get_thread_num();
+#else
+						int t = 0;
+#endif
 
 #pragma omp for schedule(static, bs) lastprivate(e)
 						for (j = 0; j < std::min(i + _block_size, _search_arc_num) - i; j++) {
@@ -894,7 +926,7 @@ namespace lemon {
 				num_big_subsequences = _arc_num % mixingCoeff;
 				num_total_big_subsequence_numbers = subsequence_length * num_big_subsequences;
 
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) num_threads(_omp_threads) if(_omp_threads > 1)
 				for (Arc a = 0; a <= _graph.maxArcId(); a++) {   // --a <=> _graph.next(a)  , -1 == INVALID 
 					ArcsType i = sequence(_graph.maxArcId()-a);
 					_source[i] = _node_id(_graph.source(a));
@@ -1448,7 +1480,7 @@ namespace lemon {
 				} else {
 					arc_vector.resize(demand_nodes.size());
 					// Find the min. cost incomming arc for each demand node
-#pragma omp parallel for
+#pragma omp parallel for num_threads(_omp_threads) if(_omp_threads > 1)
 					for (ArcsType i = 0; i < ArcsType(demand_nodes.size()); ++i) {
 						Node v = demand_nodes[i];
 						Cost min_cost = std::numeric_limits<Cost>::max();
@@ -1468,7 +1500,7 @@ namespace lemon {
 			} else {
 				arc_vector.resize(supply_nodes.size());
 				// Find the min. cost outgoing arc for each supply node
-#pragma omp parallel for
+#pragma omp parallel for num_threads(_omp_threads) if(_omp_threads > 1)
 				for (int i = 0; i < int(supply_nodes.size()); ++i) {
 					Node u = supply_nodes[i];
 					Cost min_cost = std::numeric_limits<Cost>::max();

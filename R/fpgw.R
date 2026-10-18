@@ -10,60 +10,83 @@
 #'     \item \code{omega1}: Weight of the feature term (0 ≤ omega1 ≤ 1).
 #'       The structural term weight omega2 = 1 - omega1 is computed
 #'       automatically (default: 0.001)
-#'     \item \code{lambda}: Non-negative total variation penalty for the
-#'       penalized FPGW variant. Set \code{lambda = 0} to disable and use
-#'       \code{rho} instead (default: 0).
-#'       NOTE: The TV penalty is experimental and may not produce expected 
-#'       sparsity-inducing behavior due to its quadratic formulation
+#'     \item \code{lambda}: Non-negative mass penalty for the penalized
+#'       ("TV") FPGW variant. Set \code{lambda = 0} to disable and use
+#'       \code{rho} instead (default: 0). The penalized variant is
+#'       experimental.
 #'     \item \code{rho}: Mass budget in (0, min(|μ|,|ν|)] for the
 #'       mass-constrained variant. If \code{rho} is supplied, the solver
 #'       runs the mass-constrained variant; otherwise it uses the
 #'       penalized variant (\eqn{\lambda > 0}) or classical FGW when both
 #'       \eqn{\lambda = 0} and \code{rho} is \code{NULL}
-#'     \item \code{epsilon}: Initial entropic regularization for warm-start
-#'       (default: 0.01). Set to 0 to disable warm-start
-#'     \item \code{metric}: Distance metric for within-domain distances (default: "euclidean")
+#'     \item \code{epsilon}: Entropic regularization of the warm start
+#'       (default: 0.01). Set to 0 to disable the warm start
+#'     \item \code{metric}: Distance metric, one of \code{"euclidean"},
+#'       \code{"manhattan"} or \code{"cosine"} (default: "euclidean")
 #'     \item \code{max_iter}: Maximum iterations for Frank-Wolfe optimization
 #'       (default: 200)
 #'     \item \code{tol}: Convergence tolerance for the Frank-Wolfe gap
 #'       (default: 1e-6)
-#'     \item \code{inner_max_iter}: Maximum iterations for inner optimization
-#'       (default: 50)
+#'     \item \code{inner_max_iter}: Number of Sinkhorn iterations of the
+#'       entropic warm start (default: 50)
 #'     \item \code{verbose}: Print convergence information (default: FALSE)
 #'   }
 #'
-#' @return An fpgw object (inheriting from multiblock_biprojector) containing:
+#' @return An object of class \code{fpgw} containing:
 #' \itemize{
 #'   \item \code{transport_plans}: List of optimal transport plans between domains
+#'     (upper-triangular pair order)
 #'   \item \code{distances}: Matrix of pairwise FPGW distances between domains
-#'   \item \code{converged}: Convergence status for each optimization
+#'     (square root of the minimised objective)
+#'   \item \code{converged}: Convergence status for each optimization (Frank-Wolfe
+#'     gap below \code{tol})
 #'   \item \code{n_samples}: Number of samples per domain
 #'   \item \code{omega1}: Feature weight used
-#'   \item \code{lambda}: TV penalty (if penalized variant)
+#'   \item \code{lambda}: Mass penalty (if penalized variant)
 #'   \item \code{rho}: Mass budget (if mass-constrained variant)
 #'   \item \code{domain_names}: Names of the domains
 #'   \item \code{training_data}: Original domain matrices for prediction
 #'   \item \code{metric}: Distance metric used
 #' }
+#' The object is not a projector: it has no scores, loadings or
+#' preprocessing pipeline, and it does not inherit from
+#' \code{multiblock_biprojector}.
 #'
 #' @details
-#' The FPGW distance combines feature and structural information through:
-#' \deqn{L(\gamma) = \omega_1 \langle C, \gamma \rangle + 
-#'       \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2 \gamma_{ij} \gamma_{i'j'} + 
+#' With uniform marginals \eqn{\mu, \nu} the FPGW objective is
+#' \deqn{L(\gamma) = \omega_1 \langle C, \gamma \rangle +
+#'       \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2 \gamma_{ij} \gamma_{i'j'} +
 #'       \lambda(|\mu|^2 + |\nu|^2 - 2|\gamma|^2)}
-#' 
-#' where C is the feature cost matrix and C_X, C_Y are within-domain distance matrices.
-#' 
-#' The algorithm supports two variants:
+#'
+#' where C is the feature cost matrix, C_X, C_Y are within-domain distance
+#' matrices (scaled to a maximum of one) and \eqn{|\gamma|} is the total mass of
+#' \eqn{\gamma}.
+#'
+#' The algorithm supports three variants:
 #' \itemize{
-#'   \item Mass-constrained: Transports exactly rho mass between domains
-#'   \item Penalized: Uses TV regularization with parameter lambda
+#'   \item Classical FGW (\code{lambda = 0}, \code{rho = NULL}): \eqn{\gamma}
+#'     has marginals exactly \eqn{\mu} and \eqn{\nu}; the penalty is absent.
+#'   \item Mass-constrained (\code{rho}): \eqn{\gamma \ge 0} with row sums at
+#'     most \eqn{\mu}, column sums at most \eqn{\nu} and total mass exactly
+#'     \code{rho}; the penalty is absent.
+#'   \item Penalized (\code{lambda > 0}): \eqn{\gamma \ge 0} with row sums at
+#'     most \eqn{\mu} and column sums at most \eqn{\nu}; the term
+#'     \eqn{\lambda(|\mu|^2 + |\nu|^2 - 2|\gamma|^2)} charges for mass that is
+#'     not transported, so larger \code{lambda} transports more mass. Pairs whose
+#'     structural discrepancy exceeds about \eqn{2\lambda} are left
+#'     untransported.
 #' }
-#' 
-#' The Frank-Wolfe algorithm is used with closed-form step sizes for efficiency.
+#'
+#' Each pair is solved by Frank-Wolfe started from a feasible plan (the
+#' rounded entropic warm start, scaled to mass \code{rho} for the
+#' mass-constrained variant). The linear minimisation oracle is an exact
+#' network-simplex LP over the variant's feasible set and the step size is the
+#' exact minimiser of the quadratic objective along the search direction. The
+#' returned plans are checked against the marginal bounds and total mass of
+#' their variant; a violation is an error.
 #'
 #' @references
-#' Bai et al. (2025). Fused-Partial Gromov-Wasserstein for Heterogeneous Domain 
+#' Bai et al. (2025). Fused-Partial Gromov-Wasserstein for Heterogeneous Domain
 #' Adaptation. arXiv preprint.
 #'
 #' @examples
@@ -135,14 +158,23 @@ fpgw <- function(data, ...) {
 #' @rdname fpgw
 #' @method fpgw hyperdesign
 #' @param omega1 Weight of the feature term (0 ≤ omega1 ≤ 1). Default: 0.001
-#' @param lambda Non-negative total variation penalty. Default: 0
+#' @param lambda Non-negative mass penalty of the penalized variant. Default: 0
 #' @param rho Mass budget in (0, min(|μ|,|ν|)] for mass-constrained variant
-#' @param epsilon Initial entropic regularization for warm-start. Default: 0.01
-#' @param metric Distance metric for within-domain distances. Default: "euclidean"
-#' @param max_iter Maximum iterations for Frank-Wolfe. Default: 200
-#' @param tol Convergence tolerance for Frank-Wolfe gap. Default: 1e-6
-#' @param inner_max_iter Maximum iterations for inner optimization. Default: 50
+#' @param epsilon Entropic regularization of the warm start (>= 0; 0 disables
+#'   it). Default: 0.01
+#' @param metric Distance metric: "euclidean", "manhattan" or "cosine".
+#'   Default: "euclidean"
+#' @param max_iter Maximum iterations for Frank-Wolfe (>= 1). Default: 200
+#' @param tol Convergence tolerance for Frank-Wolfe gap (> 0). Default: 1e-6
+#' @param inner_max_iter Number of Sinkhorn iterations of the entropic warm
+#'   start (>= 1). Default: 50
 #' @param verbose Print convergence information. Default: FALSE
+#' @section Memory:
+#' Every pair of domains stores a dense \eqn{n_i \times n_j} plan and the
+#' solver keeps dense within-domain distance matrices. The estimated size is
+#' checked against \code{getOption("manifoldalign.ot_max_dense_bytes")}
+#' (default 4e9 bytes) before any work starts; larger problems are refused with
+#' an error that reports the estimate.
 #' @export
 fpgw.hyperdesign <- function(data,
                             omega1 = 0.001,
@@ -155,46 +187,52 @@ fpgw.hyperdesign <- function(data,
                             inner_max_iter = 50,
                             verbose = FALSE,
                             ...) {
-  
+
   if (!inherits(data, "hyperdesign")) {
     stop("fpgw requires a hyperdesign object", call. = FALSE)
   }
-  
-  if (!is.null(rho) && lambda > 0) {
-    stop("Choose *either* rho (mass-constrained) or lambda (penalized), not both", 
-         call. = FALSE)
-  }
-  
+  .ot_reject_dots(list(...), "fpgw")
+  .fpgw_check_args(omega1 = omega1, lambda = lambda, rho = rho,
+                   epsilon = epsilon, metric = metric, max_iter = max_iter,
+                   tol = tol, inner_max_iter = inner_max_iter,
+                   verbose = verbose)
+
   if (lambda > 0) {
-    warning("TV penalty (lambda > 0) is experimental and may not produce expected ",
-            "sparsity-inducing behavior. Consider using rho for mass-constrained transport.",
+    warning("The penalized FPGW variant (lambda > 0) is experimental.",
             call. = FALSE)
   }
-  
+
   # Prepare data using shared utilities
   prep <- prepare_ot_data(data)
   X_list <- prep$X_list
   n_samples <- prep$n_samples
   n_domains <- prep$n_domains
   domain_names <- prep$domain_names
-  
-  # Compute cost matrices (feature & geometry) 
+
+  .ot_check_dense_memory(n_samples, "fpgw")
+
+  # With uniform marginals both sides carry mass one.
+  if (!is.null(rho) && rho > 1 + 1e-12) {
+    stop("rho (", rho, ") exceeds min(sum(p), sum(q)) = 1", call. = FALSE)
+  }
+
+  # Compute cost matrices (feature & geometry)
   C_list <- lapply(X_list, function(X) {
     D <- compute_distance_matrix(X, metric)
     D / (max(D) + 1e-10)
   })
-  
+
   # Pairwise loop -> call FW solver
   n_pairs <- n_domains * (n_domains - 1) / 2
   transport_list <- vector("list", n_pairs)
   dist_mat <- matrix(0, n_domains, n_domains)
   conv <- matrix(TRUE, n_domains, n_domains)
-  
+
   pair <- 1
   for (i in 1:(n_domains - 1)) {
     for (j in (i + 1):n_domains) {
       if (verbose) cat(sprintf("FPGW: Computing distance between domain %d and %d\n", i, j))
-      
+
       # Uniform marginals (can be customized later)
       p <- rep(1 / n_samples[i], n_samples[i])
       q <- rep(1 / n_samples[j], n_samples[j])
@@ -210,17 +248,22 @@ fpgw.hyperdesign <- function(data,
         pair <- pair + 1
         next
       }
-      
+
       C_feat <- compute_feature_cost(X_list[[i]], X_list[[j]], metric)
       Cx <- C_list[[i]]
       Cy <- C_list[[j]]
-      
-      ## ---- PERF ---- warm-start with entropic FGW if epsilon > 0
-      P0 <- matrix(1/(length(p)*length(q)), length(p), length(q))
+
+      ## Feasible starting plan: the (rounded) entropic warm start lies in
+      ## Pi(p, q); the mass-constrained variant scales it to mass rho.
+      P0 <- outer(p, q)
       if (epsilon > 0) {
-        P0 <- sinkhorn_fgw_warmstart(C_feat, Cx, Cy, p, q, omega1, epsilon, 20)
+        P0 <- sinkhorn_fgw_warmstart(C_feat, Cx, Cy, p, q, omega1, epsilon,
+                                     inner_max_iter)
       }
-      
+      if (!is.null(rho)) {
+        P0 <- P0 * (rho / sum(p))
+      }
+
       ## ---- SOLVER ---- Frank-Wolfe
       sol <- fw_fpgw(C_feat, Cx, Cy, p, q,
                      omega1 = omega1,
@@ -228,17 +271,16 @@ fpgw.hyperdesign <- function(data,
                      rho = rho,
                      P0 = P0,
                      max_iter = max_iter,
-                     inner_max_iter = inner_max_iter,
                      tol = tol,
                      verbose = verbose)
-      
+
       transport_list[[pair]] <- sol$P
       dist_mat[i, j] <- dist_mat[j, i] <- sol$distance
       conv[i, j] <- conv[j, i] <- sol$converged
       pair <- pair + 1
     }
   }
-  
+
   structure(
     list(
       transport_plans = transport_list,
@@ -252,460 +294,366 @@ fpgw.hyperdesign <- function(data,
       training_data = X_list,
       metric = metric
     ),
-    class = c("fpgw", "multiblock_biprojector")
+    class = "fpgw"
   )
+}
+
+# Argument validation for fpgw.hyperdesign().
+.fpgw_check_args <- function(omega1, lambda, rho, epsilon, metric, max_iter,
+                             tol, inner_max_iter, verbose) {
+  is_num1 <- function(x) is.numeric(x) && length(x) == 1L && is.finite(x)
+  if (!is_num1(omega1) || omega1 < 0 || omega1 > 1) {
+    stop("omega1 must be a single number in [0, 1]", call. = FALSE)
+  }
+  if (!is_num1(lambda) || lambda < 0) {
+    stop("lambda must be a single non-negative number", call. = FALSE)
+  }
+  if (!is.null(rho)) {
+    if (!is_num1(rho) || rho <= 0) {
+      stop("rho must be NULL or a single positive number", call. = FALSE)
+    }
+    if (lambda > 0) {
+      stop("Choose *either* rho (mass-constrained) or lambda (penalized), not both",
+           call. = FALSE)
+    }
+  }
+  if (!is_num1(epsilon) || epsilon < 0) {
+    stop("epsilon must be a single non-negative number (0 disables the warm start)",
+         call. = FALSE)
+  }
+  if (!is.character(metric) || length(metric) != 1L ||
+      !metric %in% c("euclidean", "manhattan", "cosine")) {
+    stop("metric must be one of 'euclidean', 'manhattan' or 'cosine'",
+         call. = FALSE)
+  }
+  if (!is_num1(max_iter) || max_iter < 1 || max_iter != round(max_iter)) {
+    stop("max_iter must be a positive integer", call. = FALSE)
+  }
+  if (!is_num1(tol) || tol <= 0) {
+    stop("tol must be a single positive number", call. = FALSE)
+  }
+  if (!is_num1(inner_max_iter) || inner_max_iter < 1 ||
+      inner_max_iter != round(inner_max_iter)) {
+    stop("inner_max_iter must be a positive integer", call. = FALSE)
+  }
+  if (!is.logical(verbose) || length(verbose) != 1L || is.na(verbose)) {
+    stop("verbose must be TRUE or FALSE", call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+# Check that P is feasible for the FPGW variant; error otherwise.
+.fpgw_check_plan <- function(P, p, q, variant, rho = NULL, tol = 1e-8,
+                             what = "plan") {
+  if (!is.matrix(P) || nrow(P) != length(p) || ncol(P) != length(q)) {
+    stop("FPGW ", what, " has the wrong dimensions", call. = FALSE)
+  }
+  if (any(!is.finite(P))) {
+    stop("FPGW ", what, " contains non-finite entries", call. = FALSE)
+  }
+  scale <- max(1, sum(p), sum(q))
+  tol <- tol * scale
+  rs <- rowSums(P)
+  cs <- colSums(P)
+  problems <- character(0)
+  if (min(P) < -tol) problems <- c(problems, sprintf("negative entry %.3g", min(P)))
+  if (variant == "balanced") {
+    err <- max(abs(rs - p), abs(cs - q))
+    if (err > tol) problems <- c(problems, sprintf("marginal error %.3g", err))
+  } else {
+    excess <- max(rs - p, cs - q)
+    if (excess > tol) problems <- c(problems, sprintf("marginal excess %.3g", excess))
+    if (variant == "mass") {
+      merr <- abs(sum(P) - rho)
+      if (merr > tol) {
+        problems <- c(problems, sprintf("total mass %.12g differs from rho = %.12g",
+                                        sum(P), rho))
+      }
+    }
+  }
+  if (length(problems)) {
+    stop("FPGW ", what, " is infeasible for the ", variant, " variant: ",
+         paste(problems, collapse = "; "), call. = FALSE)
+  }
+  invisible(TRUE)
 }
 
 #' Frank-Wolfe solver for FPGW
 #'
-#' @return A list with transport plan P, distance, convergence status, iterations, and final gradient.
+#' @return A list with transport plan P, distance, objective, convergence
+#'   status, iterations, final Frank-Wolfe gap and final gradient. The
+#'   objective trace is attached as attribute \code{"obj_trace"}.
 #'
 #' @details
-#' For TV penalty (lambda > 0), the objective includes the smooth quadratic term:
-#' lambda * (|mu|^2 + |nu|^2 - 2|gamma|^2)
-#' where |gamma| = sum(gamma) is the total transported mass.
-#' This is NOT an L1 penalty but a smooth penalty that encourages partial transport.
-#' The Frank-Wolfe oracle remains standard OT, with the penalty handled in step size.
+#' Minimises
+#' \eqn{f(\gamma) = \omega_1\langle C,\gamma\rangle + \omega_2\langle M(\gamma),\gamma\rangle
+#'   [+ \lambda(|p|^2+|q|^2-2|\gamma|^2)]} where
+#' \eqn{M(\gamma) = C_X^2 \gamma 1 \oplus C_Y^2 \gamma^T 1 - 2 C_X \gamma C_Y^T}.
+#' The gradient is \eqn{\omega_1 C + 2\omega_2 M(\gamma) [- 4\lambda|\gamma|]}.
+#' The feasible set and linear oracle depend on the variant: \eqn{\Pi(p, q)}
+#' with \code{classical_ot_lp()} (\code{lambda = 0}, \code{rho = NULL}),
+#' \eqn{\{\gamma \le (p, q), |\gamma| = \rho\}} with \code{partial_ot_mass()}
+#' (\code{rho}), and \eqn{\{\gamma \le (p, q)\}} with \code{partial_ot_tv()}
+#' (\code{lambda > 0}). \code{P0} must lie in the feasible set. The step size
+#' minimises the quadratic \eqn{f(P + \alpha d)} exactly over \eqn{[0, 1]}, so
+#' the objective never increases. Convergence means a Frank-Wolfe gap
+#' \eqn{-\langle\nabla f(P), d\rangle} of at most \code{tol}.
 #'
 #' @keywords internal
 fw_fpgw <- function(C, Cx, Cy, p, q,
                     omega1, lambda, rho,
                     P0,
                     max_iter = 200,
-                    inner_max_iter = 50,
                     tol = 1e-6,
-                    verbose = FALSE) {
-  
+                    verbose = FALSE,
+                    ...) {
+  .ot_reject_dots(list(...), "fw_fpgw")
+
+  variant <- if (!is.null(rho)) "mass" else if (lambda > 0) "tv" else "balanced"
   n1 <- length(p)
   n2 <- length(q)
-  P <- P0
-  
-  # Pre-compute pieces that never change
+  P <- as.matrix(P0)
+  .fpgw_check_plan(P, p, q, variant, rho, what = "starting plan")
+
   Cx2 <- Cx^2
   Cy2 <- Cy^2
-  const1 <- as.vector(Cx2 %*% p)
-  const2 <- as.vector(Cy2 %*% q)
-  const <- outer(const1, rep(1, n2)) + outer(rep(1, n1), const2)
-  
   feature_weight <- omega1
   struct_weight <- 1 - omega1
-  
-  converged <- FALSE
-  obj_trace <- numeric(max_iter + 1)  # Store objective values
-  
-  # Compute initial objective
-  const1_P <- as.vector(Cx2 %*% rowSums(P))
-  const2_P <- as.vector(Cy2 %*% colSums(P))
-  const_P <- outer(const1_P, rep(1, n2)) + outer(rep(1, n1), const2_P)
-  M_P <- const_P - 2 * Cx %*% P %*% t(Cy)
-  obj_init <- sum(P * (feature_weight * C + struct_weight * M_P))
-  if (lambda > 0) {
-    # Add TV penalty: lambda * (|mu|^2 + |nu|^2 - 2|gamma|^2)
-    obj_init <- obj_init + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P)^2)
+  pen_const <- if (variant == "tv") lambda * (sum(p)^2 + sum(q)^2) else 0
+
+  gw_M <- function(P) {
+    outer(as.vector(Cx2 %*% rowSums(P)), as.vector(Cy2 %*% colSums(P)), "+") -
+      2 * (Cx %*% P %*% t(Cy))
   }
-  obj_trace[1] <- obj_init
-  
-  for (iter in seq_len(max_iter)) {
-    ## ---- PERF ---- gradient computation
-    # For Gromov-Wasserstein term, gradient depends on current P
-    const1_P <- as.vector(Cx2 %*% rowSums(P))
-    const2_P <- as.vector(Cy2 %*% colSums(P))
-    const_P <- outer(const1_P, rep(1, n2)) + outer(rep(1, n1), const2_P)
-    
-    M_P <- const_P - 2 * Cx %*% P %*% t(Cy)
-    # Gradient of GW term needs factor of 2 (quadratic form)
+  objective <- function(P, M) {
+    val <- sum(P * (feature_weight * C + struct_weight * M))
+    if (variant == "tv") val <- val + pen_const - 2 * lambda * sum(P)^2
+    val
+  }
+  oracle <- function(G) {
+    switch(variant,
+      balanced = classical_ot_lp(G - min(G), p, q),
+      mass = partial_ot_mass(G - min(G), p, q, rho),
+      # no shift: the <= polytope is not invariant to adding a constant
+      tv = partial_ot_tv(G, p, q)
+    )
+  }
+
+  M_P <- gw_M(P)
+  obj <- objective(P, M_P)
+  obj_trace <- obj
+  converged <- FALSE
+  gap <- NA_real_
+  grad <- NULL
+  iter <- 0L
+
+  while (TRUE) {
     grad <- feature_weight * C + struct_weight * 2 * M_P
-    
-    # Compute current objective for line search
-    current_obj <- sum(P * (feature_weight * C + struct_weight * M_P))
-    if (lambda > 0) {
-      # Add TV penalty: lambda * (|mu|^2 + |nu|^2 - 2|gamma|^2)
-      current_obj <- current_obj + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P)^2)
-    }
-    
-    ## ---- PERF ---- linear sub-problem (partial OT oracle)
-    G <- grad
-    
-    if (!is.null(rho)) {
-      # Mass-constrained variant
-      G <- G - min(G)  # shift improves numerics
-      gamma_star <- partial_ot_mass(G, p, q, rho)
-    } else {
-      # Classical FGW or TV-penalized - both use standard OT oracle
-      # For TV penalty, the lambda term is smooth and handled in step size
-      G <- G - min(G)  # shift improves numerics
-      gamma_star <- classical_ot_lp(G, p, q)
-    }
-    
-    dP <- gamma_star - P  # FW direction
-    
-    ## ---- PERF ---- step size computation
-    # Full computation of quadratic coefficient for non-convex GW term
-    # a = L(dP) where L is the GW objective
-    dr <- rowSums(dP)
-    dc <- colSums(dP)
-    
-    # Three terms of L(dP)
-    term1 <- sum((Cx2 %*% dr) * dr)  # <Cx^2, dr dr^T>
-    term2 <- sum((Cy2 %*% dc) * dc)  # <Cy^2, dc dc^T>
-    term3 <- -2 * sum((Cx %*% dP %*% t(Cy)) * dP)  # -2<Cx dP Cy^T, dP>
-    
-    a <- struct_weight * (term1 + term2 + term3)
+    if (variant == "tv") grad <- grad - 4 * lambda * sum(P)
+
+    gamma_star <- oracle(grad)
+    dP <- gamma_star - P
     b <- sum(grad * dP)
-    
-    # Add TV penalty contribution if lambda > 0
-    # The TV penalty is lambda * (|mu|^2 + |nu|^2 - 2|gamma|^2)
-    # For step size, we need derivatives:
-    # d/d(alpha) of -2*lambda*|P + alpha*dP|^2 gives:
-    # -4*lambda*|P|*sum(dP) - 2*lambda*alpha*sum(dP)^2
-    if (lambda > 0) {
-      mass_P <- sum(P)
-      mass_dP <- sum(dP)
-      a <- a + 2 * lambda * mass_dP^2  # quadratic term
-      b <- b - 4 * lambda * mass_P * mass_dP  # linear term
-    }
-    
-    # Note: a can be negative for non-convex GW objective
-    # This is not a bug, but a property of the problem
-    
-    # Compute optimal step size for non-convex objective
-    if (abs(a) < 1e-10) {
-      # Linear objective along ray
-      alpha <- if (b < 0) 1 else 0
-    } else if (a > 0) {
-      # Locally convex - standard quadratic minimization
-      alpha_star <- -b / (2 * a)
-      alpha <- min(1, max(0, alpha_star))
-    } else {
-      # Locally concave (a < 0) - minimum at boundary
-      # Choose alpha=1 if f(1) < f(0), i.e., if a + b < 0
-      alpha_boundary <- if (a + b < 0) 1 else 0
-      
-      # If boundary suggests no progress, use Armijo line search
-      if (alpha_boundary < 1e-12 && abs(b) > tol) {
-        # Try Armijo backtracking line search
-        alpha <- 1.0
-        beta <- 0.5  # backtracking factor
-        c1 <- 1e-4   # Armijo constant
-        
-        # current_obj already computed above
-        
-        # Backtracking line search
-        for (ls_iter in 1:20) {
-          P_test <- P + alpha * dP
-          
-          # Compute objective at test point
-          const1_test <- as.vector(Cx2 %*% rowSums(P_test))
-          const2_test <- as.vector(Cy2 %*% colSums(P_test))
-          const_test <- outer(const1_test, rep(1, n2)) + outer(rep(1, n1), const2_test)
-          M_test <- const_test - 2 * Cx %*% P_test %*% t(Cy)
-          obj_test <- sum(P_test * (feature_weight * C + struct_weight * M_test))
-          if (lambda > 0) {
-            obj_test <- obj_test + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P_test)^2)
-          }
-          
-          # Check Armijo condition
-          if (obj_test <= current_obj + c1 * alpha * b) {
-            break
-          }
-          
-          alpha <- alpha * beta
-        }
-        
-        # Ensure minimum step size
-        alpha <- max(alpha, 1e-4)
-      } else {
-        alpha <- alpha_boundary
-      }
-    }
-    
-    P_new <- P + alpha * dP
-    
-    # Check convergence
-    gap <- abs(sum(grad * dP))
+    gap <- -b
+
     if (verbose && iter %% 10 == 0) {
-      cat(sprintf("  Iteration %3d: FW gap = %.3e, alpha = %.3f\n", iter, gap, alpha))
+      cat(sprintf("  Iteration %3d: objective = %.6e, FW gap = %.3e\n", iter, obj, gap))
     }
-    
-    if (gap < tol) {
-      P <- P_new
+    if (gap <= tol) {
       converged <- TRUE
-      # Store final objective
-      const1_P <- as.vector(Cx2 %*% rowSums(P))
-      const2_P <- as.vector(Cy2 %*% colSums(P))
-      const_P <- outer(const1_P, rep(1, n2)) + outer(rep(1, n1), const2_P)
-      M_P_new <- const_P - 2 * Cx %*% P %*% t(Cy)
-      obj_val <- sum(P * (feature_weight * C + struct_weight * M_P_new))
-      if (lambda > 0) {
-        obj_val <- obj_val + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P)^2)
-      }
-      obj_trace[iter + 1] <- obj_val
-      obj_trace <- obj_trace[1:(iter + 1)]  # Trim to actual length
       break
     }
-    P <- P_new
-    
-    # Store objective after update
-    const1_P <- as.vector(Cx2 %*% rowSums(P))
-    const2_P <- as.vector(Cy2 %*% colSums(P))
-    const_P <- outer(const1_P, rep(1, n2)) + outer(rep(1, n1), const2_P)
-    M_P_new <- const_P - 2 * Cx %*% P %*% t(Cy)
-    obj_val <- sum(P * (feature_weight * C + struct_weight * M_P_new))
-    if (lambda > 0) {
-      obj_val <- obj_val + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P)^2)
+    if (iter >= max_iter) break
+    iter <- iter + 1L
+
+    # f(P + alpha dP) = f(P) + b alpha + a alpha^2
+    M_d <- gw_M(dP)
+    a <- struct_weight * sum(M_d * dP)
+    if (variant == "tv") a <- a - 2 * lambda * sum(dP)^2
+
+    candidates <- c(0, 1)
+    if (a > 0) candidates <- c(candidates, min(1, max(0, -b / (2 * a))))
+    phi <- b * candidates + a * candidates^2
+    alpha <- candidates[which.min(phi)]
+    if (alpha <= 0) {
+      # Cannot happen for a positive gap (phi(1) or the interior minimiser is
+      # negative); guard against floating-point ties anyway.
+      break
     }
-    obj_trace[iter + 1] <- obj_val
+
+    P <- P + alpha * dP
+    M_P <- M_P + alpha * M_d
+    obj <- objective(P, M_P)
+    obj_trace <- c(obj_trace, obj)
   }
-  
-  if (iter == max_iter) {
-    converged <- FALSE
-    if (verbose) message("  Did not converge within max_iter iterations")
-    obj_trace <- obj_trace[1:(iter + 1)]  # Trim if didn't converge
-  }
-  
-  # Final distance computation
-  const1_P <- as.vector(Cx2 %*% rowSums(P))
-  const2_P <- as.vector(Cy2 %*% colSums(P))
-  const_P <- outer(const1_P, rep(1, n2)) + outer(rep(1, n1), const2_P)
-  M_P_final <- const_P - 2 * Cx %*% P %*% t(Cy)
-  distance <- sqrt(max(0, sum(P * (feature_weight * C + struct_weight * M_P_final))))
+
+  if (!converged && verbose) message("  Did not converge within max_iter iterations")
+
+  .fpgw_check_plan(P, p, q, variant, rho, what = "returned plan")
+
+  # Recompute from scratch for the reported value (avoids incremental drift).
+  obj <- objective(P, gw_M(P))
+  distance <- sqrt(max(0, obj))
   if (distance < 1e-8) {
     distance <- 0
   }
-  
-  # Return with objective trace as attribute
-  result <- list(P = P, distance = distance, converged = converged, iterations = iter, 
-                 grad = grad)  # Include final gradient for testing
+
+  result <- list(P = P, distance = distance, objective = obj,
+                 converged = converged, iterations = iter, gap = gap,
+                 grad = grad, variant = variant)
   attr(result, "obj_trace") <- obj_trace
   result
 }
 
 #' Mass-constrained partial OT oracle
+#'
+#' Exact solution of \eqn{\min \langle C, \gamma\rangle} over
+#' \eqn{\gamma \ge 0}, \eqn{\gamma 1 \le p}, \eqn{\gamma^T 1 \le q},
+#' \eqn{|\gamma| = \rho} (network simplex on an extended graph).
 #' @return A numeric matrix representing the optimal transport plan.
 #' @keywords internal
-partial_ot_mass <- function(cost, p, q, rho, method = c("lpSolve", "Rsymphony")) {
-  # Try to use C++ implementation if available
-  # Note: C++ function is exported as partial_ot_mass_rcpp
-  if (exists("partial_ot_mass_rcpp", where = asNamespace("manifoldalign"))) {
-    tryCatch({
-      return(partial_ot_mass_rcpp(cost, p, q, rho))
-    }, error = function(e) {
-      # Fall back to R implementation
-      message("C++ solver failed, falling back to lpSolve: ", e$message)
-    })
-  }
-  
-  if (!requireNamespace("lpSolve", quietly = TRUE)) {
-    stop("Install 'lpSolve' for the partial-OT LP", call. = FALSE)
-  }
-  
-  n <- length(p)
-  m <- length(q)
-  f.obj <- as.vector(cost)
-  
-  # Constraints: row sums <= p, col sums <= q, total mass >= rho
-  # Row sum constraints: sum_j gamma_ij <= p_i
-  row_constraints <- matrix(0, n, n * m)
-  for (i in 1:n) {
-    idx <- seq(i, n * m, by = n)
-    row_constraints[i, idx] <- 1
-  }
-  
-  # Column sum constraints: sum_i gamma_ij <= q_j  
-  col_constraints <- matrix(0, m, n * m)
-  for (j in 1:m) {
-    idx <- ((j - 1) * n + 1):(j * n)
-    col_constraints[j, idx] <- 1
-  }
-  
-  # Combine all constraints
-  Amat <- rbind(row_constraints, col_constraints)
-  rhs <- c(p, q)
-  
-  # Total mass constraint: sum gamma_ij == rho
-  # We implement as two inequalities: sum gamma_ij <= rho AND sum gamma_ij >= rho
-  Amass_upper <- matrix(1, 1, n * m)   # sum gamma_ij <= rho
-  Amass_lower <- matrix(-1, 1, n * m)  # -sum gamma_ij <= -rho (i.e., sum >= rho)
-  Amat <- rbind(Amat, Amass_upper, Amass_lower)
-  rhs <- c(rhs, rho, -rho)
-  sense <- rep("<=", n + m + 2)
-  
-  lp <- lpSolve::lp("min", f.obj, Amat, sense, rhs)
-  
-  if (lp$status != 0) {
-    warning("lpSolve did not find optimal solution, status = ", lp$status)
-  }
-  
-  plan <- matrix(lp$solution, n, m)
-  plan[abs(plan) < 1e-12] <- 0
-  plan <- round(plan, 10)
-  plan
+partial_ot_mass <- function(cost, p, q, rho) {
+  partial_ot_mass_rcpp(as.matrix(cost), as.numeric(p), as.numeric(q), rho)
 }
 
 #' Classical OT linear program
+#'
+#' Exact network-simplex solution of \eqn{\min \langle C, \gamma\rangle} over
+#' \eqn{\Pi(p, q)}. Solver failures are errors (no silent fallback).
 #' @return A numeric matrix representing the optimal transport plan.
 #' @keywords internal
 classical_ot_lp <- function(cost, p, q) {
-  # Try to use C++ implementation if available
-  if (exists("network_simplex_ot_cpp", where = asNamespace("manifoldalign"))) {
-    tryCatch({
-      return(network_simplex_ot_cpp(cost, p, q))
-    }, error = function(e) {
-      # Fall back to R implementation
-      message("C++ solver failed, falling back to lpSolve: ", e$message)
-    })
-  }
-  
-  classical_ot_lp_r(cost, p, q)
+  network_simplex_ot_cpp(as.matrix(cost), as.numeric(p), as.numeric(q))
 }
 
-#' Classical OT linear program (R implementation)
+#' Partial OT oracle without a mass constraint (penalized FPGW variant)
+#'
+#' Exact solution of \eqn{\min \langle C, \gamma\rangle} over
+#' \eqn{\gamma \ge 0}, \eqn{\gamma 1 \le p}, \eqn{\gamma^T 1 \le q}. Only
+#' entries that lower the cost below zero carry mass, so \code{cost} must not
+#' be shifted. Solved as a balanced problem with a zero-cost dummy row
+#' (mass \eqn{|q|}) and dummy column (mass \eqn{|p|}); every
+#' \eqn{\gamma} in the polytope extends to a feasible balanced plan with the
+#' same cost and vice versa.
+#' @return A numeric matrix representing the optimal sub-coupling.
+#' @keywords internal
+partial_ot_tv <- function(cost, p, q) {
+  cost <- as.matrix(cost)
+  n <- length(p)
+  m <- length(q)
+  C_aug <- matrix(0, n + 1L, m + 1L)
+  C_aug[seq_len(n), seq_len(m)] <- cost
+  P_aug <- classical_ot_lp(C_aug, c(p, sum(q)), c(q, sum(p)))
+  P_aug[seq_len(n), seq_len(m), drop = FALSE]
+}
+
+# Dense LP size guard shared by the lpSolve reference implementations.
+.ot_lp_size_guard <- function(n, m) {
+  nvar <- as.numeric(n) * as.numeric(m)
+  limit <- getOption("manifoldalign.lp_max_variables", 250000)
+  if (nvar > limit) {
+    stop(sprintf(paste0(
+      "The lpSolve transport LP would have %.0f variables (%d x %d), above ",
+      "getOption('manifoldalign.lp_max_variables') = %.0f. Use the network ",
+      "simplex solver (classical_ot_lp()/partial_ot_mass()) or raise the option."),
+      nvar, as.integer(n), as.integer(m), limit), call. = FALSE)
+  }
+  invisible(nvar)
+}
+
+# Sparse (row, column, value) constraint triplets for the n x m transport LP
+# with column-major variables x[i + (j - 1) n]: rows 1..n are row sums,
+# rows n+1..n+m are column sums.
+.ot_lp_marginal_triplets <- function(n, m) {
+  var <- seq_len(n * m)
+  i <- (var - 1L) %% n + 1L
+  j <- (var - 1L) %/% n + 1L
+  rbind(cbind(i, var, 1), cbind(n + j, var, 1))
+}
+
+.ot_lp_solve <- function(f.obj, dir, rhs, dense, what) {
+  if (!requireNamespace("lpSolve", quietly = TRUE)) {
+    stop("Install 'lpSolve' for the ", what, call. = FALSE)
+  }
+  lp <- lpSolve::lp("min", f.obj, const.dir = dir, const.rhs = rhs,
+                    dense.const = dense)
+  if (lp$status != 0) {
+    stop("lpSolve failed to solve the ", what, " (status ", lp$status, ")",
+         call. = FALSE)
+  }
+  sol <- lp$solution
+  sol[abs(sol) < 1e-12] <- 0
+  sol
+}
+
+#' Mass-constrained partial OT via lpSolve (reference implementation)
+#' @return A numeric matrix representing the optimal transport plan.
+#' @keywords internal
+partial_ot_mass_lp_r <- function(cost, p, q, rho) {
+  n <- length(p)
+  m <- length(q)
+  .ot_lp_size_guard(n, m)
+  dense <- rbind(.ot_lp_marginal_triplets(n, m),
+                 cbind(n + m + 1, seq_len(n * m), 1))
+  sol <- .ot_lp_solve(as.vector(cost), c(rep("<=", n + m), "="), c(p, q, rho),
+                      dense, "partial-OT LP")
+  matrix(sol, n, m)
+}
+
+#' Classical OT linear program (lpSolve reference implementation)
 #' @return A numeric matrix representing the optimal transport plan.
 #' @keywords internal
 classical_ot_lp_r <- function(cost, p, q) {
-  if (!requireNamespace("lpSolve", quietly = TRUE)) {
-    stop("Install 'lpSolve' for the OT LP", call. = FALSE)
-  }
-  
   n <- length(p)
   m <- length(q)
-  f.obj <- as.vector(cost)
-  
-  # Constraints: row sums = p, col sums = q
-  # Row sum constraints
-  row_constraints <- matrix(0, n, n * m)
-  for (i in 1:n) {
-    idx <- seq(i, n * m, by = n)
-    row_constraints[i, idx] <- 1
-  }
-  
-  # Column sum constraints
-  col_constraints <- matrix(0, m, n * m)
-  for (j in 1:m) {
-    idx <- ((j - 1) * n + 1):(j * n)
-    col_constraints[j, idx] <- 1
-  }
-  
-  # Combine constraints
-  Amat <- rbind(row_constraints, col_constraints)
-  rhs <- c(p, q)
-  sense <- rep("=", n + m)
-  
-  lp <- lpSolve::lp("min", f.obj, Amat, sense, rhs)
-  
-  if (lp$status != 0) {
-    warning("lpSolve did not find optimal solution, status = ", lp$status)
-  }
-  
-  plan <- matrix(lp$solution, n, m)
-  plan[abs(plan) < 1e-12] <- 0
-  plan <- round(plan, 10)
-  plan
+  .ot_lp_size_guard(n, m)
+  sol <- .ot_lp_solve(as.vector(cost), rep("=", n + m), c(p, q),
+                      .ot_lp_marginal_triplets(n, m), "OT LP")
+  matrix(sol, n, m)
 }
 
-#' TV-penalized oracle
-#' @return A numeric matrix representing the optimal transport plan.
-#' @keywords internal
-partial_ot_tv <- function(cost, p, q, lambda) {
-  # For TV-penalized transport, we solve partial OT using augmentation method
-  # This transforms the partial OT problem into a full OT problem on augmented space
-  # 
-  # Mathematical formulation:
-  # Original: min <cost, gamma> subject to partial OT constraints
-  # TV-penalized: min <cost, gamma> + lambda * ||gamma||_1
-  # Augmented: min <cost + lambda, gamma> with zero-cost escape routes
-  
-  n <- length(p)
-  m <- length(q)
-  
-  # Create augmented cost matrix (n+1) x (m+1)
-  # Zero cost for escape routes (dummy nodes) - allows mass to NOT be transported
-  C_aug <- matrix(0, nrow = n + 1, ncol = m + 1)
-  
-  # Add lambda to transport costs to penalize transported mass
-  # This makes transport more expensive as lambda increases
-  C_aug[1:n, 1:m] <- cost + lambda
-  
-  # Augmented marginals
-  # The dummy source gets the total mass of sinks
-  # The dummy sink gets the total mass of sources
-  p_aug <- c(p, sum(q))
-  q_aug <- c(q, sum(p))
-  
-  # Solve augmented full OT problem
-  # Important: Use lpSolve directly for augmented problems
-  # The C++ solver may not handle the augmented formulation correctly
-  if (!requireNamespace("lpSolve", quietly = TRUE)) {
-    stop("Install 'lpSolve' for the TV-penalized OT LP", call. = FALSE)
+# Round a nonnegative matrix onto Pi(p, q) (Altschuler, Weed & Rigollet 2017):
+# scale down rows and columns that exceed their marginals, then add the rank-one
+# correction outer(err_r, err_c) / sum(err_r). Requires sum(p) == sum(q).
+.round_to_transport_polytope <- function(P, p, q) {
+  r <- rowSums(P)
+  x <- ifelse(r > p, p / r, 1)
+  P <- P * x
+  cc <- colSums(P)
+  y <- ifelse(cc > q, q / cc, 1)
+  P <- sweep(P, 2, y, "*")
+  err_r <- pmax(p - rowSums(P), 0)
+  err_c <- pmax(q - colSums(P), 0)
+  s <- sum(err_r)
+  if (s > 0) {
+    P <- P + outer(err_r, err_c) / s
   }
-  
-  n_aug <- length(p_aug)
-  m_aug <- length(q_aug)
-  f.obj <- as.vector(C_aug)
-  
-  # Constraints for full OT
-  row_constraints <- matrix(0, n_aug, n_aug * m_aug)
-  for (i in 1:n_aug) {
-    # NOTE: R vectorizes matrices in column-major order, so the variable
-    # corresponding to (i, j) in gamma_aug is at index i + (j-1) * n_aug.
-    idx <- i + (0:(m_aug - 1)) * n_aug
-    row_constraints[i, idx] <- 1
-  }
-  
-  col_constraints <- matrix(0, m_aug, n_aug * m_aug)
-  for (j in 1:m_aug) {
-    idx <- ((j - 1) * n_aug + 1):(j * n_aug)
-    col_constraints[j, idx] <- 1
-  }
-  
-  Amat <- rbind(row_constraints, col_constraints)
-  rhs <- c(p_aug, q_aug)
-  sense <- rep("=", n_aug + m_aug)
-  
-  lp <- lpSolve::lp("min", f.obj, Amat, sense, rhs)
-  
-  if (lp$status != 0) {
-    warning("lpSolve did not find optimal solution for augmented problem, status = ", lp$status)
-  }
-  
-  gamma_aug <- matrix(lp$solution, n_aug, m_aug)
-  
-  # Extract the partial transport plan (top-left n x m block)
-  gamma <- gamma_aug[1:n, 1:m]
-  
-  return(gamma)
+  P
 }
 
-#' Warm-start with entropic FGW
-#' @return A numeric matrix representing the warm-start transport plan.
+#' Warm-start with entropic OT on the feature cost
+#'
+#' Log-domain Sinkhorn on \code{omega1 * Cfeat} with regularisation \code{eps},
+#' followed by rounding onto \eqn{\Pi(p, q)} so that the result is a feasible
+#' Frank-Wolfe starting point.
+#' @return A numeric matrix in \eqn{\Pi(p, q)}.
 #' @keywords internal
 sinkhorn_fgw_warmstart <- function(Cfeat, Cx, Cy, p, q, omega1, eps, iters) {
-  ## ---- PERF ---- Simplified warm-start
-  n1 <- length(p)
-  n2 <- length(q)
-  
-  # Initialize with product of marginals
-  P <- outer(p, q)
-  
-  # Simple entropic iterations
-  for (t in seq_len(iters)) {
-    # Approximate gradient
-    grad <- omega1 * Cfeat
-    
-    # Sinkhorn step
-    K <- exp(-grad / eps)
-    u <- p
-    v <- q
-    
-    for (inner in 1:10) {
-      u <- p / (K %*% v + 1e-20)
-      v <- q / (t(K) %*% u + 1e-20)
-    }
-    
-    P <- sweep(sweep(K, 1, u, "*"), 2, v, "*")
+  K_log <- -(omega1 * Cfeat) / eps
+  log_p <- log(p)
+  log_q <- log(q)
+  lse_rows <- function(A) {
+    mx <- apply(A, 1L, max)
+    mx + log(rowSums(exp(A - mx)))
   }
-  
-  P
+  f <- numeric(length(p))
+  g <- numeric(length(q))
+  for (t in seq_len(iters)) {
+    f <- log_p - lse_rows(sweep(K_log, 2, g, "+"))
+    g <- log_q - lse_rows(t(K_log + f))
+  }
+  P <- exp(sweep(K_log + f, 2, g, "+"))
+  .round_to_transport_polytope(P, p, q)
 }
 
 #' Print Method for FPGW Objects
@@ -733,18 +681,18 @@ print.fpgw <- function(x, ...) {
   cat("Number of domains:", length(x$domain_names), "\n")
   cat("Domain names:", paste(x$domain_names, collapse = ", "), "\n")
   cat("Feature weight (omega1):", x$omega1, "\n")
-  
+
   if (!is.null(x$rho)) {
     cat("Mode: Mass-constrained (rho =", x$rho, ")\n")
   } else if (x$lambda > 0) {
-    cat("Mode: TV-penalized (lambda =", x$lambda, ")\n")  
+    cat("Mode: TV-penalized (lambda =", x$lambda, ")\n")
   } else {
     cat("Mode: Classical Fused GW\n")
   }
-  
+
   cat("\nPairwise distances:\n")
   print(round(x$distances, 4))
-  
+
   if (!all(x$converged)) {
     cat("\nWarning: Some optimizations did not converge\n")
     cat("Non-converged pairs:\n")
@@ -756,7 +704,7 @@ print.fpgw <- function(x, ...) {
       }
     }
   }
-  
+
   invisible(x)
 }
 
@@ -765,7 +713,7 @@ print.fpgw <- function(x, ...) {
 #' Transport new samples using learned FPGW alignment
 #'
 #' @importFrom RANN nn2
-#' 
+#'
 #' @param object An fpgw object
 #' @param newdata New data from one domain to transport
 #' @param from Source domain index or name
@@ -773,9 +721,9 @@ print.fpgw <- function(x, ...) {
 #' @param type Type of prediction: "transport" (default), "weights", or "embedding"
 #' @param k Number of nearest neighbors used for barycentric interpolation
 #' @param ... Additional arguments
-#' 
+#'
 #' @return Transported samples, barycentric weights, or embeddings (when implemented)
-#' 
+#'
 #' @details
 #' This method provides out-of-sample extension for FPGW by:
 #' \itemize{
@@ -785,7 +733,7 @@ print.fpgw <- function(x, ...) {
 #' }
 #' The object must contain the training data used for fitting,
 #' otherwise an error is thrown.
-#' 
+#'
 #' @examples
 #' \dontrun{
 #' # After computing FPGW alignment
@@ -796,7 +744,7 @@ print.fpgw <- function(x, ...) {
 #' transported <- predict(result, new_samples, from = 1, to = 2)
 #' head(transported)
 #' }
-#' 
+#'
 #' @export
 predict.fpgw <- function(object, newdata, from, to,
                          type = c("transport", "weights", "embedding"),
@@ -805,9 +753,9 @@ predict.fpgw <- function(object, newdata, from, to,
   if (!inherits(object, "fpgw")) {
     stop("object must be an fpgw result", call. = FALSE)
   }
-  
+
   type <- match.arg(type)
-  
+
   # Convert domain names to indices if needed
   if (is.character(from)) {
     from_idx <- which(object$domain_names == from)
@@ -816,7 +764,7 @@ predict.fpgw <- function(object, newdata, from, to,
     }
     from <- from_idx
   }
-  
+
   if (is.character(to)) {
     to_idx <- which(object$domain_names == to)
     if (length(to_idx) == 0) {
@@ -824,28 +772,28 @@ predict.fpgw <- function(object, newdata, from, to,
     }
     to <- to_idx
   }
-  
+
   # Get the appropriate transport plan
   n_domains <- length(object$domain_names)
   if (from < to) {
-    pair_idx <- (from - 1) * n_domains - 
+    pair_idx <- (from - 1) * n_domains -
                 from * (from - 1) / 2 + (to - from)
   } else {
-    pair_idx <- (to - 1) * n_domains - 
+    pair_idx <- (to - 1) * n_domains -
                 to * (to - 1) / 2 + (from - to)
   }
-  
+
   if (pair_idx > length(object$transport_plans)) {
     stop("Transport plan not found for specified domain pair", call. = FALSE)
   }
-  
+
   P <- object$transport_plans[[pair_idx]]
-  
+
   # If from > to, we need to transpose the plan
   if (from > to) {
     P <- t(P)
   }
-  
+
   if (type %in% c("transport", "weights")) {
     if (is.null(object$training_data)) {
       stop("Training data not stored in object; cannot perform barycentric mapping",
@@ -906,6 +854,6 @@ predict.fpgw <- function(object, newdata, from, to,
     transported <- bary_weights %*% X_target
     return(transported)
   }
-  
+
   stop("Embedding prediction not yet implemented for FPGW", call. = FALSE)
 }

@@ -43,8 +43,9 @@ objective_fpgw <- function(gamma, C_feat, Cx, Cy,
   gw_term <- sum((const - 2 * Cx %*% gamma %*% t(Cy)) * gamma)
   strc <- struct_wt * gw_term
   
-  # term 3 - TV penalty
-  tv <- if (lambda > 0) lambda * sum(gamma) else 0
+  # term 3 - mass penalty lambda * (|p|^2 + |q|^2 - 2 |gamma|^2), with uniform
+  # marginals of total mass one
+  tv <- if (lambda > 0) lambda * (1 + 1 - 2 * sum(gamma)^2) else 0
   
   ftr + strc + tv
 }
@@ -90,11 +91,12 @@ test_that("Analytic gradient matches numeric finite differences", {
   q <- rep(1/3, 3)
   P0 <- outer(p, q)
   
-  # Run one iteration to get gradient
+  # max_iter = 0: no step, so `grad` is the gradient at P0 (fw_fpgw returns
+  # the gradient at the plan it returns)
   sol <- manifoldalign:::fw_fpgw(
     C_feat, Cx, Cy, p, q,
     omega1 = 0.3, lambda = 0, rho = NULL,
-    P0 = P0, max_iter = 1, tol = 1e-9
+    P0 = P0, max_iter = 0, tol = 1e-9
   )
   grad_analytical <- sol$grad
   
@@ -272,9 +274,13 @@ test_that("FPGW with rho=1 or huge lambda equals classical FGW", {
 })
 
 # ---------------------------------------------------------------------------
-# 9. TV penalty effect: transported mass decreases with lambda
+# 9. Mass penalty effect: lambda(|p|^2 + |q|^2 - 2|gamma|^2) charges for mass
+#    that is NOT transported, so transported mass grows with lambda.
+#    (This test previously asserted the opposite direction; it passed only
+#    because the old solver used the mass-preserving oracle and always
+#    returned mass 1.)
 # ---------------------------------------------------------------------------
-test_that("Mass penalty decreases transported mass as lambda grows", {
+test_that("Mass penalty: transported mass grows with lambda", {
   skip_on_cran()
   skip_if_missing_fpgw_deps()
 
@@ -283,23 +289,22 @@ test_that("Mass penalty decreases transported mass as lambda grows", {
   X2 <- matrix(rnorm(20), 5, 4)
   hd <- create_test_hyperdesign(list(X1, X2))
 
-  result_lambda0 <- fpgw(hd, omega1 = 0.4, lambda = 0.0, max_iter = 60)
-  result_lambda1 <- suppressWarnings(
-    fpgw(hd, omega1 = 0.4, lambda = 0.5, max_iter = 60)
-  )
-  result_lambda5 <- suppressWarnings(
-    fpgw(hd, omega1 = 0.4, lambda = 2.0, max_iter = 60)
-  )
+  masses <- vapply(c(1e-4, 0.05, 0.5, 50), function(lam) {
+    res <- suppressWarnings(fpgw(hd, omega1 = 0.4, lambda = lam, max_iter = 200))
+    P <- res$transport_plans[[1]]
+    expect_true(all(P >= 0))
+    expect_lte(max(rowSums(P) - 1/5), 1e-12)
+    expect_lte(max(colSums(P) - 1/5), 1e-12)
+    sum(P)
+  }, numeric(1))
 
-  mass0 <- sum(result_lambda0$transport_plans[[1]])
-  mass1 <- sum(result_lambda1$transport_plans[[1]])
-  mass5 <- sum(result_lambda5$transport_plans[[1]])
-
-  tol <- 1e-6
-  expect_lte(mass1, mass0 + tol,
-             label = sprintf("λ=0.5 mass (%.4f) should not exceed λ=0 mass (%.4f)", mass1, mass0))
-  expect_lte(mass5, mass1 + tol,
-             label = sprintf("λ=2.0 mass (%.4f) should not exceed λ=0.5 mass (%.4f)", mass5, mass1))
+  # Tiny lambda: transporting anything costs more than the penalty saves.
+  expect_lt(masses[1], 1e-10)
+  # Huge lambda: everything is transported.
+  expect_gt(masses[4], 1 - 1e-10)
+  expect_true(all(diff(masses) >= -1e-10),
+              label = sprintf("masses %s should be non-decreasing in lambda",
+                              paste(signif(masses, 4), collapse = ", ")))
 })
 
 # ---------------------------------------------------------------------------

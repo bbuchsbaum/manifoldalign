@@ -1453,24 +1453,27 @@ multiset_uot_align <- function(datasets,
     }
 
     pi2_list <- lapply(results, `[[`, "pi2")
-    beta_new <- Reduce(`+`, Map(`*`, omega, pi2_list))
+    pi2_mix <- Reduce(`+`, Map(`*`, omega, pi2_list))
+    beta_new <- pi2_mix
 
     if (!is.null(m0)) {
       beta_new <- beta_new * (m0 / (sum(beta_new) + 1e-16))
     }
 
     if (learn_template_features) {
-      # Compute numerator = sum_k omega_k * pi2_k * mean_F_k
+      # G_j = sum_k omega_k pi2_kj meanF_kj / sum_k omega_k pi2_kj: the
+      # weighted mean of the features transported to template node j. The
+      # denominator must use the same (un-rescaled) pi2 mixture as the
+      # numerator; dividing by the mass-rescaled beta_new would scale G by
+      # sum(pi2_mix) / m0.
       D <- ncol(results[[1]]$mean_F)
       num <- matrix(0, M, D)
-      den <- beta_new
       for (k in seq_along(results)) {
         mean_F <- results[[k]]$mean_F
         pi2_k <- as.numeric(pi2_list[[k]])
         num <- num + omega[k] * sweep(mean_F, 1, pi2_k, `*`)
       }
-      G_new <- num / (den + delta)
-      G <- G_new
+      G <- num / (pi2_mix + delta)
     }
 
     d_beta <- max(abs(beta_new - beta))
