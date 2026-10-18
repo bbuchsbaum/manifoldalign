@@ -29,15 +29,13 @@
 #' # Generate pseudolabels
 #' plabs <- assign_pseudolabels(similarity_matrix, min_clusters = 20)
 #' 
-#' # Use with KEMA
-#' fit <- kema.hyperdesign(
-#'   data = strata,
-#'   y = plabs$labels,
-#'   u = 0.8,           # Trust geometry over pseudolabels
-#'   dweight = 0.2,     # Mild class separation
-#'   simfun = function(lab) binary_label_matrix(lab, type = "s"),
-#'   disfun = function(lab) binary_label_matrix(lab, type = "d")
-#' )
+#' # Store them as a design column of each domain, then fit KEMA on it
+#' offsets <- c(0, cumsum(sapply(strata, function(s) nrow(s$x))))
+#' for (i in seq_along(strata)) {
+#'   rows <- (offsets[i] + 1):offsets[i + 1]
+#'   strata[[i]]$design$pseudo <- plabs$labels[rows]
+#' }
+#' fit <- kema(strata, y = pseudo, u = 0.8)  # trust geometry over pseudolabels
 #' }
 #' 
 #' Key parameters:
@@ -123,7 +121,9 @@ NULL
 #'   0.5 = balanced approach (default: 0.3)
 #' @param adaptive_threshold_quantile Quantile of non-zero similarities to 
 #'   use as adaptive threshold (default: 0.8)
-#' @param seed Random seed for reproducibility
+#' @param seed Optional seed for the randomised representative selection;
+#'   applied locally, so the caller's RNG stream is left unchanged. `NULL`
+#'   uses the session RNG.
 #' @param use_advanced_diversity Whether to use advanced farthest-first 
 #'   traversal for diversity selection on large candidate sets (default: TRUE)
 #' @param verbose Whether to print progress information (default: FALSE)
@@ -235,7 +235,7 @@ assign_pseudolabels <- function(sim_matrix,
   }
   
   # Check sparsity level with performance warning
-  sparsity <- Matrix::nnzero(sim_matrix) / (n * n)
+  sparsity <- Matrix::nnzero(sim_matrix) / (as.numeric(n) * n)  # avoid integer overflow
   if (sparsity > 0.5 && n > 1000) {
     warning("High density matrix (", round(sparsity * 100, 1), 
            "% non-zero) with n=", n, " may cause memory issues. ", 
@@ -262,11 +262,6 @@ assign_pseudolabels <- function(sim_matrix,
     sim_matrix[cbind(nz_diag, nz_diag)] <- 0
   }
   
-  # Set seed for reproducibility if provided
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
-  
   if (verbose) {
     cat("Processing", n, "samples with", Matrix::nnzero(sim_matrix), 
         "non-zero similarities\n")
@@ -285,7 +280,7 @@ assign_pseudolabels <- function(sim_matrix,
   
   # Step 2: Build thresholded similarity graph
   # OPTIMIZED: Efficient sparse thresholding without intermediate logical matrix
-  thresholded_sim <- as(sim_matrix, "dgCMatrix")
+  thresholded_sim <- methods::as(methods::as(methods::as(sim_matrix, "generalMatrix"), "CsparseMatrix"), "dMatrix")
   thresholded_sim@x <- as.numeric(thresholded_sim@x >= sim_threshold)
   thresholded_sim <- Matrix::drop0(thresholded_sim)  # Remove zeros
   
@@ -320,34 +315,9 @@ assign_pseudolabels <- function(sim_matrix,
   
   # OPTIMIZED: Memory-efficient graph construction for large matrices
   # For large graphs (n >= 50,000), use edge list approach to avoid memory blow-up
-  if (n >= 50000) {
-    # Use summary() to get edge list directly, avoiding dense intermediate matrix
-    edge_summary <- summary(thresholded_sim)
-    edge_list <- as.matrix(edge_summary[edge_summary$x > 0, c("i", "j")])
-    
-    if (nrow(edge_list) == 0) {
-      # No edges - return empty result
-      warning("No connections remain after thresholding - try lower ", 
-              "sim_threshold")
-      return(list(
-        labels = factor(rep(NA_character_, n)),
-        representatives = integer(0),
-        cluster_info = data.frame(),
-        threshold_used = sim_threshold,
-        n_clusters = 0
-      ))
-    }
-    
-    g <- igraph::graph_from_edgelist(edge_list, directed = FALSE)
-    igraph::V(g)$name <- seq_len(n)  # Ensure proper vertex mapping
-  } else {
-    # For smaller graphs, use standard adjacency matrix approach
-    g <- igraph::graph_from_adjacency_matrix(thresholded_sim, 
-                                           mode = "undirected", 
-                                           weighted = TRUE)
-  }
+  g <- .pseudolabel_threshold_graph(thresholded_sim)
   components <- igraph::components(g)
-  
+
   # Extract cluster assignments
   cluster_assignments <- components$membership
   cluster_sizes <- components$csize
@@ -378,19 +348,28 @@ assign_pseudolabels <- function(sim_matrix,
         "valid clusters after size filtering\n")
   }
   
-  # Step 5: Select diverse representatives
+  # Step 5: Select diverse representatives. Only this step draws random
+  # numbers; a supplied `seed` is applied locally so the caller's RNG stream
+  # is left unchanged.
   initial_rep_count <- length(valid_clusters)  # Track for algorithm choice metadata
-  representatives <- .select_diverse_representatives(
-    sim_matrix = sim_matrix,
-    cluster_assignments = cluster_assignments,
-    valid_clusters = valid_clusters,
-    diversity_weight = diversity_weight,
-    min_clusters = min_clusters,
-    max_clusters = max_clusters,
-    use_advanced_diversity = use_advanced_diversity,
-    verbose = verbose
-  )
-  
+  select_reps <- function() {
+    .select_diverse_representatives(
+      sim_matrix = sim_matrix,
+      cluster_assignments = cluster_assignments,
+      valid_clusters = valid_clusters,
+      diversity_weight = diversity_weight,
+      min_clusters = min_clusters,
+      max_clusters = max_clusters,
+      use_advanced_diversity = use_advanced_diversity,
+      verbose = verbose
+    )
+  }
+  representatives <- if (is.null(seed)) {
+    select_reps()
+  } else {
+    .with_local_seed(seed, select_reps())
+  }
+
   # FIXED: Enforce min_clusters constraint after representative selection
   if (length(representatives) < min_clusters) {
     warning("Final number of representatives (", length(representatives), 
@@ -803,15 +782,11 @@ as.data.frame.pseudolabels <- function(x, ...) {
     for (j in seq_along(remaining)) {
       candidate <- remaining[j]
       
-      # Diversity component: distance to already selected representatives
-      sims_to_selected <- sim_matrix[candidate, selected[1:(i-1)]]
-      if (inherits(sims_to_selected, "sparseVector")) {
-        dense_sims <- as.vector(sims_to_selected)
-        min_sim <- if (length(dense_sims) == 0) 0 else min(dense_sims, na.rm = TRUE)
-      } else {
-        min_sim <- if (length(sims_to_selected) == 0) 0 else min(sims_to_selected, na.rm = TRUE)
-      }
-      diversity_score <- 1 - min_sim  # Higher = more diverse
+      # Diversity component: distance to the NEAREST already selected
+      # representative (farthest-first traversal), i.e. 1 - max similarity.
+      sims_to_selected <- as.vector(sim_matrix[candidate, selected[1:(i-1)]])
+      max_sim <- if (length(sims_to_selected) == 0) 0 else max(sims_to_selected, na.rm = TRUE)
+      diversity_score <- 1 - max_sim  # Higher = more diverse
       
       # Confidence component
       confidence_score <- remaining_confidence[j]
@@ -1383,4 +1358,41 @@ evaluate_pseudolabeling <- function(predicted_labels, true_labels, verbose = TRU
     completeness = avg_completeness,
     confusion_matrix = confusion
   ))
+}
+
+#' Undirected graph of a thresholded similarity matrix
+#'
+#' Builds the igraph graph used for connected-component clustering. The graph
+#' always has exactly `nrow(thresholded_sim)` vertices, in row order, so
+#' component memberships align with samples even when the highest-index
+#' samples have no edges. Large matrices (`n >= edge_list_min_n`) are
+#' converted through an edge list to avoid dense intermediates.
+#'
+#' @param thresholded_sim Square sparse 0/1 matrix with zero diagonal.
+#' @param edge_list_min_n Size at which the edge-list construction is used.
+#' @return An undirected igraph graph with `nrow(thresholded_sim)` vertices.
+#' @keywords internal
+#' @noRd
+.pseudolabel_threshold_graph <- function(thresholded_sim, edge_list_min_n = 50000L) {
+  n <- nrow(thresholded_sim)
+  if (n >= edge_list_min_n) {
+    edge_summary <- summary(methods::as(thresholded_sim, "CsparseMatrix"))
+    edge_summary <- edge_summary[edge_summary$x > 0 & edge_summary$i != edge_summary$j, ,
+                                 drop = FALSE]
+    g <- igraph::make_empty_graph(n = n, directed = FALSE)
+    if (nrow(edge_summary)) {
+      edges <- as.vector(rbind(edge_summary$i, edge_summary$j))
+      g <- igraph::add_edges(g, edges)
+      g <- igraph::simplify(g, remove.multiple = TRUE, remove.loops = TRUE)
+    }
+  } else {
+    g <- igraph::graph_from_adjacency_matrix(thresholded_sim,
+                                             mode = "undirected",
+                                             weighted = TRUE)
+  }
+  if (igraph::vcount(g) != n) {
+    stop("Internal error: pseudolabel graph has ", igraph::vcount(g),
+         " vertices for ", n, " samples.", call. = FALSE)
+  }
+  g
 }

@@ -47,6 +47,9 @@ kema_orig <- function(data, y, ...) {
 #' @param mu Weight for class-pull Laplacian in \eqn{L + \mu L_s}.
 #' @param kernel Kernel function.
 #' @param sample_frac Fraction of samples retained as landmarks (<1 => REKEMA).
+#'   The selected landmark rows are stored in `fit$encoder$landmarks`.
+#' @param seed Optional seed for REKEMA landmark selection; `NULL` draws from
+#'   the session RNG. A supplied seed leaves the caller's RNG stream untouched.
 #' @param lambda Positive Tikhonov regularization added to the RHS generalized
 #'   matrix. A positive value is required because the partial generalized
 #'   eigensolver uses that matrix as an inner-product metric.
@@ -56,7 +59,14 @@ kema_orig <- function(data, y, ...) {
 #'   diagnostics. Supported keys: `full_exact_max_n`, `reduced_exact_max_r`,
 #'   `dense_exact_max_dim`,
 #'   `fidelity_residual_tol`, `fidelity_orth_tol`, `fidelity_action`,
-#'   `eigencore_tol`, `eigencore_maxit`, and `kernel_rank_tol`.
+#'   `eigencore_tol`, `eigencore_maxit`, `eigencore_seed`, `kernel_rank_tol`,
+#'   and `max_dense_bytes`. `eigencore_seed` (default 1) seeds the iterative
+#'   partial eigensolver locally, so fits do not depend on, or change, the
+#'   caller's RNG state. Every backend materialises dense kernel blocks, dense
+#'   quotient matrices and dense label-comparison matrices, so memory grows as
+#'   O(n r + r^2 + n_labelled^2); `max_dense_bytes` (default 8 GiB) bounds a
+#'   coarse estimate of that footprint and the fit errors before allocating
+#'   when it is exceeded. Use `Inf` to disable the guard.
 #' @export
 kema_orig.multidesign <- function(data, y,
                                   subject,
@@ -70,7 +80,15 @@ kema_orig.multidesign <- function(data, y,
                                   lambda = 1e-4,
                                   backend = "auto",
                                   backend_control = NULL,
+                                  seed = NULL,
                                   ...) {
+  if (!requireNamespace("multidesign", quietly = TRUE)) {
+    stop(
+      "KEMA on a multidesign object requires the 'multidesign' package ",
+      "(a suggested dependency). Install it, or pass a hyperdesign object.",
+      call. = FALSE
+    )
+  }
   subject <- rlang::enquo(subject)
   y <- rlang::enquo(y)
   strata <- multidesign::hyperdesign(split(data, subject))
@@ -86,7 +104,8 @@ kema_orig.multidesign <- function(data, y,
     sample_frac = sample_frac,
     lambda = lambda,
     backend = backend,
-    backend_control = backend_control
+    backend_control = backend_control,
+    seed = seed
   )
 }
 
@@ -104,6 +123,7 @@ kema_orig.hyperdesign <- function(data, y,
                                   lambda = 1e-4,
                                   backend = "auto",
                                   backend_control = NULL,
+                                  seed = NULL,
                                   ...) {
   chk::chk_number(ncomp)
   chk::chk_true(ncomp > 0)
@@ -156,7 +176,7 @@ kema_orig.hyperdesign <- function(data, y,
     pre_i <- preproc_list[[i]]
     if (is.null(pre_i)) {
       pdata[[i]]$x <- Xi
-      proclist[[i]] <- NULL
+      proclist[i] <- list(NULL)
     } else if (is.function(pre_i)) {
       pdata[[i]]$x <- pre_i(Xi)
       proclist[[i]] <- pre_i
@@ -200,9 +220,39 @@ kema_orig.hyperdesign <- function(data, y,
     stop("kema_orig requires at least 2 distinct class labels.", call. = FALSE)
   }
 
-  sample_block_indices <- block_indices(pdata)
-  block_indices_list <- split(sample_block_indices, row(sample_block_indices))
-  proc <- multivarious::concat_pre_processors(proclist, block_indices_list)
+  # Dense-memory guard: every backend below materialises dense objects.
+  n_per_block <- vapply(pdata, function(d) nrow(d$x), integer(1))
+  landmarks <- .kema_select_landmarks(n_per_block, sample_frac, seed = seed)
+  r_per_block <- if (is.null(landmarks)) {
+    n_per_block
+  } else {
+    vapply(landmarks, length, integer(1))
+  }
+  .kema_check_dense_memory(
+    n_per_block = n_per_block,
+    r_per_block = r_per_block,
+    n_labeled = sum(!is.na(labels)),
+    max_bytes = control$max_dense_bytes
+  )
+
+  # concat_pre_processors() expects the feature (column) indices of each block.
+  feat_sizes <- vapply(pdata, function(b) ncol(b$x), integer(1))
+  feat_ends <- cumsum(feat_sizes)
+  feat_starts <- c(1L, utils::head(feat_ends, -1L) + 1L)
+  feature_index_list <- lapply(seq_along(feat_sizes), function(i) {
+    seq.int(feat_starts[i], feat_ends[i])
+  })
+  # NULL or plain-function preprocessing has no fitted pre_processor; the
+  # combined object then records a pass-through for that block. Prediction
+  # never relies on it: the kernel encoder applies `proclist` itself.
+  proc_for_concat <- lapply(seq_along(proclist), function(i) {
+    p <- proclist[[i]]
+    if (inherits(p, "pre_processor")) {
+      return(p)
+    }
+    multivarious::fit_transform(multivarious::pass(), as.matrix(pdata[[i]]$x))$preproc
+  })
+  proc <- multivarious::concat_pre_processors(proc_for_concat, feature_index_list)
 
   # Build within-domain graph W (block diagonal).
   W_blocks <- lapply(pdata, function(dom) {
@@ -237,7 +287,7 @@ kema_orig.hyperdesign <- function(data, y,
 
   component_basis <- kema_graph_component_basis(W + mu * Ws)
 
-  Ks <- compute_kernels(pdata, kernel, sample_frac = sample_frac, centre_kernel = FALSE)
+  Ks <- compute_kernels(pdata, kernel, landmarks = landmarks)
   Ks_sparse <- lapply(Ks, function(k) {
     if (!methods::is(k, "sparseMatrix")) {
       k <- Matrix::Matrix(k, sparse = TRUE)
@@ -390,35 +440,30 @@ kema_orig.hyperdesign <- function(data, y,
     )
   }
 
-  if (identical(eig$coefficient_space, "full")) {
-    Z <- get_Z()
-    scores <- Z %*% vectors
-    k_idx <- get_block_indices(Ks, byrow = TRUE)
-    v <- do.call(rbind, lapply(seq_along(pdata), function(i) {
-      xi <- pdata[[i]]$x
-      idx <- seq(k_idx[i, 1], k_idx[i, 2])
-      alpha_i <- vectors[idx, , drop = FALSE]
-      Matrix::crossprod(xi, alpha_i)
-    }))
-  } else {
-    scores <- if (is.function(eig$score_apply)) {
-      eig$score_apply(vectors)
-    } else {
-      get_Z() %*% vectors
-    }
-    landmark_counts <- vapply(Ks, ncol, integer(1))
-    landmark_end <- cumsum(landmark_counts)
-    landmark_start <- c(1L, head(landmark_end, -1L) + 1L)
-    v <- do.call(rbind, lapply(seq_along(pdata), function(i) {
-      xi <- pdata[[i]]$x
-      idx <- seq(landmark_start[i], landmark_end[i])
-      alpha_i <- vectors[idx, , drop = FALSE]
-      Matrix::crossprod(xi, Ks[[i]] %*% alpha_i)
-    }))
-  }
+  # In both the full (Eq. 6) and reduced (Eq. 10) forms the score of row x of
+  # domain i is k(x, R_i) alpha_i, where R_i are the kernel's reference rows
+  # (all rows for full KEMA, the landmark rows for REKEMA). The encoder keeps
+  # exactly those ingredients so out-of-sample rows use the same map.
+  scores <- get_Z() %*% vectors
   if (!is.matrix(scores) && !methods::is(scores, "Matrix")) {
     scores <- matrix(scores, ncol = 1L)
   }
+  scores <- as.matrix(scores)
+  domain_names <- names(pdata)
+  if (is.null(domain_names) || any(!nzchar(domain_names))) {
+    domain_names <- paste0("domain_", seq_along(pdata))
+  }
+  encoder <- .kema_build_encoder(
+    pdata = pdata,
+    proclist = proclist,
+    kernel = kernel,
+    alpha = vectors,
+    landmarks = landmarks,
+    domain_names = domain_names
+  )
+  # Feature loadings exist only for the linear kernel; NA otherwise so that
+  # no generic linear projection silently stands in for the kernel encoder.
+  v <- .kema_encoder_loadings(encoder)
 
   feat_per_block <- vapply(pdata, function(b) ncol(b$x), integer(1))
   end_idx <- cumsum(feat_per_block)
@@ -436,7 +481,14 @@ kema_orig.hyperdesign <- function(data, y,
     Ks = Ks,
     sample_frac = sample_frac,
     labels = labels,
-    classes = "kema_orig"
+    encoder = encoder,
+    landmarks = landmarks,
+    loadings_status = if (isTRUE(encoder$linear_kernel)) {
+      "exact_linear_kernel"
+    } else {
+      "unavailable_nonlinear_kernel"
+    },
+    classes = c("kema_fit", "kema_orig")
   )
   result$eigenvalues <- eigenvalues
   result$formulation <- paste0("kema_orig_", eig$formulation)
@@ -579,7 +631,9 @@ default_kema_backend_control <- function() {
     fidelity_action = "fallback",
     eigencore_tol = 1e-8,
     eigencore_maxit = 500L,
-    kernel_rank_tol = sqrt(.Machine$double.eps)
+    kernel_rank_tol = sqrt(.Machine$double.eps),
+    max_dense_bytes = 8 * 1024^3,
+    eigencore_seed = 1L
   )
 }
 
@@ -634,6 +688,10 @@ normalize_kema_backend_control <- function(control) {
   chk::chk_number(out$kernel_rank_tol)
   chk::chk_true(out$kernel_rank_tol > 0)
   chk::chk_true(out$kernel_rank_tol < 1)
+  chk::chk_number(out$max_dense_bytes)
+  chk::chk_true(out$max_dense_bytes > 0)
+  chk::chk_number(out$eigencore_seed)
+  out$eigencore_seed <- as.integer(out$eigencore_seed)
 
   out
 }
@@ -949,6 +1007,7 @@ solve_kema_quotient <- function(quotient, M, Ld, lambda, ncomp, control,
         constraints = constraints
       ),
       tol = control$eigencore_tol,
+      seed = control$eigencore_seed,
       allow_dense_fallback = "never"
     )
   }

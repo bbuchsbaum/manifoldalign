@@ -32,7 +32,13 @@
 #' @param force_SO Logical; if TRUE (default), enforce det(R)=+1.
 #' @param store_basis Logical; if TRUE, store eigenpairs in the returned object.
 #' @param store_descriptors Logical; if TRUE, store HKS descriptors in the result.
-#' @param seed Integer seed for sampling label-based correspondences.
+#' @param bridge_ridge Non-negative relative ridge penalty of the linear
+#'   out-of-sample bridge (see [spectral_mnn_align()]). The absolute penalty is
+#'   `bridge_ridge * sum(X^2) / ncol(X)` for each domain's preprocessed data
+#'   `X`; `0` gives the minimum-norm least-squares fit.
+#' @param seed Integer seed for the deterministic eigensolver start and
+#'   automatic bandwidth selection. It is applied locally; the caller's RNG
+#'   stream is not changed.
 #' @param verbose Logical toggle for progress messages.
 #'
 #' @return A list of class `spectral_mnn_align_control`.
@@ -59,6 +65,7 @@ spectral_mnn_align_control <- function(
   force_SO = TRUE,
   store_basis = FALSE,
   store_descriptors = FALSE,
+  bridge_ridge = 1e-6,
   seed = 1L,
   verbose = TRUE
 ) {
@@ -115,6 +122,9 @@ spectral_mnn_align_control <- function(
   if (!is.logical(store_descriptors) || length(store_descriptors) != 1L || is.na(store_descriptors)) {
     stop("`store_descriptors` must be TRUE or FALSE.", call. = FALSE)
   }
+  if (!is.numeric(bridge_ridge) || length(bridge_ridge) != 1L || !is.finite(bridge_ridge) || bridge_ridge < 0) {
+    stop("`bridge_ridge` must be a non-negative finite scalar.", call. = FALSE)
+  }
   if (!is.numeric(seed) || length(seed) != 1L || is.na(seed)) {
     stop("`seed` must be a numeric scalar.", call. = FALSE)
   }
@@ -142,6 +152,7 @@ spectral_mnn_align_control <- function(
       force_SO = force_SO,
       store_basis = store_basis,
       store_descriptors = store_descriptors,
+      bridge_ridge = as.numeric(bridge_ridge),
       seed = as.integer(seed),
       verbose = verbose
     ),
@@ -204,22 +215,9 @@ resolve_spectral_mnn_align_control <- function(control) {
 
 .with_seed_spectral_mnn <- function(seed, expr) {
   if (is.null(seed) || !is.finite(seed)) {
-    return(eval.parent(substitute(expr)))
+    return(expr)
   }
-  has_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-  old_seed <- if (has_seed) get(".Random.seed", envir = .GlobalEnv) else NULL
-  on.exit(
-    if (is.null(old_seed)) {
-      if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-        rm(".Random.seed", envir = .GlobalEnv)
-      }
-    } else {
-      assign(".Random.seed", old_seed, envir = .GlobalEnv)
-    },
-    add = TRUE
-  )
-  set.seed(as.integer(seed))
-  eval.parent(substitute(expr))
+  .with_local_seed(as.integer(seed), expr)
 }
 
 .compute_basis_spectral_mnn <- function(X, k_embed, sigma, knn, use_laplacian, seed = 1L, eig_tol = 1e-12) {
@@ -262,15 +260,17 @@ resolve_spectral_mnn_align_control <- function(control) {
                          opts = opts),
       "Eigen-decomposition failed in spectral_mnn_align"
     )
-  } else if (requireNamespace("PRIMME", quietly = TRUE)) {
+  } else if (.primme_available()) {
     safe_compute(
       PRIMME::eigs_sym(L, NEig = k_request, which = "SA"),
       "Eigen-decomposition failed in spectral_mnn_align"
     )
   } else {
+    # eigen() orders eigenvalues decreasingly; take the smallest k_request.
     eig_full <- eigen(as.matrix(L), symmetric = TRUE)
-    list(values = eig_full$values[seq_len(k_request)],
-         vectors = eig_full$vectors[, seq_len(k_request), drop = FALSE])
+    ord <- order(eig_full$values, decreasing = FALSE)[seq_len(k_request)]
+    list(values = eig_full$values[ord],
+         vectors = eig_full$vectors[, ord, drop = FALSE])
   }
 
   evals <- as.numeric(decomp$values)
@@ -292,16 +292,70 @@ resolve_spectral_mnn_align_control <- function(control) {
   )
 }
 
-.compute_hks_spectral_mnn <- function(basis, ctrl) {
+# One HKS time grid shared by every domain, so descriptor column t means the
+# same diffusion time in each domain. In "auto" mode it is derived from the
+# pooled retained eigenvalues of all domains.
+.hks_time_grid_spectral_mnn <- function(bases, ctrl) {
+  pooled <- unlist(lapply(bases, function(b) as.numeric(b$values)), use.names = FALSE)
+  hks_time_grid(
+    pooled,
+    q = ctrl$q_descriptors,
+    mode = ctrl$time_mode,
+    time_range = ctrl$time_range,
+    spacing = "log",
+    time_scale = ctrl$time_scale
+  )
+}
+
+.compute_hks_spectral_mnn <- function(basis, ctrl, times) {
   compute_hks_descriptors(
     basis = basis,
     q = ctrl$q_descriptors,
-    time_mode = ctrl$time_mode,
-    time_range = ctrl$time_range,
-    spacing = "log",
-    time_scale = ctrl$time_scale,
+    times = times,
     normalize = "both"
   )
+}
+
+# Linear ridge bridge from a domain's preprocessed features X to its aligned
+# spectral scores S: B = argmin ||X B - S||_F^2 + lambda ||B||_F^2 with
+# lambda = bridge_ridge * sum(X^2) / ncol(X). Solved in the primal (p <= n) or
+# dual (p > n) form; both give the same ridge solution. With lambda = 0 the
+# minimum-norm least-squares solution is returned.
+.ridge_bridge_spectral_mnn <- function(X, S, bridge_ridge) {
+  X <- as.matrix(X)
+  S <- as.matrix(S)
+  n <- nrow(X)
+  p <- ncol(X)
+  scale <- sum(X * X) / max(p, 1L)
+  lambda <- as.numeric(bridge_ridge) * scale
+  if (lambda > 0) {
+    B <- if (p <= n) {
+      solve(crossprod(X) + diag(lambda, p), crossprod(X, S))
+    } else {
+      crossprod(X, solve(tcrossprod(X) + diag(lambda, n), S))
+    }
+  } else {
+    B <- .pinv_spectral_mnn(X) %*% S
+  }
+  fitted <- X %*% B
+  ss_res <- colSums((S - fitted)^2)
+  ss_tot <- colSums(sweep(S, 2L, colMeans(S), "-")^2)
+  r2 <- ifelse(ss_tot > 0, 1 - ss_res / ss_tot, NA_real_)
+  list(
+    coefficients = B,
+    lambda = lambda,
+    r_squared = as.numeric(r2),
+    max_abs_residual = max(abs(S - fitted))
+  )
+}
+
+# Moore-Penrose pseudoinverse via SVD (no extra dependency).
+.pinv_spectral_mnn <- function(X, tol = sqrt(.Machine$double.eps)) {
+  sv <- svd(X)
+  d <- sv$d
+  keep <- d > tol * max(d, 0)
+  if (!any(keep)) return(matrix(0, ncol(X), nrow(X)))
+  sv$v[, keep, drop = FALSE] %*% (t(sv$u[, keep, drop = FALSE]) / d[keep])
 }
 
 .pairs_from_correspondences_spectral_mnn <- function(correspondences, ref_idx, dom_idx, n_ref, n_dom) {
@@ -334,29 +388,6 @@ resolve_spectral_mnn_align_control <- function(control) {
 
   ok <- is.finite(i) & is.finite(j) & i >= 1 & i <= n_ref & j >= 1 & j <= n_dom
   list(i = as.integer(i[ok]), j = as.integer(j[ok]))
-}
-
-.pairs_from_labels_spectral_mnn <- function(labels_ref, labels_dom, max_pairs_per_label, seed = 1L) {
-  set.seed(seed)
-  if (is.null(labels_ref) || is.null(labels_dom)) return(list(i = integer(0), j = integer(0)))
-  labs1 <- as.character(labels_ref)
-  labs2 <- as.character(labels_dom)
-  u <- intersect(unique(labs1[!is.na(labs1)]), unique(labs2[!is.na(labs2)]))
-  if (!length(u)) return(list(i = integer(0), j = integer(0)))
-
-  i_all <- integer(0)
-  j_all <- integer(0)
-  for (lab in u) {
-    I <- which(labs1 == lab)
-    J <- which(labs2 == lab)
-    m <- min(length(I), length(J), as.integer(max_pairs_per_label))
-    if (m < 1L) next
-    I <- sample(I, m)
-    J <- sample(J, m)
-    i_all <- c(i_all, I)
-    j_all <- c(j_all, J)
-  }
-  list(i = as.integer(i_all), j = as.integer(j_all))
 }
 
 .pairs_from_labels_mnn_spectral_mnn <- function(D_ref, D_dom, labels_ref, labels_dom, ctrl) {
@@ -566,26 +597,29 @@ resolve_spectral_mnn_align_control <- function(control) {
   list(i = one2one$i, j = one2one$j, d = one2one$d, mode = "hks_nn")
 }
 
+# Weighted orthogonal Procrustes with translation: the map
+# b -> (b - mu_B) R + mu_A minimises sum_k w_k ||a_k - ((b_k - mu_B) R + mu_A)||^2
+# over rotations R, with mu_A, mu_B the weighted anchor means. Returns the
+# rotation and the translation `t = mu_A - mu_B R`, so the map is `b R + t`.
 .procrustes_rotation_spectral_mnn <- function(A, B, weights = NULL, force_SO = TRUE) {
   A <- as.matrix(A)
   B <- as.matrix(B)
   if (nrow(A) != nrow(B)) stop("Procrustes: A and B must have same rows.", call. = FALSE)
   if (ncol(A) != ncol(B)) stop("Procrustes: A and B must have same columns.", call. = FALSE)
 
-  Ac <- scale(A, center = TRUE, scale = FALSE)
-  Bc <- scale(B, center = TRUE, scale = FALSE)
-
+  w <- rep(1, nrow(A))
   if (!is.null(weights)) {
-    w <- as.numeric(weights)
-    if (length(w) == nrow(Ac) && any(is.finite(w) & w > 0)) {
-      w[!is.finite(w) | w < 0] <- 0
-      if (sum(w) > 0) {
-        ws <- sqrt(w)
-        Ac <- Ac * ws
-        Bc <- Bc * ws
-      }
+    wi <- as.numeric(weights)
+    if (length(wi) == nrow(A) && any(is.finite(wi) & wi > 0)) {
+      wi[!is.finite(wi) | wi < 0] <- 0
+      if (sum(wi) > 0) w <- wi
     }
   }
+  mu_A <- colSums(A * w) / sum(w)
+  mu_B <- colSums(B * w) / sum(w)
+  ws <- sqrt(w)
+  Ac <- sweep(A, 2L, mu_A, "-") * ws
+  Bc <- sweep(B, 2L, mu_B, "-") * ws
 
   M <- crossprod(Bc, Ac)
   sv <- svd(M)
@@ -595,7 +629,12 @@ resolve_spectral_mnn_align_control <- function(control) {
     D[ncol(R), ncol(R)] <- -1
     R <- sv$u %*% D %*% t(sv$v)
   }
-  R
+  list(rotation = R, translation = as.numeric(mu_A - drop(mu_B %*% R)))
+}
+
+.apply_rigid_spectral_mnn <- function(E, map) {
+  out <- as.matrix(E) %*% map$rotation
+  sweep(out, 2L, map$translation, "+")
 }
 
 .apply_preproc_domains_spectral_mnn <- function(domains, preproc) {
@@ -673,7 +712,21 @@ resolve_spectral_mnn_align_control <- function(control) {
 #' 2) computes Laplacian eigenmaps,
 #' 3) constructs intrinsic Heat Kernel Signatures (HKS),
 #' 4) discovers anchors via mutual nearest neighbors (or optional supervision),
-#' 5) aligns domains to a reference via Procrustes.
+#' 5) aligns domains to a reference via Procrustes (rotation plus
+#'    translation estimated on the anchors).
+#'
+#' Heat-kernel signatures use one time grid shared by all domains (stored in
+#' `hks_times`); in `time_mode = "auto"` it is derived from the pooled
+#' retained eigenvalues of every domain.
+#'
+#' Training scores `s` are the aligned Laplacian eigenmaps. The eigenmaps have
+#' no exact out-of-sample extension, so the loadings `v` are an explicit,
+#' separately fitted approximation: a linear ridge regression ("bridge") from
+#' each domain's preprocessed features to its aligned scores, with relative
+#' penalty `control$bridge_ridge`. Out-of-sample prediction ([oos_predict()],
+#' `project()`) uses this bridge; its fit quality is reported in `bridge`
+#' (`r_squared`, `max_abs_residual`). Bridge predictions for training rows
+#' therefore differ from `s` unless the bridge interpolates.
 #'
 #' @param data A `hyperdesign` object or list of matrices.
 #' @param ... Additional arguments passed to methods.
@@ -774,8 +827,9 @@ spectral_mnn_align.hyperdesign <- function(
   }
 
   if (verbose) message("spectral_mnn_align: computing HKS descriptors (q=", ctrl$q_descriptors, ")")
+  hks_times <- .hks_time_grid_spectral_mnn(bases, ctrl)
   desc <- vector("list", n_domains)
-  for (i in seq_len(n_domains)) desc[[i]] <- .compute_hks_spectral_mnn(bases[[i]], ctrl)
+  for (i in seq_len(n_domains)) desc[[i]] <- .compute_hks_spectral_mnn(bases[[i]], ctrl, hks_times)
 
   # Embeddings used for output/alignment
   k_avail <- vapply(bases, function(b) ncol(b$vectors), integer(1))
@@ -788,9 +842,10 @@ spectral_mnn_align.hyperdesign <- function(
   # Center embeddings per domain for stable Procrustes/loadings
   E <- lapply(E, function(M) scale(as.matrix(M), center = TRUE, scale = FALSE))
 
-  # Estimate per-domain rotations into ref space
-  rotations <- vector("list", n_domains)
-  rotations[[ref_idx]] <- diag(k_use)
+  # Estimate per-domain rigid maps (rotation + translation) into ref space
+  identity_map <- list(rotation = diag(k_use), translation = rep(0, k_use))
+  rigid <- vector("list", n_domains)
+  rigid[[ref_idx]] <- identity_map
   anchors <- vector("list", n_domains)
   anchors[[ref_idx]] <- NULL
 
@@ -833,7 +888,7 @@ spectral_mnn_align.hyperdesign <- function(
 
     if (length(pair_info$i) < max(2L, k_use)) {
       if (verbose) message("spectral_mnn_align: domain ", g, " has insufficient anchors (", length(pair_info$i), "); using identity rotation")
-      rotations[[g]] <- diag(k_use)
+      rigid[[g]] <- identity_map
       anchors[[g]] <- data.frame(i_ref = integer(0), i_dom = integer(0), dist = numeric(0), mode = rep(mode, 0L),
                                  stringsAsFactors = FALSE)
       next
@@ -843,13 +898,13 @@ spectral_mnn_align.hyperdesign <- function(
     A <- E[[ref_idx]][pair_info$i, , drop = FALSE]
     B <- E[[g]][pair_info$j, , drop = FALSE]
     w1 <- .anchor_weights_spectral_mnn(pair_info$d)
-    Rg <- .procrustes_rotation_spectral_mnn(A, B, weights = w1, force_SO = ctrl$force_SO)
+    map_g <- .procrustes_rotation_spectral_mnn(A, B, weights = w1, force_SO = ctrl$force_SO)
 
     # Optional refinement in aligned space (cheap ICP-style)
     rounds <- as.integer(ctrl$refine_rounds)
     if (rounds > 0L) {
       for (rr in seq_len(rounds)) {
-        B_aligned <- E[[g]] %*% Rg
+        B_aligned <- .apply_rigid_spectral_mnn(E[[g]], map_g)
         # Update anchors directly in the aligned embedding space.
         if (is.null(correspondences) && !is.null(labels)) {
           pair2 <- .pairs_from_labels_mnn_spectral_mnn(
@@ -868,13 +923,13 @@ spectral_mnn_align.hyperdesign <- function(
         A2 <- E[[ref_idx]][pair2$i, , drop = FALSE]
         B2 <- E[[g]][pair2$j, , drop = FALSE]
         w2 <- .anchor_weights_spectral_mnn(pair2$d)
-        Rg <- .procrustes_rotation_spectral_mnn(A2, B2, weights = w2, force_SO = ctrl$force_SO)
+        map_g <- .procrustes_rotation_spectral_mnn(A2, B2, weights = w2, force_SO = ctrl$force_SO)
         pair_info <- pair2
         mode <- paste0(mode, "+refine")
       }
     }
 
-    rotations[[g]] <- Rg
+    rigid[[g]] <- map_g
     dvec <- pair_info$d
     if (is.null(dvec) || length(dvec) != length(pair_info$i)) {
       dvec <- rep(NA_real_, length(pair_info$i))
@@ -888,27 +943,44 @@ spectral_mnn_align.hyperdesign <- function(
     )
   }
 
-  # Apply rotations
+  # Apply the rigid maps
   E_aligned <- lapply(seq_len(n_domains), function(i) {
-    Ei <- E[[i]]
-    Ri <- rotations[[i]]
-    if (is.null(Ri)) Ri <- diag(k_use)
-    Ei %*% Ri
+    map_i <- rigid[[i]]
+    if (is.null(map_i)) map_i <- identity_map
+    .apply_rigid_spectral_mnn(E[[i]], map_i)
   })
+  rotations <- lapply(rigid, `[[`, "rotation")
+  translations <- lapply(rigid, `[[`, "translation")
 
+  # Training scores are the aligned spectral embeddings themselves.
   scores <- do.call(rbind, E_aligned)
 
-  loadings <- do.call(rbind, lapply(seq_len(n_domains), function(i) {
-    Xi <- as.matrix(pdata[[i]]$x)
-    Matrix::crossprod(Xi, E_aligned[[i]])
-  }))
+  # Out-of-sample bridge: the spectral embedding has no exact extension to
+  # new rows, so fit an explicit linear ridge regression from each domain's
+  # preprocessed features to its aligned scores. These coefficients are the
+  # loadings `v`, used by oos_predict()/project(); they approximate, and do
+  # not reproduce, the training scores.
+  bridges <- lapply(seq_len(n_domains), function(i) {
+    .ridge_bridge_spectral_mnn(pdata[[i]]$x, E_aligned[[i]], ctrl$bridge_ridge)
+  })
+  names(bridges) <- domain_names
+  loadings <- do.call(rbind, lapply(bridges, `[[`, "coefficients"))
 
   feature_blocks <- feature_block_indices(pdata)
 
   extras <- list(
     ref_idx = ref_idx,
     rotations = rotations,
+    translations = translations,
     anchors = anchors,
+    hks_times = hks_times,
+    bridge = list(
+      type = "linear_ridge",
+      ridge = ctrl$bridge_ridge,
+      lambda = vapply(bridges, `[[`, numeric(1), "lambda"),
+      r_squared = lapply(bridges, `[[`, "r_squared"),
+      max_abs_residual = vapply(bridges, `[[`, numeric(1), "max_abs_residual")
+    ),
     control = ctrl
   )
   if (isTRUE(ctrl$store_basis)) extras$basis <- bases

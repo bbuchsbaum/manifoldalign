@@ -6,7 +6,8 @@
 #'
 #' @param n_per_domain Number of samples per domain.
 #' @param noise_level Gaussian noise standard deviation.
-#' @param seed Random seed for reproducibility.
+#' @param seed Random seed for reproducibility. The fixture is generated with
+#'   this seed locally; the caller's RNG stream is left unchanged.
 #' @return A list with domain data, labels, and combined strata.
 #' @examples
 #' data <- generate_spiral_validation_data(n_per_domain = 50, seed = 123)
@@ -15,16 +16,22 @@
 generate_spiral_validation_data <- function(n_per_domain = 100,
                                             noise_level = 0.1,
                                             seed = 42) {
-  set.seed(seed)
-
   t <- seq(0, 4 * pi, length.out = n_per_domain)
+  noise <- .with_local_seed(seed, {
+    list(
+      a = stats::rnorm(n_per_domain, 0, noise_level),
+      b = stats::rnorm(n_per_domain, 0, noise_level),
+      c = stats::rnorm(n_per_domain, 0, noise_level),
+      d = stats::rnorm(n_per_domain, 0, noise_level)
+    )
+  })
   x1 <- cbind(
-    t * cos(t) + stats::rnorm(n_per_domain, 0, noise_level),
-    t * sin(t) + stats::rnorm(n_per_domain, 0, noise_level)
+    t * cos(t) + noise$a,
+    t * sin(t) + noise$b
   )
   x2 <- cbind(
-    0.8 * t * cos(t + pi / 4) + stats::rnorm(n_per_domain, 0, noise_level),
-    0.8 * t * sin(t + pi / 4) + stats::rnorm(n_per_domain, 0, noise_level)
+    0.8 * t * cos(t + pi / 4) + noise$c,
+    0.8 * t * sin(t + pi / 4) + noise$d
   )
   labels1 <- ifelse(t < 2 * pi, "early", "late")
   labels2 <- ifelse(t < 2 * pi, "early", "late")
@@ -50,10 +57,11 @@ generate_spiral_validation_data <- function(n_per_domain = 100,
 #' only `lambda * I`; its claimed comparison with paper eigenvalues was therefore
 #' not valid accuracy evidence.
 #'
-#' @param expected_eigenvals Deprecated and ignored.
-#' @param tolerance Deprecated and ignored.
-#' @param n_per_domain Deprecated and ignored.
-#' @return This function emits a deprecation warning and then errors.
+#' @param expected_eigenvals Defunct and ignored.
+#' @param tolerance Defunct and ignored.
+#' @param n_per_domain Defunct and ignored.
+#' @return This function is defunct: it always signals a `defunctError`.
+#'   Use [run_kema_validation_suite()].
 #' @seealso [run_kema_validation_suite()]
 #' @examples
 #' \dontrun{
@@ -63,18 +71,16 @@ generate_spiral_validation_data <- function(n_per_domain = 100,
 validate_kema_eigenvalues <- function(expected_eigenvals = c(0.82, 0.41),
                                       tolerance = 0.1,
                                       n_per_domain = 100) {
-  .Deprecated(
+  .Defunct(
+    new = "run_kema_validation_suite",
+    package = "manifoldalign",
     msg = paste0(
-      "validate_kema_eigenvalues() is deprecated and withdrawn because it ",
-      "did not reproduce a documented paper fixture or the implemented KEMA ",
-      "generalized eigenproblem. Use run_kema_validation_suite()."
+      "validate_kema_eigenvalues() is defunct: it did not reproduce a ",
+      "documented paper fixture or the implemented KEMA generalized ",
+      "eigenproblem, so historical paper-eigenvalue validation is invalid. ",
+      "Use the fidelity-gated residual and backend-agreement checks in ",
+      "run_kema_validation_suite()."
     )
-  )
-  stop(
-    "Historical KEMA paper-eigenvalue validation is invalid. Use the ",
-    "fidelity-gated residual and backend-agreement checks in ",
-    "run_kema_validation_suite().",
-    call. = FALSE
   )
 }
 
@@ -85,16 +91,16 @@ validate_kema_eigenvalues <- function(expected_eigenvals = c(0.82, 0.41),
 #' implementation did not fit KEMA or evaluate held-out predictions; it returned
 #' `expected_error` plus random noise and has therefore been withdrawn.
 #'
-#' @param expected_error Deprecated and ignored.
-#' @param tolerance Deprecated and ignored.
-#' @param test_fraction Deprecated and ignored.
-#' @return This function emits a deprecation warning and then errors.
+#' @param expected_error Defunct and ignored.
+#' @param tolerance Defunct and ignored.
+#' @param test_fraction Defunct and ignored.
+#' @return This function is defunct: it always signals a `defunctError`.
 #' @details
-#' No direct reconstruction replacement is currently available because KEMA's
-#' out-of-sample projection has not passed an independent reconstruction oracle.
-#' Use [cv_alignment_rows()] for leakage-safe held-out alignment scoring.
-#' Historical results from this function are invalid.
-#' @seealso [cv_alignment_rows()]
+#' Historical results from this function are invalid. KEMA fits now carry a
+#' kernel encoder: embed held-out rows with [oos_predict()] (see
+#' [oos_predict.kema_fit()]), and use [cv_alignment_rows()] for leakage-safe
+#' held-out alignment scoring.
+#' @seealso [oos_predict.kema_fit()], [cv_alignment_rows()]
 #' @examples
 #' \dontrun{
 #' validate_out_of_sample_reconstruction()
@@ -103,17 +109,15 @@ validate_kema_eigenvalues <- function(expected_eigenvals = c(0.82, 0.41),
 validate_out_of_sample_reconstruction <- function(expected_error = 0.14,
                                                   tolerance = 0.05,
                                                   test_fraction = 0.2) {
-  .Deprecated(
+  .Defunct(
+    new = "cv_alignment_rows",
+    package = "manifoldalign",
     msg = paste0(
-      "validate_out_of_sample_reconstruction() is deprecated and withdrawn ",
-      "because it did not fit KEMA or evaluate held-out predictions. ",
-      "Use cv_alignment_rows() for leakage-safe held-out alignment scoring."
+      "validate_out_of_sample_reconstruction() is defunct and withdrawn: it ",
+      "did not fit KEMA or evaluate held-out predictions. Embed held-out rows ",
+      "with oos_predict() on a kema() fit and score them with ",
+      "cv_alignment_rows()."
     )
-  )
-  stop(
-    "KEMA out-of-sample reconstruction validation is withdrawn until a ",
-    "verified OOS predictor and independent reconstruction oracle are available.",
-    call. = FALSE
   )
 }
 

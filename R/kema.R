@@ -1,5 +1,3 @@
-
-
 #' @importFrom Matrix bdiag Diagonal rowSums sparseMatrix
 #' @importFrom kernlab kernelMatrix
 #' @importFrom cluster pam
@@ -10,23 +8,14 @@
 #' @importFrom methods new is as
 #' @import Matrix
 #' @keywords internal
-rescale <- function(z) {
-  # Check data orientation (expect samples x features)
-  if (nrow(z) < ncol(z)) {
-    warning("rescale(): Data has more features (", ncol(z), ") than samples (", nrow(z), "). ",
-            "This may indicate transposed data. Expected orientation: samples x features.", 
-            call. = FALSE)
-  }
-  
-  # Vectorized rescaling
-  rn <- sqrt(Matrix::rowSums(z^2))
-  rn[rn == 0] <- 1e-12  # Guard against zero-norm rows
-  z / rn
-}
+#' @noRd
+NULL
 
 #' Block indices for data list
-#' 
-#' @param data_list List of data blocks
+#'
+#' @param data_list List of data blocks, each with an `x` component whose rows
+#'   are samples. Dense matrices, sparse `Matrix` objects and vectors are
+#'   accepted; a vector counts as one sample per element.
 #' @return Matrix with start and end indices for each block
 #' @examples
 #' data1 <- list(x = matrix(rnorm(20), 10, 2))
@@ -38,35 +27,16 @@ rescale <- function(z) {
 block_indices <- function(data_list) {
   # Generate block indices for a list of data blocks
   if (is.list(data_list)) {
-    n_samples <- sapply(data_list, function(x) if (is.matrix(x$x)) nrow(x$x) else length(x$x))
+    n_samples <- vapply(data_list, function(x) {
+      if (!is.null(dim(x$x))) nrow(x$x) else length(x$x)
+    }, numeric(1))
   } else {
     stop("data_list must be a list")
   }
-  
+
   end_indices <- cumsum(n_samples)
   start_indices <- c(1, end_indices[-length(end_indices)] + 1)
-  
-  cbind(start=start_indices, end=end_indices)
-}
 
-
-
-#' @keywords internal
-get_block_indices <- function(data_list, byrow=FALSE) {
-  # Generate block indices for kernel matrices
-  if (is.list(data_list)) {
-    if (byrow) {
-      n_items <- sapply(data_list, nrow)
-    } else {
-      n_items <- sapply(data_list, ncol)
-    }
-  } else {
-    stop("data_list must be a list")
-  }
-  
-  end_indices <- cumsum(n_items)
-  start_indices <- c(1, end_indices[-length(end_indices)] + 1)
-  
   cbind(start=start_indices, end=end_indices)
 }
 
@@ -81,529 +51,362 @@ get_block_indices <- function(data_list, byrow=FALSE) {
 #' @export
 coskern <- function() {
   rval <- function(x, y = NULL) {
-    if (!is(x, "vector")) 
+    if (!is(x, "vector"))
       stop("x must be a vector")
-    if (!is(y, "vector") && !is.null(y)) 
+    if (!is(y, "vector") && !is.null(y))
       stop("y must be a vector")
-    if (is(x, "vector") && is.null(y)) {
-      coop::cosine(x)
+    if (is.null(y)) {
+      return(coop::cosine(x, x))
     }
-    if (is(x, "vector") && is(y, "vector")) {
-      if (!length(x) == length(y)) 
-        stop("number of dimension must be the same on both data points")
-      coop::cosine(x, y)
-    }
+    if (!length(x) == length(y))
+      stop("number of dimension must be the same on both data points")
+    coop::cosine(x, y)
   }
-  
+
   return(new("kernel", .Data = rval, kpar = list()))
 }
 
+# ---------------------------------------------------------------------------
+# KEMA kernels, landmarks and the dense-memory guard
+# ---------------------------------------------------------------------------
+
+#' Select REKEMA landmark rows for each domain
+#'
+#' @param n_per_block Integer vector of domain sizes.
+#' @param sample_frac Landmark fraction; `1` selects every row (full KEMA).
+#' @param seed `NULL` to draw from the session RNG, otherwise a seed used
+#'   locally (the caller's RNG stream is restored).
+#' @return A list with one sorted integer vector of landmark rows per domain,
+#'   or `NULL` for full KEMA.
 #' @keywords internal
-stratified_subsample <- function(labels, nperlabel) {
-  nlabs <- length(unique(labels))
-  sp <- split(seq_along(labels), labels)
-  unlist(lapply(sp, function(idx) sample(idx, nperlabel)))
-}
-
-#' @keywords internal
-normalize_laplacian <- function(A) {
-  # Compute normalized Laplacian: L_norm = D^(-1/2) * L * D^(-1/2)
-  
-  # Input validation
-  if (!methods::is(A, "Matrix")) {
-    A <- Matrix::Matrix(A, sparse = TRUE)
-  }
-  
-  degrees <- Matrix::rowSums(A)
-  n <- length(degrees)
-  
-  # Handle isolated nodes (zero degree)
-  zero_degree_mask <- degrees == 0
-  n_isolated <- sum(zero_degree_mask)
-  
-  if (n_isolated > 0) {
-    message("normalize_laplacian(): ", n_isolated, 
-            " isolated nodes detected - treating as disconnected components.")
-  }
-  
-  # For isolated nodes, D^(-1/2) = 0 to preserve PSD property
-  inv_sqrt_degrees <- numeric(n)
-  non_zero_mask <- !zero_degree_mask
-  
-  if (any(non_zero_mask)) {
-    inv_sqrt_degrees[non_zero_mask] <- 1 / sqrt(degrees[non_zero_mask])
-  }
-  
-  Dinvsq <- Matrix::Diagonal(x = inv_sqrt_degrees)
-  
-  # Use stable formula: L_norm = I - D^(-1/2) * A * D^(-1/2)
-  I <- Matrix::Diagonal(n)
-  L_norm <- I - Dinvsq %*% A %*% Dinvsq
-  
-  # Clean up numerical artifacts
-  if (methods::is(L_norm, "sparseMatrix")) {
-    L_norm@x[abs(L_norm@x) < 1e-14] <- 0
-    L_norm <- Matrix::drop0(L_norm)
-  }
-  
-  # Ensure result is sparse dgCMatrix
-  if (!methods::is(L_norm, "dgCMatrix")) {
-    L_norm <- as(L_norm, "dgCMatrix")
-  }
-  
-  # Validate result properties
-  if (nrow(L_norm) != ncol(L_norm)) {
-    stop("Normalized Laplacian is not square: ", 
-         paste(dim(L_norm), collapse = " x "), call. = FALSE)
-  }
-  
-  # Check symmetry (within numerical tolerance)
-  if (nrow(L_norm) <= 1000) {  # Only check for reasonably sized matrices
-    if (!isSymmetric(L_norm, tol = 1e-10)) {
-      warning("Normalized Laplacian is not symmetric within tolerance. ",
-              "This may indicate numerical issues.", call. = FALSE)
-    }
-  }
-  
-  L_norm
-}
-
-#' @keywords internal
-normalize_adjacency <- function(A, D) {
-  Dinvsq <-  Matrix::Diagonal(x=1/sqrt(diag(D)))
-  Dinvsq %*% A %*% Dinvsq
-}
-
-
-
-#' @keywords internal
-kcentroids <- function(X, k, sfrac=.5) {
-  chk::chk_true(sfrac > 0 && sfrac <= 1)
-  # X is expected to be samples x features
-  
-  if (sfrac < 1) {
-    n <- round(sfrac * nrow(X))  # Use nrow(X) for sample count
-    sidx <- sort(sample(1:nrow(X), n))
-    
-    res <- safe_compute(
-      cluster::pam(X[sidx, , drop=FALSE], k, metric="manhattan"),
-      paste0("PAM clustering failed during subsampling. ",
-             "Try reducing k, increasing sfrac, or checking for constant/degenerate features.")
-    )
-    
-    # Convert back to original indices
-    return(sort(sidx[res$id.med]))
-  } else {
-    res <- safe_compute(
-      cluster::pam(X, k, metric="manhattan"),
-      paste0("PAM clustering failed on full data. ",
-             "Try reducing k or checking for constant/degenerate features.")
-    )
-    
-    return(sort(res$id.med))
-  }
-}
-
-#' @keywords internal
-class_medoids <- function(X, L) {
-  # SEMI-SUPERVISED: Handle missing labels
-  # Filter out NA labels before processing
-  non_missing_mask <- !is.na(L)
-  
-  if (!any(non_missing_mask)) {
-    stop("All labels are missing. Cannot compute class medoids.", call. = FALSE)
-  }
-  
-  # Work only with non-missing labels and corresponding data
-  L_clean <- L[non_missing_mask]
-  X_clean <- X[non_missing_mask, , drop=FALSE]
-  
-  L_clean <- as.factor(L_clean)
-  sl <- split(1:length(L_clean), L_clean)
-  
-  ids <- tryCatch({
-    sapply(sl, function(sidx) {
-      if (length(sidx) <= 2) {
-        sidx[1]
-      } else {
-        cp <- safe_compute(
-          cluster::pam(X_clean[sidx,], k=1, metric="manhattan"),
-          paste0("PAM clustering failed for class with ", length(sidx), " samples. Using first sample as medoid."),
-          warning_fn = function(w) { list(id.med = 1) }
-        )
-        sidx[cp$id.med]
-      }
-    })
-  }, error = function(e) {
-    stop("Class medoid computation failed. ",
-         "This may indicate issues with the class structure or data quality. ",
-         "Original error: ", e$message, call. = FALSE)
-  })
-  
-  # Map indices back to original data indices
-  original_indices <- which(non_missing_mask)
-  mapped_ids <- original_indices[ids]
-  names(mapped_ids) <- names(ids)
-  
-  mapped_ids
-}
-
-
-
 #' @noRd
-compute_local_similarity <- function(strata, y, knn, weight_mode, type, sigma, repulsion=TRUE) {
-  y <- rlang::enquo(y)
-  y_name <- rlang::as_name(y)
-  Sl <- purrr::map(strata, function(x) {
-    labs <- x$design[[y_name]]
-    
-    # SEMI-SUPERVISED: Handle missing labels
-    # adjoin functions can handle NA values in labels
-    # but we need to ensure they're passed through correctly
-    
-    g <- adjoin::graph_weights(x$x,
-                                        weight_mode=weight_mode,
-                                        neighbor_mode="knn",
-                                        k=knn,
-                                        type=type,
-                                        sigma=sigma)
-    
-    # Handle NA labels in class graph
-    cg <- tryCatch({
-      adjoin::class_graph(labs)
-    }, error = function(e) {
-      # If class_graph fails with NA labels, create empty sparse matrix
-      n <- length(labs)
-      warning("class_graph failed for stratum with labels containing NAs. ",
-              "Creating empty class graph. Error: ", e$message, call. = FALSE)
-      Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0), dims = c(n, n))
-    })
-    
-    if (repulsion) {
-      r <- tryCatch({
-        adjoin::repulsion_graph(g, cg, method="weighted")
-      }, error = function(e) {
-        # If repulsion_graph fails, create empty repulsion matrix
-        n <- length(labs)
-        warning("repulsion_graph failed for stratum with labels containing NAs. ",
-                "Creating empty repulsion graph. Error: ", e$message, call. = FALSE)
-        Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0), dims = c(n, n))
-      })
-      list(G=adjoin::adjacency(g), R=adjoin::adjacency(r))
-    } else {
-      list(
-        G = adjoin::adjacency(g),
-        R = Matrix::sparseMatrix(
-          i = integer(0),
-          j = integer(0),
-          x = numeric(0),
-          dims = c(length(labs), length(labs))
-        )
-      )
-    }
-    
-    
-  })
-  
-  Sl
-  
-}
-
-#' @keywords internal
-compute_laplacians <- function(Ws, Wr, W, Wd, use_laplacian) {
-  
-  # Ensure all matrices are sparse
-  matrices <- list(Ws = Ws, Wr = Wr, W = W, Wd = Wd)
-  for (name in names(matrices)) {
-    mat <- matrices[[name]]
-    if (!methods::is(mat, "sparseMatrix")) {
-      matrices[[name]] <- Matrix::Matrix(mat, sparse = TRUE)
-    }
+.kema_select_landmarks <- function(n_per_block, sample_frac, seed = NULL) {
+  if (sample_frac >= 1) {
+    return(NULL)
   }
-  
-  # Extract validated sparse matrices
-  Ws <- matrices$Ws
-  Wr <- matrices$Wr  
-  W <- matrices$W
-  Wd <- matrices$Wd
-  
-  if (use_laplacian) {
-    # Compute normalized Laplacians
-    L <- safe_compute(
-      normalize_laplacian(W),
-      "Failed to compute normalized Laplacian for W. This may indicate issues with the graph structure or isolated nodes"
-    )
-    
-    Ls <- safe_compute(
-      normalize_laplacian(Ws),
-      "Failed to compute normalized Laplacian for Ws. This may indicate issues with the similarity graph structure"
-    )
-    
-    Lr <- safe_compute(
-      normalize_laplacian(Wr),
-      "Failed to compute normalized Laplacian for Wr. This may indicate issues with the repulsion graph structure"
-    )
-    
-    Ld <- safe_compute(
-      normalize_laplacian(Wd),
-      "Failed to compute normalized Laplacian for Wd. This may indicate issues with the dissimilarity graph structure"
-    )
-    
-  } else {
-    # Compute degree vectors
-    d_W <- Matrix::rowSums(W)
-    d_Ws <- Matrix::rowSums(Ws)  
-    d_Wr <- Matrix::rowSums(Wr)
-    d_Wd <- Matrix::rowSums(Wd)
-    
-    # Create degree matrices as sparse diagonal matrices
-    D_W <- Matrix::Diagonal(x = d_W)
-    D_Ws <- Matrix::Diagonal(x = d_Ws)
-    D_Wr <- Matrix::Diagonal(x = d_Wr)
-    D_Wd <- Matrix::Diagonal(x = d_Wd)
-    
-    # Compute unnormalized Laplacians: L = D - A
-    L <- D_W - W
-    Ls <- D_Ws - Ws
-    Lr <- D_Wr - Wr  
-    Ld <- D_Wd - Wd
-  }
-  
-  # Ensure all results are sparse dgCMatrix
-  result_matrices <- list(L = L, Ls = Ls, Lr = Lr, Ld = Ld)
-  for (name in names(result_matrices)) {
-    mat <- result_matrices[[name]]
-    if (!methods::is(mat, "dgCMatrix")) {
-      result_matrices[[name]] <- as(mat, "dgCMatrix")
-    }
-  }
-  
-  # Validate matrix dimensions
-  n <- nrow(result_matrices$L)
-  for (name in names(result_matrices)) {
-    mat <- result_matrices[[name]]
-    if (!all(dim(mat) == c(n, n))) {
-      stop("Laplacian matrix ", name, " has incorrect dimensions: ", 
-           paste(dim(mat), collapse = " x "), call. = FALSE)
-    }
-  }
-  
-  result_matrices
-}
-
-#' @keywords internal
-compute_between_graph <- function(strata, y, dfun=NULL) {
-  y <- rlang::enquo(y)
-  y_name <- rlang::as_name(y)
-  
-  if (is.null(dfun)) {
-    dlabels <- lapply(strata, function(s) {
-      labs <- s$design[[y_name]]
-    
-      # Only compute medoids for labeled samples
-      non_missing_mask <- !is.na(labs)
-      
-      if (!any(non_missing_mask)) {
-        # All labels are missing in this stratum
-        # Return all NAs - binary_label_matrix will handle this
-        return(rep(NA, length(labs)))
+  draw <- function() {
+    lapply(n_per_block, function(n_i) {
+      n_landmarks <- max(1L, as.integer(round(sample_frac * n_i)))
+      if (n_landmarks >= n_i) {
+        seq_len(n_i)
+      } else {
+        sort(sample.int(n_i, n_landmarks, replace = FALSE))
       }
-      
-      # Find medoids only among labeled samples
-      labeled_indices <- which(non_missing_mask)
-      labeled_labs <- labs[labeled_indices]
-      
-      if (length(unique(labeled_labs)) == 1) {
-        # Only one class in this stratum, use first labeled sample as medoid
-        medlabels <- rep(NA, length(labs))
-        medlabels[labeled_indices[1]] <- labeled_labs[1]
-        return(medlabels)
-      }
-      
-      # Compute medoids for labeled samples only
-      meds <- tryCatch({
-        sort(class_medoids(s$x[labeled_indices, , drop=FALSE], labeled_labs))
-      }, error = function(e) {
-        warning("class_medoids failed for stratum with missing labels. ",
-                "Using first sample of each class. Error: ", e$message, call. = FALSE)
-        # Fallback: use first sample of each unique class
-        unique_labs <- unique(labeled_labs)
-        sapply(unique_labs, function(lab) {
-          class_indices <- which(labeled_labs == lab)
-          class_indices[1]  # First sample of this class
-        })
-      })
-    
-      medlabels <- rep(NA, length(labs))
-      # Map medoid indices back to original indices
-      medoid_original_indices <- labeled_indices[meds]
-      medlabels[medoid_original_indices] <- names(meds)
-      medlabels
     })
-    
-    # Sanitize labels before constructing between-class graph to avoid NA indices
-    all_dlabels <- unlist(dlabels)
-    all_dlabels[is.na(all_dlabels)] <- "UNLABELED"
-    adjoin::binary_label_matrix(all_dlabels, all_dlabels, type="d")
-  } else {
-    dlabels <- unlist(lapply(strata, function(s) {
-      s$design[[y_name]]
-    }))
-    
-    # Pass labels with NAs to custom function
-    dfun(dlabels)
   }
-    
+  if (is.null(seed)) draw() else .with_local_seed(seed, draw())
+}
+
+#' Approximate peak memory of the dense KEMA formulation
+#'
+#' Every KEMA backend (including `operator_exact`) materialises dense kernel
+#' blocks, their eigen/SVD factors, dense quotient matrices of order
+#' `r_total`, and dense label-comparison matrices over the labelled rows. The
+#' estimate below is a deliberately coarse upper bound on those allocations:
+#' about 60 bytes per kernel entry (dense block, sparse copies and factors),
+#' 48 bytes per entry of an `r_total x r_total` matrix (the two quotient
+#' matrices plus dense eigensolver workspace) and 32 bytes per pair of
+#' labelled rows (logical and sparse class graphs).
+#'
+#' @keywords internal
+#' @noRd
+.kema_dense_memory_estimate <- function(n_per_block, r_per_block, n_labeled) {
+  n_per_block <- as.numeric(n_per_block)
+  r_per_block <- as.numeric(r_per_block)
+  r_total <- sum(r_per_block)
+  60 * sum(n_per_block * r_per_block) +
+    48 * r_total^2 +
+    32 * as.numeric(n_labeled)^2
 }
 
 #' @keywords internal
-compute_kernels <- function(strata, kernel, sample_frac, centre_kernel = FALSE) {
-  if (sample_frac <= 0 || sample_frac > 1) {
-    stop("sample_frac must be in (0, 1]", call. = FALSE)
+#' @noRd
+.kema_check_dense_memory <- function(n_per_block, r_per_block, n_labeled,
+                                     max_bytes) {
+  est <- .kema_dense_memory_estimate(n_per_block, r_per_block, n_labeled)
+  if (is.finite(max_bytes) && est > max_bytes) {
+    stop(
+      "KEMA would allocate dense O(n^2) objects of roughly ",
+      format(structure(est, class = "object_size"), units = "auto"),
+      " (", sum(n_per_block), " samples, ", sum(r_per_block),
+      " kernel columns, ", n_labeled, " labelled rows), which exceeds ",
+      "backend_control$max_dense_bytes = ",
+      format(structure(max_bytes, class = "object_size"), units = "auto"),
+      ". Every KEMA backend, including 'operator_exact', forms dense kernel ",
+      "blocks and quotient matrices. Use sample_frac < 1 (REKEMA) to reduce ",
+      "the kernel rank, or raise max_dense_bytes if the memory is available.",
+      call. = FALSE
+    )
   }
-  
+  invisible(est)
+}
+
+#' Compute the KEMA kernel blocks
+#'
+#' @param strata Preprocessed domains (each with a dense `x`).
+#' @param kernel A kernlab kernel.
+#' @param landmarks `NULL` for full KEMA (square blocks `K(X_i, X_i)`), or a
+#'   list of landmark row indices per domain for REKEMA (`K(X_i, X_i[L_i, ])`).
+#' @return A list of sparse-format kernel blocks (dense content).
+#' @keywords internal
+#' @noRd
+compute_kernels <- function(strata, kernel, landmarks = NULL) {
   Ks <- vector("list", length(strata))
-  
+
   for (i in seq_along(strata)) {
     X <- strata[[i]]$x
-    
+
     if (!is.matrix(X) || nrow(X) == 0 || ncol(X) == 0) {
       stop("Data block ", i, " is not a valid matrix or is empty", call. = FALSE)
     }
-    
-    if (sample_frac < 1) {
-      # REKEMA: Landmark-based kernel approximation
-      n_landmarks <- max(1, round(sample_frac * nrow(X)))
-      
-      landmark_indices <- safe_compute({
-        if (n_landmarks >= nrow(X)) {
-          seq_len(nrow(X))
-        } else {
-          sort(sample(nrow(X), n_landmarks, replace = FALSE))
-        }
-      }, paste0("Landmark selection failed for data block ", i))
-      
-      X_landmarks <- X[landmark_indices, , drop = FALSE]
-      
-      # Paper's REKEMA: Direct kernel without K_rr^(-1/2) normalization
+
+    if (!is.null(landmarks)) {
+      X_landmarks <- X[landmarks[[i]], , drop = FALSE]
       K <- safe_compute(
         kernlab::kernelMatrix(kernel, X, X_landmarks),
         paste0("Kernel computation failed for data block ", i, " in REKEMA mode")
       )
-      
-      message("REKEMA block ", i, ": ", nrow(K), " x ", ncol(K), " kernel matrix")
-      
     } else {
-      # Full kernel computation
-      n_samples <- nrow(X)
-      
-      if (n_samples > 10000) {
-        warning("Computing full kernel matrix for ", n_samples, " samples in block ", i, 
-                ". Consider using sample_frac < 1 for large datasets.", call. = FALSE)
-      }
-      
       K <- safe_compute(
         kernlab::kernelMatrix(kernel, X),
         paste0("Full kernel computation failed for data block ", i)
       )
     }
-    
+
     if (any(!is.finite(K))) {
       stop("Kernel matrix for block ", i, " contains non-finite values", call. = FALSE)
     }
-    
-    if (centre_kernel) {
-      # Center kernel matrix: K_c = K - 1K/n - K1/n + 1K1/n^2
-      row_means <- Matrix::rowMeans(K)
-      col_means <- Matrix::colMeans(K)
-      grand_mean <- mean(K)
-      K <- K - outer(row_means, rep(1, ncol(K))) - outer(rep(1, nrow(K)), col_means) + grand_mean
-    }
-    
-    # Convert to sparse format
-    if (!methods::is(K, "sparseMatrix")) {
-      K <- as(K, "dgCMatrix")
-    }
-    
+
+    K <- as(as.matrix(K), "dgCMatrix")
     Ks[[i]] <- K
   }
-  
+
   Ks
 }
 
+# ---------------------------------------------------------------------------
+# KEMA kernel encoder (out-of-sample prediction)
+# ---------------------------------------------------------------------------
+
+#' Build the kernel encoder of a KEMA fit
+#'
+#' KEMA's embedding of a row `x` of domain `i` is `k(x, R_i) alpha_i`, where
+#' `R_i` are the reference rows of the domain (every preprocessed training
+#' row for full KEMA, the stored landmark rows for REKEMA) and `alpha_i` is the
+#' domain's block of dual coefficients. Training scores are exactly this map
+#' applied to the training rows.
+#'
 #' @keywords internal
-normalize_graphs <- function(Sl, Ws, Wd) {
-  # Extract and combine similarity graphs
-  W_list <- lapply(Sl, "[[", "G")
-  Wr_list <- lapply(Sl, "[[", "R")
-  
-  W <- Matrix::bdiag(W_list)
-  Wr <- Matrix::bdiag(Wr_list)
-  
-  # Remove diagonal from class similarity matrix
-  if (methods::is(Ws, "sparseMatrix")) {
-    diag_mask <- Ws@i == rep(0:(ncol(Ws)-1), diff(Ws@p))
-    if (any(diag_mask)) {
-      Ws@x[diag_mask] <- 0
-      Ws <- Matrix::drop0(Ws)
-    }
+#' @noRd
+.kema_build_encoder <- function(pdata, proclist, kernel, alpha, landmarks,
+                                domain_names) {
+  n_ref <- if (is.null(landmarks)) {
+    vapply(pdata, function(d) nrow(d$x), integer(1))
   } else {
-    diag(Ws) <- 0
-    Ws <- Matrix::Matrix(Ws, sparse = TRUE)
+    vapply(landmarks, length, integer(1))
   }
-  
-  # Ensure all matrices are sparse
-  if (!methods::is(W, "sparseMatrix")) W <- Matrix::Matrix(W, sparse = TRUE)
-  if (!methods::is(Wr, "sparseMatrix")) Wr <- Matrix::Matrix(Wr, sparse = TRUE)
-  if (!methods::is(Wd, "sparseMatrix")) Wd <- Matrix::Matrix(Wd, sparse = TRUE)
-  
-  # Validate dimensions
-  n_total <- nrow(W)
-  matrices_to_check <- list(W = W, Wr = Wr, Ws = Ws, Wd = Wd)
-  for (name in names(matrices_to_check)) {
-    mat <- matrices_to_check[[name]]
-    if (!all(dim(mat) == c(n_total, n_total))) {
-      stop("Matrix ", name, " has incorrect dimensions: ", 
-           paste(dim(mat), collapse = " x "), 
-           ", expected: ", n_total, " x ", n_total, call. = FALSE)
-    }
+  ends <- cumsum(n_ref)
+  starts <- c(1L, utils::head(ends, -1L) + 1L)
+  alpha <- as.matrix(alpha)
+  if (nrow(alpha) != sum(n_ref)) {
+    stop("KEMA dual coefficients do not match the reference rows.", call. = FALSE)
   }
-  
-  list(W = W, Wr = Wr, Ws = Ws, Wd = Wd)
+
+  reference <- lapply(seq_along(pdata), function(i) {
+    X <- as.matrix(pdata[[i]]$x)
+    if (is.null(landmarks)) X else X[landmarks[[i]], , drop = FALSE]
+  })
+  alpha_blocks <- lapply(seq_along(pdata), function(i) {
+    alpha[seq.int(starts[i], ends[i]), , drop = FALSE]
+  })
+  names(reference) <- domain_names
+  names(alpha_blocks) <- domain_names
+  if (!is.null(landmarks)) names(landmarks) <- domain_names
+
+  linear <- inherits(kernel, "vanillakernel")
+  structure(
+    list(
+      kernel = kernel,
+      reference = reference,
+      alpha = alpha_blocks,
+      landmarks = landmarks,
+      preproc = proclist,
+      domain_names = domain_names,
+      n_features = vapply(pdata, function(d) ncol(d$x), integer(1)),
+      form = if (is.null(landmarks)) "full" else "reduced",
+      linear_kernel = linear
+    ),
+    class = "kema_encoder"
+  )
 }
 
-#' Sanitize labels before computing similarity matrices
-#' 
-#' Ensures there are no NA values passed into simfun by replacing each missing
-#' label with a unique placeholder. Using unique placeholders prevents all
-#' unlabeled samples from being treated as the same class while still keeping
-#' the input compatible with functions like adjoin::binary_label_matrix,
-#' which cannot accept NA values.
+#' Exact linear loadings of a KEMA fit, when they exist
 #'
-#' @param labels Vector of labels that may contain NA entries
-#' @return Vector with the same length and names as `labels` but with all
-#'   missing entries replaced by unique placeholders.
+#' For the linear kernel `k(x, r) = x'r`, `k(x, R_i) alpha_i = x R_i' alpha_i`,
+#' so `R_i' alpha_i` are exact feature loadings. For any other kernel no
+#' feature-space loading reproduces the encoder, so the loadings are `NA`.
+#'
 #' @keywords internal
-sanitize_labels_for_similarity <- function(labels) {
-  if (!anyNA(labels)) {
-    return(labels)
+#' @noRd
+.kema_encoder_loadings <- function(encoder) {
+  ncomp <- ncol(encoder$alpha[[1L]])
+  blocks <- lapply(seq_along(encoder$alpha), function(i) {
+    if (isTRUE(encoder$linear_kernel)) {
+      crossprod(encoder$reference[[i]], encoder$alpha[[i]])
+    } else {
+      matrix(NA_real_, encoder$n_features[[i]], ncomp)
+    }
+  })
+  do.call(rbind, blocks)
+}
+
+#' @keywords internal
+#' @noRd
+.kema_block_index <- function(encoder, side) {
+  n_blocks <- length(encoder$alpha)
+  if (length(side) != 1L || is.na(side)) {
+    stop("`side` must identify exactly one KEMA domain.", call. = FALSE)
   }
-  
-  sanitized <- labels
-  if (!is.character(sanitized)) {
-    sanitized <- as.character(sanitized)
+  if (is.character(side)) {
+    idx <- match(side, encoder$domain_names)
+    if (is.na(idx) && side %in% c("i", "j")) {
+      idx <- if (identical(side, "i")) 1L else 2L
+    }
+    if (is.na(idx) || idx > n_blocks) {
+      stop("Unknown KEMA domain `", side, "`; expected one of: ",
+           paste(encoder$domain_names, collapse = ", "), ".", call. = FALSE)
+    }
+    return(as.integer(idx))
   }
-  
-  missing_idx <- which(is.na(sanitized))
-  if (!length(missing_idx)) {
-    return(sanitized)
+  if (!is.numeric(side) || abs(side - round(side)) > 1e-8 ||
+      side < 1 || side > n_blocks) {
+    stop("`side` must be a KEMA domain name or an index in 1..", n_blocks, ".",
+         call. = FALSE)
   }
-  
-  sanitized[missing_idx] <- sprintf("__UNLABELED__%05d", missing_idx)
-  if (!is.null(names(labels))) {
-    names(sanitized) <- names(labels)
+  as.integer(side)
+}
+
+#' @keywords internal
+#' @noRd
+.kema_apply_block_preproc <- function(pre, X) {
+  if (is.null(pre)) {
+    return(X)
   }
-  sanitized
+  if (is.function(pre)) {
+    return(as.matrix(pre(X)))
+  }
+  as.matrix(multivarious::transform(pre, X))
+}
+
+#' @keywords internal
+#' @noRd
+.kema_encode <- function(encoder, newX, block) {
+  X <- newX
+  if (is.data.frame(X) || methods::is(X, "Matrix")) {
+    X <- as.matrix(X)
+  } else if (is.null(dim(X))) {
+    X <- matrix(X, nrow = 1L)
+  }
+  if (!is.numeric(X)) {
+    stop("`newX` must be numeric.", call. = FALSE)
+  }
+  storage.mode(X) <- "double"
+  if (ncol(X) != encoder$n_features[[block]]) {
+    stop("`newX` has ", ncol(X), " columns; KEMA domain `",
+         encoder$domain_names[[block]], "` was fitted with ",
+         encoder$n_features[[block]], ".", call. = FALSE)
+  }
+  if (any(!is.finite(X))) {
+    stop("`newX` contains non-finite values.", call. = FALSE)
+  }
+  Xp <- .kema_apply_block_preproc(encoder$preproc[[block]], X)
+  K <- kernlab::kernelMatrix(encoder$kernel, Xp, encoder$reference[[block]])
+  out <- as.matrix(K) %*% encoder$alpha[[block]]
+  out <- matrix(as.numeric(out), nrow = nrow(X))
+  rownames(out) <- rownames(X)
+  out
+}
+
+#' Encode new observations with a fitted KEMA model
+#'
+#' KEMA is a kernel method: the embedding of a new row `x` of domain `i` is
+#' `k(phi_i(x), R_i) alpha_i`, where `phi_i` is the domain's fitted
+#' preprocessing, `R_i` are the domain's reference rows (all preprocessed
+#' training rows for full KEMA, the stored landmark rows for REKEMA,
+#' `sample_frac < 1`) and `alpha_i` are the domain's dual coefficients.
+#' Re-encoding a domain's training rows reproduces the stored training scores,
+#' and each row is encoded independently of the other rows in `newX`.
+#'
+#' @param fit_or_transform A KEMA fit returned by [kema()].
+#' @param newX New observations (rows) with the same columns as the domain's
+#'   training data. A numeric vector is treated as a single row.
+#' @param side Domain name or index. For two-domain fits `"i"` and `"j"` are
+#'   accepted as aliases of the first and second domain.
+#' @param ... Not used; supplying extra arguments is an error.
+#' @return A numeric matrix with one row per row of `newX` and `ncomp`
+#'   columns.
+#' @export
+oos_predict.kema_fit <- function(fit_or_transform, newX, side, ...) {
+  if (length(list(...))) {
+    stop("oos_predict() for KEMA fits accepts no additional arguments.",
+         call. = FALSE)
+  }
+  encoder <- fit_or_transform$encoder
+  if (!inherits(encoder, "kema_encoder")) {
+    stop("This KEMA fit has no kernel encoder; refit it with kema().",
+         call. = FALSE)
+  }
+  block <- .kema_block_index(encoder, side)
+  .kema_encode(encoder, newX, block)
+}
+
+#' Projection methods for KEMA fits
+#'
+#' A KEMA fit is a per-domain kernel encoder, not a linear projector on the
+#' concatenated feature space. `project_block()` encodes rows of one domain
+#' with the fitted kernel map (see [oos_predict.kema_fit()]); `project()` and
+#' `partial_project()` are not defined for KEMA and error rather than return
+#' a linear surrogate. The stored loadings `fit$v` are exact only for the
+#' linear kernel (`kernlab::vanilladot()`); for every other kernel they are
+#' `NA`.
+#'
+#' @param x A KEMA fit.
+#' @param new_data New observations of one domain.
+#' @param block Domain name or index.
+#' @param least_squares Must be `FALSE`; least-squares partial projection is
+#'   not defined for a kernel encoder.
+#' @param ... Not used.
+#' @return For `project_block()`, a numeric matrix of embeddings.
+#' @name kema_projection
+#' @exportS3Method multivarious::project_block
+project_block.kema_fit <- function(x, new_data, block, least_squares = FALSE, ...) {
+  if (isTRUE(least_squares)) {
+    stop("least_squares projection is not defined for KEMA kernel encoders.",
+         call. = FALSE)
+  }
+  oos_predict.kema_fit(x, new_data, side = block)
+}
+
+#' @rdname kema_projection
+#' @exportS3Method multivarious::project
+project.kema_fit <- function(x, new_data, ...) {
+  stop(
+    "project() is not defined for KEMA fits: KEMA encodes each domain with ",
+    "its own kernel map k(x, R_i) alpha_i, which has no linear loading on the ",
+    "concatenated features. Use oos_predict(fit, newX, side = <domain>) or ",
+    "project_block(fit, new_data, block = <domain>).",
+    call. = FALSE
+  )
+}
+
+#' @rdname kema_projection
+#' @exportS3Method multivarious::partial_project
+partial_project.kema_fit <- function(x, new_data, ...) {
+  stop(
+    "partial_project() is not defined for KEMA kernel encoders. Use ",
+    "oos_predict(fit, newX, side = <domain>) to encode complete rows of one domain.",
+    call. = FALSE
+  )
 }
 
 #' @keywords internal
@@ -652,23 +455,37 @@ sanitize_labels_for_similarity <- function(labels) {
 
 #' Kernel Manifold Alignment for Multidesign Data
 #'
-#' Performs Kernel Manifold Alignment on multidesign data structures. 
+#' Performs Kernel Manifold Alignment on multidesign data structures.
 #' Automatically splits data by subject variable and aligns domains.
 #'
 #' @param data A multidesign object containing data with subject groupings
-#' @param y Name of the label variable to use for alignment (can contain NA 
+#' @param y Name of the label variable to use for alignment (can contain NA
 #'   for unlabeled samples)
 #' @param subject Name of the subject variable that defines the domains/strata
-#' @param preproc Preprocessing function to apply to the data (default: 
+#' @param preproc Preprocessing function to apply to the data (default:
 #'   center())
 #' @param ncomp Number of components to extract (default: 2)
 #' @param knn Number of nearest neighbors for graph construction (default: 5)
-#' @param sigma Kernel bandwidth parameter (default: 0.73)
-#' @param u Trade-off parameter between data geometry and class alignment 
+#' @param sigma Scale parameter with two roles. It is always the heat-kernel
+#'   bandwidth of the within-domain kNN graph
+#'   (`adjoin::graph_weights(..., sigma = sigma)`). When `kernel = NULL` it is
+#'   also the inverse width of the default kernel `kernlab::rbfdot(sigma)`,
+#'   `k(x, y) = exp(-sigma * ||x - y||^2)`; these are different
+#'   parameterisations, so pass `kernel` explicitly to set the kernel width
+#'   independently of the graph. Default 0.73 (the hyperdesign method's `NULL`
+#'   resolves to 0.73).
+#' @param u Trade-off parameter between data geometry and class alignment
 #'   (0-1, default: 0.5)
-#' @param kernel Kernel function to use (default: coskern())
-#' @param sample_frac Fraction of samples to use for kernel approximation 
-#'   (default: 1)
+#' @param kernel A kernlab kernel object. The defaults differ by method: the
+#'   multidesign method defaults to `coskern()`; the hyperdesign method's
+#'   default `NULL` means `kernlab::rbfdot(sigma = sigma)`.
+#' @param sample_frac Fraction of each domain's rows kept as REKEMA landmarks
+#'   (default 1, full KEMA). The selected landmark rows are stored in
+#'   `fit$encoder$landmarks`.
+#' @param seed Optional seed for REKEMA landmark selection. `NULL` (default)
+#'   draws landmarks from the session RNG; a value draws them reproducibly
+#'   without disturbing the caller's RNG stream. No effect when
+#'   `sample_frac = 1`.
 #' @param use_laplacian Withdrawn compatibility argument. Supplying it now
 #'   errors because previous releases silently ignored it.
 #' @param solver Eigensolver contract. Only `"exact"` is supported. The former
@@ -677,10 +494,13 @@ sanitize_labels_for_similarity <- function(labels) {
 #' @param backend Backend for the original eigensolver. One of `"auto"`,
 #'   `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`. The legacy
 #'   `"operator_exact"` name requests the certified partial quotient solver,
-#'   with a certified dense fallback for small quotients; the quotient matrices
-#'   are currently materialized.
-#' @param backend_control Optional list controlling auto backend thresholds and
-#'   fidelity checks (passed through to `kema_orig()`).
+#'   with a certified dense fallback for small quotients. Every backend,
+#'   including `"operator_exact"`, materialises dense kernel blocks and dense
+#'   quotient matrices; a memory guard (`backend_control$max_dense_bytes`)
+#'   rejects problems whose estimated dense footprint is too large.
+#' @param backend_control Optional list controlling auto backend thresholds,
+#'   fidelity checks and the dense-memory guard (passed through to
+#'   `kema_orig()`).
 #' @param dweight,rweight,simfun,disfun Withdrawn compatibility arguments.
 #'   Supplying any of them errors because they were previously ignored.
 #' @param lambda Strictly positive Tikhonov regularization for the generalized
@@ -688,13 +508,19 @@ sanitize_labels_for_similarity <- function(labels) {
 #' @param centre_kernel Withdrawn compatibility argument. Supplying it errors.
 #' @param ... No additional arguments are accepted; unknown arguments error.
 #'
-#' @return A multiblock_biprojector object containing the KEMA alignment
+#' @return A KEMA fit of class `c("kema_fit", "kema_orig",
+#'   "multiblock_biprojector", ...)`. `fit$s` holds the training scores,
+#'   `fit$alpha` the dual coefficients and `fit$encoder` the kernel encoder
+#'   (kernel, preprocessing, reference or landmark rows, per-domain dual
+#'   coefficients). Use [oos_predict()] (or `project_block()`) to embed new
+#'   rows; generic `project()` errors because KEMA has no linear loading.
+#'   `fit$v` is exact only for the linear kernel and is `NA` otherwise.
 #'
 #' @examples
 #' \donttest{
 #' # Example with multidesign data
 #' library(multidesign)
-#' 
+#'
 #' # Create synthetic multi-subject data
 #' set.seed(123)
 #' data_design <- expand.grid(
@@ -702,18 +528,18 @@ sanitize_labels_for_similarity <- function(labels) {
 #'   condition = factor(c("A", "B")),
 #'   trial = 1:10
 #' )
-#' 
+#'
 #' # Generate synthetic data matrix
 #' n_obs <- nrow(data_design)
 #' n_features <- 20
 #' X <- matrix(rnorm(n_obs * n_features), n_obs, n_features)
-#' 
+#'
 #' # Create multidesign object
 #' md <- multidesign(X, data_design)
-#' 
+#'
 #' # Run KEMA alignment across subjects
 #' result <- kema(md, y = condition, subject = subject, ncomp = 2)
-#' 
+#'
 #' # Semi-supervised learning with missing labels
 #' data_design$condition[sample(nrow(data_design), 20)] <- NA
 #' md_semi <- multidesign(X, data_design)
@@ -725,14 +551,14 @@ sanitize_labels_for_similarity <- function(labels) {
 #' @export
 #' @import Matrix
 kema.multidesign <- function(data, y,
-                             subject, 
-                             preproc=center(), 
-                             ncomp=2, 
-                             knn=5, 
-                             sigma=.73, u=.5, 
-                             kernel=coskern(), 
+                             subject,
+                             preproc=center(),
+                             ncomp=2,
+                             knn=5,
+                             sigma=.73, u=.5,
+                             kernel=coskern(),
                              sample_frac=1,
-                             use_laplacian=TRUE, 
+                             use_laplacian=TRUE,
                              solver="exact",
                              backend="auto",
                              backend_control=NULL,
@@ -742,8 +568,9 @@ kema.multidesign <- function(data, y,
                              disfun=NULL,
                              lambda=.0001,
                              centre_kernel=FALSE,
+                             seed=NULL,
                              ...) {
-  
+
   subject <- rlang::enquo(subject)
   y <- rlang::enquo(y)
 
@@ -760,17 +587,11 @@ kema.multidesign <- function(data, y,
   )
   .validate_kema_solver(solver)
 
-  if (is.null(kernel)) {
-    if (is.null(sigma)) {
-      sigma <- 0.73
-    }
-    if (requireNamespace("kernlab", quietly = TRUE)) {
-      kernel <- kernlab::rbfdot(sigma = sigma)
-    } else {
-      kernel <- coskern()
-    }
-  } else if (is.null(sigma)) {
+  if (is.null(sigma)) {
     sigma <- 0.73
+  }
+  if (is.null(kernel)) {
+    kernel <- kernlab::rbfdot(sigma = sigma)
   }
 
   result <- kema_orig.multidesign(
@@ -786,7 +607,8 @@ kema.multidesign <- function(data, y,
     sample_frac = sample_frac,
     lambda = lambda,
     backend = backend,
-    backend_control = backend_control
+    backend_control = backend_control,
+    seed = seed
   )
 
   # Preserve legacy class tag for downstream code using `kema()`.
@@ -805,23 +627,37 @@ kema.multidesign <- function(data, y,
 
 #' Kernel Manifold Alignment (KEMA) for Hyperdesign Data
 #'
-#' Performs Kernel Manifold Alignment on hyperdesign data structures. 
-#' Projects data from multiple domains into a shared latent space while 
+#' Performs Kernel Manifold Alignment on hyperdesign data structures.
+#' Projects data from multiple domains into a shared latent space while
 #' preserving manifold structure and aligning same-class samples.
 #'
 #' @param data A hyperdesign object containing multiple data domains
-#' @param y Name of the label variable to use for alignment (can contain NA 
+#' @param y Name of the label variable to use for alignment (can contain NA
 #'   for unlabeled samples)
-#' @param preproc Preprocessing function to apply to the data (default: 
+#' @param preproc Preprocessing function to apply to the data (default:
 #'   center())
 #' @param ncomp Number of components to extract (default: 2)
 #' @param knn Number of nearest neighbors for graph construction (default: 5)
-#' @param sigma Kernel bandwidth parameter (default: 0.73)
-#' @param u Trade-off parameter between data geometry and class alignment 
+#' @param sigma Scale parameter with two roles. It is always the heat-kernel
+#'   bandwidth of the within-domain kNN graph
+#'   (`adjoin::graph_weights(..., sigma = sigma)`). When `kernel = NULL` it is
+#'   also the inverse width of the default kernel `kernlab::rbfdot(sigma)`,
+#'   `k(x, y) = exp(-sigma * ||x - y||^2)`; these are different
+#'   parameterisations, so pass `kernel` explicitly to set the kernel width
+#'   independently of the graph. Default 0.73 (the hyperdesign method's `NULL`
+#'   resolves to 0.73).
+#' @param u Trade-off parameter between data geometry and class alignment
 #'   (0-1, default: 0.5)
-#' @param kernel Kernel function to use (default: coskern())
-#' @param sample_frac Fraction of samples to use for kernel approximation 
-#'   (default: 1)
+#' @param kernel A kernlab kernel object. The defaults differ by method: the
+#'   multidesign method defaults to `coskern()`; the hyperdesign method's
+#'   default `NULL` means `kernlab::rbfdot(sigma = sigma)`.
+#' @param sample_frac Fraction of each domain's rows kept as REKEMA landmarks
+#'   (default 1, full KEMA). The selected landmark rows are stored in
+#'   `fit$encoder$landmarks`.
+#' @param seed Optional seed for REKEMA landmark selection. `NULL` (default)
+#'   draws landmarks from the session RNG; a value draws them reproducibly
+#'   without disturbing the caller's RNG stream. No effect when
+#'   `sample_frac = 1`.
 #' @param use_laplacian Withdrawn compatibility argument. Supplying it now
 #'   errors because previous releases silently ignored it.
 #' @param solver Eigensolver contract. Only `"exact"` is supported. The former
@@ -834,7 +670,8 @@ kema.multidesign <- function(data, y,
 #' @param centre_kernel Withdrawn compatibility argument. Supplying it errors.
 #' @param ... No additional arguments are accepted; unknown arguments error.
 #'
-#' @return A multiblock_biprojector object containing the KEMA alignment
+#' @return A KEMA fit of class `c("kema_fit", "kema_orig",
+#'   "multiblock_biprojector", ...)`; see the multidesign method.
 #'
 #' @examples
 #' \donttest{
@@ -850,20 +687,24 @@ kema.multidesign <- function(data, y,
 #'   design = data.frame(labels = sample(c("A", "B"), 50, TRUE))
 #' )
 #' hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign")
-#' 
+#'
 #' # Run KEMA with default settings
 #' result <- kema(hd, y = labels, ncomp = 2)
-#' 
+#'
+#' # Embed new rows of domain 2 with the fitted kernel encoder
+#' new_rows <- matrix(rnorm(10), 5, 2)
+#' oos_predict(result, new_rows, side = "domain2")
+#'
 #' # Semi-supervised learning with missing labels
 #' hd_semi <- hd
 #' hd_semi$domain1$design$labels[1:10] <- NA  # Mark some samples as unlabeled
 #' result_semi <- kema(hd_semi, y = labels, ncomp = 2)
-#' 
+#'
 #' # Use exact solver for highest accuracy
 #' result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)
-#' 
-#' # Use REKEMA for large datasets
-#' result_rekema <- kema(hd, y = labels, sample_frac = 0.5, ncomp = 2)
+#'
+#' # Use REKEMA for large datasets (reproducible landmarks)
+#' result_rekema <- kema(hd, y = labels, sample_frac = 0.5, ncomp = 2, seed = 1)
 #' }
 #'
 #' @details
@@ -875,21 +716,21 @@ kema.multidesign <- function(data, y,
 #' callers receive an actionable error. They are not silently ignored.
 #'
 #' @references
-#' Tuia, D., & Camps-Valls, G. (2016). Kernel manifold alignment for domain 
+#' Tuia, D., & Camps-Valls, G. (2016). Kernel manifold alignment for domain
 #' adaptation. PLoS ONE, 11(2), e0148655.
 #'
 #' @rdname kema
 #' @method kema hyperdesign
 #' @export
 kema.hyperdesign <- function(data, y,
-                             preproc=center(), 
-                             ncomp=2, 
-                             knn=5, 
-                             sigma=NULL, 
-                             u=.5, 
-                             kernel=NULL, 
+                             preproc=center(),
+                             ncomp=2,
+                             knn=5,
+                             sigma=NULL,
+                             u=.5,
+                             kernel=NULL,
                              sample_frac=1,
-                             use_laplacian=TRUE, 
+                             use_laplacian=TRUE,
                              solver="exact",
                              backend="auto",
                              backend_control=NULL,
@@ -899,8 +740,9 @@ kema.hyperdesign <- function(data, y,
                              disfun=NULL,
                              lambda=.0001,
                              centre_kernel=FALSE,
+                             seed=NULL,
                              ...) {
-  
+
   y <- rlang::enquo(y)
 
   .reject_ignored_kema_arguments(
@@ -923,18 +765,11 @@ kema.hyperdesign <- function(data, y,
   chk::chk_true(knn > 0)
   chk::chk_range(u, c(0,1))
 
-  # Legacy compatibility: keep old arguments in signature but route to original KEMA.
-  if (is.null(kernel)) {
-    if (is.null(sigma)) {
-      sigma <- 0.73
-    }
-    if (requireNamespace("kernlab", quietly = TRUE)) {
-      kernel <- kernlab::rbfdot(sigma = sigma)
-    } else {
-      kernel <- coskern()
-    }
-  } else if (is.null(sigma)) {
+  if (is.null(sigma)) {
     sigma <- 0.73
+  }
+  if (is.null(kernel)) {
+    kernel <- kernlab::rbfdot(sigma = sigma)
   }
 
   result <- kema_orig.hyperdesign(
@@ -949,7 +784,8 @@ kema.hyperdesign <- function(data, y,
     sample_frac = sample_frac,
     lambda = lambda,
     backend = backend,
-    backend_control = backend_control
+    backend_control = backend_control,
+    seed = seed
   )
 
   # Preserve legacy class tag for downstream code using `kema()`.
@@ -964,13 +800,13 @@ kema.hyperdesign <- function(data, y,
   result$regression_quality <- NULL
   result$retry_info <- NULL
   result
-  
+
 }
 
 
 #' Choose optimal sigma for RBF kernel
-#' 
-#' Estimates a reasonable sigma parameter for RBF kernels using the median 
+#'
+#' Estimates a reasonable sigma parameter for RBF kernels using the median
 #' pairwise distance heuristic, which often works well in practice.
 #'
 #' @param X Data matrix (samples x features)
@@ -986,41 +822,41 @@ choose_sigma <- function(X, sample_size = 1000) {
   if (!is.matrix(X) && !methods::is(X, "Matrix")) {
     stop("X must be a matrix", call. = FALSE)
   }
-  
+
   n <- nrow(X)
   if (n < 2) {
     return(1.0)  # Default fallback
   }
-  
+
   # For large datasets, sample pairs to avoid O(n^2) computation
   if (n > sqrt(sample_size)) {
-    indices <- sample(n, min(n, sqrt(sample_size)))
+    indices <- sample.int(n, min(n, floor(sqrt(sample_size))))
     X_sample <- X[indices, , drop = FALSE]
   } else {
     X_sample <- X
   }
-  
+
   # Compute pairwise distances efficiently
-  distances <- as.matrix(dist(X_sample))
-  
+  distances <- as.matrix(dist(as.matrix(X_sample)))
+
   # Remove diagonal (zero distances)
   distances <- distances[upper.tri(distances)]
-  
+
   if (length(distances) == 0) {
     return(1.0)  # Fallback
   }
-  
+
   # Median distance heuristic
   median_dist <- median(distances, na.rm = TRUE)
-  
+
   # Convert to RBF sigma: typical rule of thumb is sigma = median_dist / sqrt(2)
   sigma <- median_dist / sqrt(2)
-  
+
   # Ensure reasonable bounds
   if (!is.finite(sigma) || sigma <= 0) {
     sigma <- 1.0
   }
-  
+
   sigma
 }
 
@@ -1029,8 +865,6 @@ choose_sigma <- function(X, sample_size = 1000) {
 #' @export
 kema.default <- function(data, ...) {
   stop("kema() requires either a hyperdesign or multidesign object. ",
-       "Got: ", paste(class(data), collapse = ", "), 
+       "Got: ", paste(class(data), collapse = ", "),
        ". See ?kema for usage examples.", call. = FALSE)
 }
-
-  
