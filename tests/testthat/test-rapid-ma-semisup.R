@@ -174,6 +174,14 @@ test_that("sparse relation propagation corrects locally inconsistent probabiliti
   expect_identical(unname(propagated[1L, ]), c(1, 0, 0))
   expect_identical(unname(propagated[5L, ]), c(0, 1, 0))
   expect_equal(rowSums(propagated), rep(1, 8L), tolerance = 1e-12)
+
+  # A named weight vector without the relation's name defaults to weight 1
+  # instead of failing with "subscript out of bounds".
+  defaulted <- manifoldalign:::.rapid_propagate_probabilities(
+    list(probability), labels, relation_states,
+    list(list(relation_weights = c(other = 0.5))), control
+  )[[1L]]
+  expect_identical(defaulted, propagated)
 })
 
 test_that("external supervised probabilities can seed propagation without new labels", {
@@ -273,6 +281,33 @@ test_that("pseudo-label selection is guarded, balanced, and can be disabled", {
     list(c(rep("a", 8L), "b")), c("a", "b"), control
   )
   expect_lt(thresholds[["b"]], thresholds[["a"]])
+
+  # `max_pseudo_fraction` is a hard maximum, also when the budget is smaller
+  # than the number of classes (6 eligible unlabelled rows, two classes).
+  for (fraction in c(0.1, 0.2, 0.34, 0.5, 1)) {
+    capped <- manifoldalign:::.rapid_select_pseudolabels(
+      list(probability), labels, list(rep(TRUE, 8L)), relation_states,
+      diffusion_fits, prototypes,
+      utils::modifyList(unclass(control), list(max_pseudo_fraction = fraction))
+    )
+    expect_lte(length(capped$selected[[1L]]), floor(fraction * 6))
+  }
+  single <- manifoldalign:::.rapid_select_pseudolabels(
+    list(probability), labels, list(rep(TRUE, 8L)), relation_states,
+    diffusion_fits, prototypes,
+    utils::modifyList(unclass(control), list(max_pseudo_fraction = 0.2))
+  )
+  # The single slot goes to the most confident candidate (row 2 or 6, 0.90).
+  expect_length(single$selected[[1L]], 1L)
+  expect_true(single$selected[[1L]] %in% c(2L, 6L))
+
+  # Named relation weights without an entry for a relation default to 1.
+  unnamed_weight <- list(list(relation_weights = c(other = 0.5)))
+  defaulted <- manifoldalign:::.rapid_select_pseudolabels(
+    list(probability), labels, list(rep(TRUE, 8L)), relation_states,
+    unnamed_weight, prototypes, control
+  )
+  expect_identical(defaulted$selected, selection$selected)
 })
 
 test_that("guarded refinement improves a hard held-out structured fixture", {
@@ -311,7 +346,9 @@ test_that("guarded refinement improves a hard held-out structured fixture", {
   ))
   for (m in seq_along(fixture$labels)) {
     index <- which(!is.na(fixture$labels[[m]]))
-    expect_identical(refined$predictions[[m]][index], fixture$labels[[m]][index])
+    expect_identical(
+      unname(refined$predictions[[m]][index]), fixture$labels[[m]][index]
+    )
   }
 
   repeated <- rapid_ma_semisup(fit, control = refined$semisup$control)

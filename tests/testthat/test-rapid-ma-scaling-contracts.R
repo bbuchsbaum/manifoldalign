@@ -72,7 +72,7 @@ test_that("multi-view matcher retains only a bounded linear candidate graph", {
       nrow(matching$matches) * matching$candidate_cap
     )
     expect_equal(matching$coverage, 1)
-    expect_false(matching$dense_pairwise_allocated)
+    expect_lt(matching$candidate_density, 1)
   }
   retained <- vapply(
     matchings, function(x) as.numeric(utils::object.size(x)), numeric(1)

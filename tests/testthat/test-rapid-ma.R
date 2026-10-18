@@ -382,3 +382,69 @@ test_that("damped orthogonal maps stay orthogonal (B3.22)", {
     expect_equal(crossprod(map$coef), diag(4L), tolerance = 1e-10)
   }
 })
+
+test_that("a stall caused by failing candidates warns and keeps the last state", {
+  d1 <- make_rapid_domain(24L, 4L, 1611L)
+  d2 <- make_rapid_domain(21L, 5L, 1612L)
+  original <- manifoldalign:::.rapid_evaluate_state
+  local_mocked_bindings(
+    .rapid_evaluate_state = function(..., warm_start = NULL) {
+      if (!is.null(warm_start)) stop("synthetic candidate failure")
+      original(..., warm_start = warm_start)
+    },
+    .package = "manifoldalign"
+  )
+  expect_warning(
+    fit <- rapid_ma_fit_list(
+      list(d1$X, d2$X),
+      labels = list(sparse_labels(d1$truth, 3L), sparse_labels(d2$truth, 3L)),
+      ncomp = 3L,
+      control = list(max_iter = 2L, min_iter = 1L, max_backtracks = 1L)
+    ),
+    "stalled at iteration 1.*synthetic candidate failure"
+  )
+  expect_identical(fit$convergence$status, "stalled")
+  expect_identical(fit$convergence$last_candidate_error, "synthetic candidate failure")
+  expect_identical(tail(fit$objective_history$status, 1L), "candidate_error")
+  expect_identical(fit$convergence$accepted_iterations, 0L)
+})
+
+test_that("missing-position indicators never alias a coordinate axis", {
+  d1 <- make_rapid_domain(26L, 4L, 1613L)
+  d2 <- make_rapid_domain(24L, 4L, 1614L)
+  positions_2d <- d1$position
+  positions_2d[c(3L, 9L), ] <- NA_real_
+  positions_3d <- cbind(d2$position, height = seq_len(24L) / 24)
+  fit <- rapid_ma_fit_list(
+    list(a = d1$X, b = d2$X),
+    labels = list(sparse_labels(d1$truth, 3L), sparse_labels(d2$truth, 3L)),
+    positions = list(positions_2d, positions_3d),
+    ncomp = 3L,
+    control = list(max_iter = 1L, min_iter = 1L)
+  )
+  structures <- stats::setNames(fit$preprocessing$structures, c("a", "b"))
+  expect_true("structure__position_missing" %in% colnames(structures$a))
+  expect_identical(
+    unname(structures$a[, "structure__position_missing"]),
+    as.numeric(seq_len(26L) %in% c(3L, 9L))
+  )
+  expect_true(all(structures$b[, "structure__position_missing"] == 0))
+  expect_true(all(structures$a[, "structure__coordinate_3"] == 0))
+  expect_equal(
+    unname(structures$b[, "structure__coordinate_3"]),
+    unname(fit$relations$b$views$position$view[, 3L])
+  )
+})
+
+test_that("non-default UOT position weights are reported as inert", {
+  d1 <- make_rapid_domain(20L, 4L, 1615L)
+  d2 <- make_rapid_domain(19L, 4L, 1616L)
+  expect_warning(
+    rapid_ma_fit_list(
+      list(d1$X, d2$X), positions = list(d1$position, d2$position),
+      ncomp = 3L,
+      control = list(max_iter = 1L, uot = list(position_weight = 2))
+    ),
+    "position_weight` has no effect"
+  )
+})

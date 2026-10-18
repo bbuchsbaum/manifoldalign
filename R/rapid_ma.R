@@ -329,8 +329,13 @@
     probability <- probability / pmax(rowSums(probability), 1e-15)
     colnames(probability) <- prototypes$class_levels
     choice <- max.col(probability, ties.method = "first")
-    predictions[[m]] <- prototypes$class_levels[choice]
-    confidence[[m]] <- probability[cbind(seq_len(nrow(probability)), choice)]
+    predictions[[m]] <- stats::setNames(
+      prototypes$class_levels[choice], rownames(probability)
+    )
+    confidence[[m]] <- stats::setNames(
+      probability[cbind(seq_len(nrow(probability)), choice)],
+      rownames(probability)
+    )
     probabilities[[m]] <- probability
 
     observed <- which(!is.na(labels[[m]]))
@@ -443,7 +448,17 @@
   X <- .rapid_validate_domain_data(data, domain_names)
   sizes <- vapply(X, nrow, integer(1))
   names(sizes) <- domain_names
+  row_names <- lapply(X, rownames)
   labels <- .rapid_validate_domain_labels(labels, sizes, domain_names)
+  default_position_weight <- .rapid_uot_control()$position_weight
+  if (!identical(control$uot$position_weight, default_position_weight)) {
+    warning(
+      "`uot$position_weight` has no effect in rapid_ma(): position ",
+      "coordinates enter the structure cost view, weighted by ",
+      "`uot$structure_weight`.",
+      call. = FALSE
+    )
+  }
   relations <- .rapid_named_domain_argument(relations, domain_names, "relations")
   positions <- .rapid_named_domain_argument(positions, domain_names, "positions")
   attributes <- .rapid_named_domain_argument(attributes, domain_names, "attributes")
@@ -478,7 +493,17 @@
     signature <- x$structure
     position <- x$position
     if (!is.null(position) && ncol(position)) {
-      colnames(position) <- paste0("coordinate_", seq_len(ncol(position)))
+      # Coordinates are aligned across domains by axis; the missing-position
+      # indicator keeps its own name so it never aliases a coordinate axis of
+      # a domain with more position dimensions.
+      metadata <- x$relations$views$position$metadata
+      input_dim <- metadata$input_dim
+      if (is.null(input_dim)) input_dim <- ncol(position)
+      extra <- ncol(position) - input_dim
+      colnames(position) <- c(
+        paste0("coordinate_", seq_len(input_dim)),
+        if (extra > 0L) "position_missing"
+      )
       signature <- cbind(signature, position)
     }
     signature
@@ -607,6 +632,14 @@
         iteration, evaluation, FALSE, 0, control$max_backtracks,
         if (is.null(candidate_error)) "rolled_back" else "candidate_error"
       )
+      if (!is.null(candidate_error)) {
+        warning(
+          "rapid_ma stalled at iteration ", iteration, ": the last candidate ",
+          "update failed (", candidate_error, "). Returning the last accepted ",
+          "state.",
+          call. = FALSE
+        )
+      }
       break
     }
     if (identical(status, "converged")) break
@@ -619,6 +652,12 @@
   probabilities <- evaluation$prediction$probabilities
   predictions <- evaluation$prediction$predictions
   confidence <- evaluation$prediction$confidence
+  for (m in seq_along(domain_names)) {
+    rownames(couplings[[m]]) <- row_names[[m]]
+    rownames(probabilities[[m]]) <- row_names[[m]]
+    names(predictions[[m]]) <- row_names[[m]]
+    names(confidence[[m]]) <- row_names[[m]]
+  }
   names(probabilities) <- names(predictions) <- names(confidence) <- domain_names
   dropped_mass <- vapply(
     evaluation$uot, function(x) x$diagnostics$dropped_fraction, numeric(1)

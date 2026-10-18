@@ -56,8 +56,18 @@ rapid_ma_aligner <- function() {
     stop("`side` must identify exactly one fitted domain.", call. = FALSE)
   }
   if (is.character(side)) {
-    if (side %in% c("i", "j")) side <- if (side == "i") 1L else 2L
-    else side <- match(side, fit$domain_names)
+    # A fitted domain name wins over the pairwise aliases "i"/"j", so a
+    # domain literally named "i" or "j" cannot be shadowed by the alias.
+    named <- match(side, fit$domain_names)
+    side <- if (!is.na(named)) {
+      named
+    } else if (identical(side, "i")) {
+      1L
+    } else if (identical(side, "j")) {
+      2L
+    } else {
+      NA_integer_
+    }
   }
   if (!is.numeric(side) || !is.finite(side) ||
       abs(side - round(side)) > 1e-8) {
@@ -95,7 +105,14 @@ fit_pair.rapid_ma_aligner <- function(
   match_control = list(),
   ...
 ) {
-  domains <- list(i = as.matrix(X_i), j = as.matrix(X_j))
+  if (!is.null(links) && !isTRUE(fine_match)) {
+    stop(
+      "`links` are used only as fine-match anchors; they require ",
+      "`fine_match = TRUE`.",
+      call. = FALSE
+    )
+  }
+  domains <- list(i = X_i, j = X_j)
   if (!is.null(labels)) labels <- .rapid_adapter_domains(labels)
   relations <- .rapid_adapter_domains(relations)
   positions <- .rapid_adapter_domains(positions)
@@ -317,6 +334,78 @@ fit_pair.rapid_ma_aligner <- function(
   output / sum(output)
 }
 
+# Row-wise median of the finite entries of a neighbour-distance matrix (NA
+# for rows without finite entries). nn2 returns ascending rows, so the median
+# is read off the middle columns; other rows fall back to stats::median().
+.rapid_row_finite_median <- function(distance) {
+  n <- nrow(distance)
+  k <- ncol(distance)
+  out <- rep(NA_real_, n)
+  if (!n || !k) return(out)
+  finite_rows <- rowSums(!is.finite(distance)) == 0L
+  ascending <- if (k > 1L) {
+    rowSums(distance[, -1L, drop = FALSE] < distance[, -k, drop = FALSE]) == 0L
+  } else {
+    rep(TRUE, n)
+  }
+  fast <- which(finite_rows & ascending)
+  if (length(fast)) {
+    if (k %% 2L) {
+      out[fast] <- distance[fast, (k + 1L) %/% 2L]
+    } else {
+      out[fast] <- rowMeans(
+        distance[fast, c(k %/% 2L, k %/% 2L + 1L), drop = FALSE]
+      )
+    }
+  }
+  for (row in setdiff(seq_len(n), fast)) {
+    finite <- distance[row, is.finite(distance[row, ])]
+    if (length(finite)) out[[row]] <- stats::median(finite)
+  }
+  out
+}
+
+# Gaussian interpolation weights over bounded neighbours. Rows with an exact
+# (within `zero_tolerance`) match average their exact neighbours; other rows
+# use a Gaussian kernel whose bandwidth is the row's median finite distance.
+.rapid_kernel_weights <- function(distance, zero_tolerance) {
+  weight <- matrix(0, nrow(distance), ncol(distance))
+  if (!length(weight)) return(weight)
+  finite <- is.finite(distance)
+  exact <- finite & distance <= zero_tolerance
+  exact_rows <- rowSums(exact) > 0L
+  if (any(exact_rows)) {
+    hits <- exact[exact_rows, , drop = FALSE] * 1
+    weight[exact_rows, ] <- hits / rowSums(hits)
+  }
+  rest <- which(!exact_rows)
+  if (length(rest)) {
+    D <- distance[rest, , drop = FALSE]
+    scale <- .rapid_row_finite_median(D)
+    scale[is.na(scale)] <- 1
+    bad <- !is.finite(scale) | scale <= 1e-12
+    if (any(bad)) {
+      largest <- D[bad, , drop = FALSE]
+      largest[!is.finite(largest)] <- -Inf
+      largest <- if (ncol(largest) > 1L) {
+        do.call(pmax, unname(as.data.frame(largest)))
+      } else {
+        largest[, 1L]
+      }
+      scale[bad] <- pmax(largest, 1)
+    }
+    value <- exp(pmax(-0.5 * (D / scale)^2, -700))
+    value[!is.finite(value)] <- 0
+    empty <- which(rowSums(value) == 0)
+    if (length(empty)) {
+      nearest <- max.col(-D[empty, , drop = FALSE], ties.method = "first")
+      value[cbind(empty, nearest)] <- 1
+    }
+    weight[rest, ] <- value / rowSums(value)
+  }
+  weight
+}
+
 .rapid_oos_weights <- function(training, query, k, zero_tolerance) {
   k <- min(.rapid_int_scalar(k, "k"), nrow(training))
   zero_tolerance <- .rapid_number_scalar(
@@ -325,21 +414,9 @@ fit_pair.rapid_ma_aligner <- function(
   neighbours <- RANN::nn2(data = training, query = query, k = k)
   distance <- neighbours$nn.dists
   index <- neighbours$nn.idx
-  weight <- matrix(0, nrow(distance), ncol(distance))
-  for (row in seq_len(nrow(distance))) {
-    exact <- is.finite(distance[row, ]) & distance[row, ] <= zero_tolerance
-    if (any(exact)) {
-      weight[row, exact] <- 1 / sum(exact)
-    } else {
-      finite <- distance[row, is.finite(distance[row, ])]
-      scale <- if (length(finite)) stats::median(finite) else 1
-      if (!is.finite(scale) || scale <= 1e-12) scale <- max(finite, 1)
-      value <- exp(pmax(-0.5 * (distance[row, ] / scale)^2, -700))
-      value[!is.finite(value)] <- 0
-      if (sum(value) == 0) value[[which.min(distance[row, ])]] <- 1
-      weight[row, ] <- value / sum(value)
-    }
-  }
+  if (is.null(dim(distance))) distance <- matrix(distance, ncol = k)
+  if (is.null(dim(index))) index <- matrix(index, ncol = k)
+  weight <- .rapid_kernel_weights(distance, zero_tolerance)
   interpolation <- Matrix::sparseMatrix(
     i = rep(seq_len(nrow(index)), each = ncol(index)),
     j = as.integer(c(t(index))),
@@ -412,12 +489,17 @@ oos_predict.rapid_ma <- function(
          call. = FALSE)
   }
   feature_query <- .rapid_apply_oos_feature_view(newX, metadata)
-  feature_neighbours <- .rapid_oos_weights(
-    training, feature_query, k, zero_tolerance
-  )
   weights <- .rapid_oos_view_weights(view_weights)
   view_state <- list()
-  if (weights[["feature"]] > 0) view_state$feature <- feature_neighbours
+  # The feature nearest-neighbour search runs only when the feature view is
+  # used; position- or attribute-only queries skip it.
+  feature_neighbours <- NULL
+  if (weights[["feature"]] > 0) {
+    feature_neighbours <- .rapid_oos_weights(
+      training, feature_query, k, zero_tolerance
+    )
+    view_state$feature <- feature_neighbours
+  }
 
   retained_views <- fit_or_transform$relations[[m]]$views
   if (weights[["position"]] > 0) {
@@ -480,9 +562,11 @@ oos_predict.rapid_ma <- function(
 
   # An exact feature match identifies a retained row. Preserve the historical
   # exact-reapplication contract even when auxiliary views contain duplicates.
-  exact_feature <- rowSums(
-    feature_neighbours$distance <= zero_tolerance
-  ) > 0L
+  exact_feature <- if (is.null(feature_neighbours)) {
+    rep(FALSE, nrow(feature_query))
+  } else {
+    rowSums(feature_neighbours$distance <= zero_tolerance) > 0L
+  }
   if (weights[["feature"]] > 0 && any(exact_feature)) {
     embedding[exact_feature, ] <- as.matrix(
       feature_neighbours$interpolation[exact_feature, , drop = FALSE] %*%
@@ -496,9 +580,13 @@ oos_predict.rapid_ma <- function(
   colnames(embedding) <- colnames(fit_or_transform$scores[[m]])
   probability <- probability / pmax(rowSums(probability), 1e-15)
   colnames(probability) <- fit_or_transform$prototypes$class_levels
+  query_names <- rownames(newX)
+  rownames(embedding) <- rownames(probability) <- query_names
   choice <- max.col(probability, ties.method = "first")
-  predicted <- colnames(probability)[choice]
-  confidence <- probability[cbind(seq_len(nrow(probability)), choice)]
+  predicted <- stats::setNames(colnames(probability)[choice], query_names)
+  confidence <- stats::setNames(
+    probability[cbind(seq_len(nrow(probability)), choice)], query_names
+  )
 
   if (type == "embedding") return(embedding)
   if (type == "probabilities") return(probability)
@@ -970,7 +1058,8 @@ rapid_ma_match <- function(
       from = fit$domain_names[[source]],
       to = fit$domain_names[[target]],
       weights = view_weights,
-      dense_pairwise_allocated = FALSE
+      candidate_density = as.numeric(length(edge_source)) /
+        (as.double(n_source) * as.double(n_target))
     ),
     class = "rapid_ma_matching"
   )
@@ -990,8 +1079,14 @@ relative_transform.rapid_ma_pair_fit <- function(
   if (is.null(fit$matching)) {
     stop("This pair fit was created with `fine_match = FALSE`.", call. = FALSE)
   }
+  # The assignment is target x source. Row-normalize in both directions so a
+  # many-to-one (independent retrieval) match averages rather than sums rows.
   op <- fit$matching$assignment
-  if (from == "j" && to == "i") op <- .normalize_rows_sparse(Matrix::t(op))
+  op <- if (from == "j" && to == "i") {
+    .normalize_rows_sparse(Matrix::t(op))
+  } else {
+    .normalize_rows_sparse(op)
+  }
   new_align_transform(
     "perm", op, from = from, to = to,
     dim = c(fit$n1, fit$n2)

@@ -259,7 +259,10 @@ test_that("bounded fine matching handles rectangles and fixes anchors", {
     52L - Matrix::nnzero(matching$assignment)
   )
   expect_lte(matching$candidate_edges, 52L * 12L)
-  expect_false(matching$dense_pairwise_allocated)
+  expect_equal(
+    matching$candidate_density,
+    matching$candidate_edges / prod(dim(matching$assignment))
+  )
 
   forward <- relative_transform(pair, from = "i", to = "j")
   reverse <- relative_transform(pair, from = "j", to = "i")
@@ -336,7 +339,10 @@ test_that("multi-view matching retrieves exact shared positions without dense pa
   expect_identical(matching$assignment_mode, "independent")
   expect_lte(matching$candidate_edges, 40L * 8L)
   expect_equal(Matrix::nnzero(matching$assignment), 40L)
-  expect_false(matching$dense_pairwise_allocated)
+  expect_equal(
+    matching$candidate_density,
+    matching$candidate_edges / prod(dim(matching$assignment))
+  )
   expect_error(
     rapid_ma_match(fit, candidate_views = "not-a-view"),
     "unique subset"
@@ -345,4 +351,173 @@ test_that("multi-view matching retrieves exact shared positions without dense pa
     rapid_ma_match(fit, assignment = "many_to_many"),
     "arg"
   )
+})
+
+test_that("fitted domain names win over the pairwise side aliases", {
+  latent <- make_rapid_adapter_latent(30L)
+  X_a <- make_rapid_adapter_features(latent, 6L, 6501L)
+  X_b <- make_rapid_adapter_features(latent, 5L, 6502L)
+  labels <- make_rapid_adapter_labels(30L)$labels
+  fit <- rapid_ma(
+    list(j = X_a, i = X_b),
+    labels = list(labels, labels),
+    ncomp = 4L,
+    control = list(max_iter = 1L, min_iter = 1L)
+  )
+  side <- manifoldalign:::.rapid_adapter_side
+  expect_identical(side(fit, "i"), 2L)
+  expect_identical(side(fit, "j"), 1L)
+  expect_equal(
+    oos_predict(fit, X_b[1:3, ], side = "i"),
+    fit$scores$i[1:3, ],
+    tolerance = 1e-12,
+    ignore_attr = TRUE
+  )
+  other <- rapid_ma(
+    list(north = X_a, south = X_b),
+    labels = list(labels, labels),
+    ncomp = 4L,
+    control = list(max_iter = 1L, min_iter = 1L)
+  )
+  expect_identical(side(other, "i"), 1L)
+  expect_identical(side(other, "j"), 2L)
+  expect_identical(side(other, "south"), 2L)
+  expect_error(side(other, "east"), "must be 'i', 'j', a domain name")
+})
+
+test_that("pair links are fine-match anchors and transforms are row-normalized", {
+  latent <- make_rapid_adapter_latent(30L)
+  X_a <- make_rapid_adapter_features(latent, 6L, 6511L)
+  X_b <- make_rapid_adapter_features(latent, 5L, 6512L)
+  labels <- make_rapid_adapter_labels(30L)$labels
+  anchors <- cbind(c(1L, 9L), c(1L, 9L))
+  expect_error(
+    fit_pair(
+      rapid_ma_aligner(), X_a, X_b, links = anchors,
+      labels = list(labels, labels), ncomp = 4L,
+      control = list(max_iter = 1L), fine_match = FALSE
+    ),
+    "require `fine_match = TRUE`"
+  )
+  pair <- fit_pair(
+    rapid_ma_aligner(), X_a, X_b,
+    labels = list(labels, labels), ncomp = 4L,
+    control = list(max_iter = 1L, min_iter = 1L),
+    match_control = list(
+      assignment = "independent", candidate_cap = 4L,
+      latent_weight = 1, structure_weight = 0, attribute_weight = 0,
+      position_weight = 0, prototype_weight = 0
+    )
+  )
+  forward <- relative_transform(pair, from = "i", to = "j")
+  reverse <- relative_transform(pair, from = "j", to = "i")
+  forward_sums <- Matrix::rowSums(forward$op)
+  reverse_sums <- Matrix::rowSums(reverse$op)
+  expect_true(all(abs(forward_sums - 1) < 1e-12 | forward_sums == 0))
+  expect_true(all(abs(reverse_sums - 1) < 1e-12 | reverse_sums == 0))
+  # Independent retrieval may map several sources to one target; the forward
+  # image of a constant column is then still constant, not a count.
+  ones <- matrix(1, nrow(X_a), 1L)
+  image <- apply_transform(forward, ones)
+  expect_true(all(abs(image[forward_sums > 0, 1L] - 1) < 1e-12))
+})
+
+test_that("named-vector relation weights default to one for absent relations", {
+  expect_identical(
+    manifoldalign:::.rapid_domain_relation_weight(c(a = 2), "d", "b"), 1
+  )
+  expect_identical(
+    manifoldalign:::.rapid_domain_relation_weight(list(d = c(a = 2)), "e", "a"),
+    1
+  )
+  expect_identical(
+    manifoldalign:::.rapid_domain_relation_weight(c(a = 2), "d", "a"), 2
+  )
+  expect_identical(manifoldalign:::.rapid_named_weight(c(a = 2), "b"), 1)
+  expect_identical(manifoldalign:::.rapid_named_weight(c(a = 2), "a"), 2)
+  expect_identical(manifoldalign:::.rapid_named_weight(NULL, "a"), 1)
+})
+
+test_that("vectorized OOS kernel weights equal the reference row loop", {
+  reference <- function(distance, zero_tolerance) {
+    weight <- matrix(0, nrow(distance), ncol(distance))
+    for (row in seq_len(nrow(distance))) {
+      exact <- is.finite(distance[row, ]) & distance[row, ] <= zero_tolerance
+      if (any(exact)) {
+        weight[row, exact] <- 1 / sum(exact)
+      } else {
+        finite <- distance[row, is.finite(distance[row, ])]
+        scale <- if (length(finite)) stats::median(finite) else 1
+        if (!is.finite(scale) || scale <= 1e-12) scale <- max(finite, 1)
+        value <- exp(pmax(-0.5 * (distance[row, ] / scale)^2, -700))
+        value[!is.finite(value)] <- 0
+        if (sum(value) == 0) value[[which.min(distance[row, ])]] <- 1
+        weight[row, ] <- value / sum(value)
+      }
+    }
+    weight
+  }
+  set.seed(6521)
+  for (k in c(1L, 2L, 5L, 8L)) {
+    distance <- t(apply(matrix(stats::rexp(40L * k), 40L, k), 1L, sort))
+    if (k == 1L) distance <- matrix(distance, ncol = 1L)
+    distance[3L, ] <- 0
+    distance[4L, 1L] <- 0
+    distance[5L, ] <- 1e-14
+    distance[6L, ] <- rev(distance[6L, ])
+    distance[7L, k] <- Inf
+    distance[8L, ] <- Inf
+    distance[9L, ] <- distance[9L, ] * 1e5
+    expect_equal(
+      manifoldalign:::.rapid_kernel_weights(distance, 1e-8),
+      reference(distance, 1e-8),
+      tolerance = 1e-15
+    )
+  }
+})
+
+test_that("OOS prediction keeps row names and skips the unused feature search", {
+  latent <- make_rapid_adapter_latent(36L)
+  X_a <- make_rapid_adapter_features(latent, 7L, 6531L)
+  X_b <- make_rapid_adapter_features(latent, 6L, 6532L)
+  rownames(X_a) <- paste0("a", seq_len(36L))
+  labels <- make_rapid_adapter_labels(36L)$labels
+  fit <- rapid_ma(
+    list(a = X_a, b = X_b),
+    labels = list(labels, labels),
+    positions = list(latent, latent),
+    ncomp = 4L,
+    control = list(max_iter = 1L, min_iter = 1L)
+  )
+  expect_identical(rownames(fit$couplings$a), rownames(X_a))
+  expect_identical(rownames(fit$prediction_probabilities$a), rownames(X_a))
+  expect_identical(names(fit$predictions$a), rownames(X_a))
+  expect_identical(names(fit$prediction_confidence$a), rownames(X_a))
+  expect_null(rownames(fit$couplings$b))
+
+  query <- X_a[c(4L, 11L), ] + 0.01
+  all <- oos_predict(fit, query, side = "a", type = "all")
+  expect_identical(rownames(all$embedding), rownames(query))
+  expect_identical(rownames(all$probabilities), rownames(query))
+  expect_identical(names(all$class), rownames(query))
+
+  calls <- 0L
+  counter <- environment()
+  suppressMessages(trace(
+    "nn2", where = asNamespace("RANN"), print = FALSE,
+    tracer = bquote(assign("calls", get("calls", envir = .(counter)) + 1L,
+                           envir = .(counter)))
+  ))
+  on.exit(suppressMessages(untrace("nn2", where = asNamespace("RANN"))),
+          add = TRUE)
+  position_only <- oos_predict(
+    fit, query, side = "a", type = "all",
+    new_positions = latent[c(4L, 11L), ],
+    view_weights = c(feature = 0, position = 1)
+  )
+  expect_identical(calls, 1L)
+  expect_identical(position_only$views_used, "position")
+  # Query positions are retained training positions, so they are exact.
+  expect_true(all(position_only$exact_reapplications))
+  expect_identical(rownames(position_only$embedding), rownames(query))
 })

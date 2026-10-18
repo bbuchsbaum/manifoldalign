@@ -150,6 +150,17 @@ rapid_ma_semisup_control <- function(
   )
 }
 
+# Weight of a named relation, defaulting to 1 when the relation has no entry.
+# `[[` on a named numeric vector errors for an absent name instead of
+# returning NULL, so the name is matched explicitly.
+.rapid_named_weight <- function(weights, name, default = 1) {
+  if (is.null(weights) || is.null(names(weights)) ||
+      !name %in% names(weights)) {
+    return(default)
+  }
+  weights[[name]]
+}
+
 .rapid_propagate_probabilities <- function(
   probabilities,
   labels,
@@ -172,7 +183,7 @@ rapid_ma_semisup_control <- function(
       relations <- relation_states[[m]]$relations
       weights <- diffusion_fits[[m]]$relation_weights
       for (name in names(relations)) {
-        weight <- if (!is.null(weights[[name]])) weights[[name]] else 1
+        weight <- .rapid_named_weight(weights, name)
         if (!is.finite(weight) || weight < control$relation_gate_min) next
         A <- relations[[name]]
         mass <- as.numeric(Matrix::rowSums(A))
@@ -341,7 +352,10 @@ rapid_ma_semisup_control <- function(
 .rapid_semisup_store_predictions <- function(fit, probabilities) {
   fit$prediction_probabilities <- probabilities
   fit$predictions <- lapply(probabilities, function(probability) {
-    colnames(probability)[max.col(probability, ties.method = "first")]
+    stats::setNames(
+      colnames(probability)[max.col(probability, ties.method = "first")],
+      rownames(probability)
+    )
   })
   fit$prediction_confidence <- lapply(probabilities, function(probability) {
     apply(probability, 1L, max)
@@ -491,7 +505,7 @@ rapid_ma_semisup_control <- function(
   relations <- relation_state$relations
   weights <- diffusion_fit$relation_weights
   for (name in names(relations)) {
-    weight <- if (!is.null(weights[[name]])) weights[[name]] else 1
+    weight <- .rapid_named_weight(weights, name)
     if (!is.finite(weight) || weight < control$relation_gate_min) next
     A <- relations[[name]]
     mass <- as.numeric(Matrix::rowSums(A))
@@ -559,14 +573,17 @@ rapid_ma_semisup_control <- function(
     raw_weight <- pmin(pmax(raw_weight, 0), 1) * uncertainty * agreement
     candidate <- candidate & raw_weight >= control$min_weight
 
-    limit <- if (control$max_pseudo_fraction == 0) {
+    # `max_pseudo_fraction` is a hard cap on the rows selected per domain and
+    # round. The budget is split evenly across classes with a floor of one
+    # candidate per class; if that floor overshoots the budget, the most
+    # confident candidates across classes are kept.
+    budget <- floor(
+      control$max_pseudo_fraction * sum(eligible[[m]] & is.na(true_labels[[m]]))
+    )
+    limit <- if (budget <= 0) {
       0L
     } else {
-      max(1L, floor(
-        control$max_pseudo_fraction *
-          sum(eligible[[m]] & is.na(true_labels[[m]])) /
-          max(length(classes), 1L)
-      ))
+      max(1L, floor(budget / max(length(classes), 1L)))
     }
     keep <- integer(0)
     for (class in classes) {
@@ -574,6 +591,10 @@ rapid_ma_semisup_control <- function(
       if (!length(index)) next
       ordering <- order(-confidence[index], -margin[index], index, method = "radix")
       keep <- c(keep, head(index[ordering], limit))
+    }
+    if (length(keep) > budget) {
+      ordering <- order(-confidence[keep], -margin[keep], keep, method = "radix")
+      keep <- keep[ordering][seq_len(budget)]
     }
     selected[[m]] <- sort(keep)
     if (length(keep)) {

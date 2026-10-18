@@ -253,8 +253,17 @@
 
 .rapid_domain_relation_weight <- function(weights, domain, relation) {
   if (is.null(weights)) return(1)
-  current <- if (is.list(weights)) weights[[domain]] else weights
-  if (is.null(current) || is.null(names(current)) || is.null(current[[relation]])) {
+  current <- if (is.list(weights)) {
+    if (!is.null(names(weights)) && domain %in% names(weights)) {
+      weights[[domain]]
+    } else {
+      NULL
+    }
+  } else {
+    weights
+  }
+  if (is.null(current) || is.null(names(current)) ||
+      !relation %in% names(current) || is.null(current[[relation]])) {
     return(1)
   }
   value <- current[[relation]]

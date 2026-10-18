@@ -67,7 +67,7 @@ failure_row <- function(seed, method, message) {
     matcher_retained_mb = NA_real_,
     hits1 = NA_real_, matched_hits1 = NA_real_, mrr = NA_real_,
     coverage = NA_real_, candidate_edges = NA_real_, candidate_cap = NA_real_,
-    dense_pairwise_allocated = NA,
+    candidate_density = NA_real_,
     correspondence_read_during_fit_or_match = FALSE,
     error = message,
     stringsAsFactors = FALSE
@@ -164,7 +164,7 @@ for (seed in seeds) {
       coverage = metric[["coverage"]],
       candidate_edges = matching$candidate_edges,
       candidate_cap = matching$candidate_cap,
-      dense_pairwise_allocated = matching$dense_pairwise_allocated,
+      candidate_density = matching$candidate_density,
       correspondence_read_during_fit_or_match = FALSE,
       error = NA_character_,
       stringsAsFactors = FALSE
@@ -201,7 +201,8 @@ for (seed in seeds) {
       coverage = value$coverage,
       candidate_edges = n_common * min(100L, nrow(fixture$data$target)),
       candidate_cap = min(100L, nrow(fixture$data$target)),
-      dense_pairwise_allocated = FALSE,
+      candidate_density = min(100L, nrow(fixture$data$target)) /
+        nrow(fixture$data$target),
       correspondence_read_during_fit_or_match = identical(method, "lema"),
       error = NA_character_,
       stringsAsFactors = FALSE
@@ -230,7 +231,8 @@ for (seed in seeds) {
       coverage = position_metrics[["coverage"]],
       candidate_edges = n_common * min(100L, nrow(fixture$data$target)),
       candidate_cap = min(100L, nrow(fixture$data$target)),
-      dense_pairwise_allocated = FALSE,
+      candidate_density = min(100L, nrow(fixture$data$target)) /
+        nrow(fixture$data$target),
       correspondence_read_during_fit_or_match = FALSE,
       error = NA_character_,
       stringsAsFactors = FALSE
