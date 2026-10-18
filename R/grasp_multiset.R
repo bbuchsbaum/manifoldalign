@@ -3,20 +3,34 @@
 #' GRASP Multiset for Hyperdesign Objects
 #'
 #' @param data A hyperdesign object containing three or more graph domains
-#' @param preproc Preprocessing step applied via multivarious::init_transform
+#' @param preproc A multivarious pre-processor (default \code{center()}), a
+#'   list with one per domain, a plain function, or \code{NULL}; fitted and
+#'   applied to each domain separately before graph construction.
 #' @param ncomp Number of spectral components (default: 30)
 #' @param q_descriptors Number of descriptors (default: 100)
 #' @param sigma Diffusion parameter (default: 0.73)
 #' @param lambda Regularization parameter (default: 0.1)
 #' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
 #' @param anchor Index of reference graph (1-based) or "mean" (default: 1)
-#' @param solver Assignment solver: "auction" or "linear" (default: "auction")
+#' @param solver Assignment solver. Only \code{"linear"} (the exact Hungarian
+#'   solver from \code{clue::solve_LSAP()}) is available; \code{"auction"} is
+#'   rejected.
 #' @param assignment_alpha Weight for cosine vs. Euclidean assignment cost (0-1)
 #' @param max_iter Maximum iterations for joint optimization (default: 100)
 #' @param tol Convergence tolerance (default: 1e-6)
+#' @param verbose Logical; report progress and convergence via message()
+#'   (default: FALSE).
 #' @param ... Additional arguments (currently unused)
 #'
-#' @return A grasp_multiset object
+#' @return A grasp_multiset object. \code{permutations[[s]][i]} is the row of
+#'   domain \code{s} matched to row \code{i} of the anchor domain, or
+#'   \code{NA} when that anchor row is unmatched (domain \code{s} has fewer
+#'   rows). \code{embeddings[[s]]} lists domain \code{s} in anchor row order,
+#'   with \code{NA} rows for unmatched anchor rows; \code{embeddings_raw}
+#'   keeps the input row order. \code{converged} and \code{iterations} describe
+#'   the joint basis alignment; when it does not converge the rotations come
+#'   from pairwise base alignment (see grasp()) to the anchor and
+#'   \code{rotation_source} is \code{"pairwise_fallback"}.
 #' @examples
 #' \donttest{
 #' set.seed(1)
@@ -47,32 +61,25 @@ grasp_multiset.hyperdesign <- function(data,
                                      lambda = 0.1,
                                      use_laplacian = TRUE,
                                      anchor = 1L,
-                                     solver = c("linear", "auction"),
+                                     solver = "linear",
                                      assignment_alpha = 0.9,
                                      max_iter = 100,
                                      tol = 1e-6,
+                                     verbose = FALSE,
                                      ...) {
 
   # Validate input
   chk::chk_s3_class(data, "hyperdesign")
+  chk::chk_flag(verbose)
 
-  pdata <- tryCatch(
-    multivarious::init_transform(data, preproc),
-    error = function(e) {
-      if (inherits(e, "error") && grepl("no applicable method", e$message, fixed = TRUE)) {
-        data
-      } else {
-        stop(e)
-      }
-    }
-  )
-  domains <- unclass(pdata)
+  domains <- lapply(unclass(data), function(d) list(x = as.matrix(d$x), design = d$design))
+  domains <- .fit_domain_preproc(domains, preproc)$pdata
   m <- length(domains)
   if (m < 2) {
     stop("Need at least two domains for multi-graph alignment", call. = FALSE)
   }
-  
-  if (m == 2) {
+
+  if (m == 2 && verbose) {
     message("Only 2 domains provided. Consider using grasp() for pairwise alignment.")
   }
   
@@ -102,7 +109,7 @@ grasp_multiset.hyperdesign <- function(data,
     stop("anchor must be a domain index (1 to ", m, ") or 'mean'", call. = FALSE)
   }
   
-  solver <- match.arg(solver)
+  solver <- .check_lsap_solver(solver)
 
   # Resolve anchor index early for downstream steps
   if (is.numeric(anchor)) {
@@ -116,9 +123,12 @@ grasp_multiset.hyperdesign <- function(data,
   descriptors <- compute_grasp_descriptors(bases, q_descriptors, sigma)
 
   # New: Joint basis alignment (with robust anchor-pairwise fallback)
-  alignment_result <- align_bases_multiset(bases, descriptors, lambda, max_iter, tol)
+  alignment_result <- align_bases_multiset(bases, descriptors, lambda, max_iter, tol,
+                                           verbose = verbose)
   rotations <- alignment_result$rotations
+  rotation_source <- "joint"
   if (!isTRUE(alignment_result$converged)) {
+    rotation_source <- "pairwise_fallback"
     k <- ncol(bases[[1]]$vectors)
     rotations <- replicate(length(bases), Matrix::Diagonal(k), simplify = FALSE)
     if (length(bases) >= 2) {
@@ -126,7 +136,7 @@ grasp_multiset.hyperdesign <- function(data,
         if (s == anchor_idx) next
         pair_fit <- align_grasp_bases(bases[[anchor_idx]], bases[[s]],
                                       descriptors[[anchor_idx]], descriptors[[s]],
-                                      lambda = lambda)
+                                      lambda = lambda, max_iter = max_iter, tol = tol)
         rotations[[s]] <- pair_fit$rotation
       }
     }
@@ -192,14 +202,14 @@ grasp_multiset.hyperdesign <- function(data,
           bases[[anchor_idx]], bases[[s]],
           descriptors[[anchor_idx]], descriptors[[s]],
           rotations[[s]], distance_method = "cosine",
-          solver_method = if (identical(solver, "auction")) "auction" else "linear",
+          solver_method = solver,
           alpha = assignment_alpha
         )
         pair_eu <- compute_grasp_assignment(
           bases[[anchor_idx]], bases[[s]],
           descriptors[[anchor_idx]], descriptors[[s]],
           rotations[[s]], distance_method = "euclidean",
-          solver_method = if (identical(solver, "auction")) "auction" else "linear"
+          solver_method = solver
         )
         # Also consider raw-feature Euclidean assignment as robust fallback
         feature_cost <- compute_assignment_cost(
@@ -207,10 +217,7 @@ grasp_multiset.hyperdesign <- function(data,
           as.matrix(domains[[s]]$x),
           distance = "euclidean"
         )
-        feature_assign <- tryCatch(
-          solve_lsap_with_padding(feature_cost, method = if (identical(solver, "auction")) "auction" else NULL),
-          error = function(e) solve_lsap_with_padding(feature_cost, method = NULL)
-        )
+        feature_assign <- solve_lsap_with_padding(feature_cost)
 
         candidates <- list(
           as.integer(pair_cos$assignment),
@@ -248,6 +255,7 @@ grasp_multiset.hyperdesign <- function(data,
       }
     })
 
+    permutations <- .sanitize_anchor_maps(permutations, embeddings)
     embeddings_aligned <- align_embeddings_to_anchor(embeddings, permutations, anchor_idx)
 
     return(structure(
@@ -257,6 +265,7 @@ grasp_multiset.hyperdesign <- function(data,
         assignment_embeddings = assignment_features,
         permutations = permutations,
         rotations = rotations,
+        rotation_source = rotation_source,
         mapping_diag = C_list,
         anchor = anchor,
         iterations = alignment_result$iterations,
@@ -282,6 +291,20 @@ grasp_multiset.hyperdesign <- function(data,
     }
   }
 
+  # Row-to-row maps from the padded LSAP use indices beyond the target size for
+  # rows matched to padding; normalise those to NA before composing maps.
+  n_rows <- vapply(assignment_features, nrow, integer(1))
+  as_map <- function(perm, n_target) {
+    perm <- as.integer(perm)
+    perm[is.na(perm) | perm < 1L | perm > n_target] <- NA_integer_
+    perm
+  }
+  for (i in seq_len(m)) {
+    for (j in seq_len(m)) {
+      if (i != j) pairwise_perm[[i]][[j]] <- as_map(pairwise_perm[[i]][[j]], n_rows[j])
+    }
+  }
+
   direct_map <- lapply(seq_len(m), function(s) {
     if (s == anchor_idx) {
       seq_len(nrow(assignment_features[[s]]))
@@ -294,17 +317,11 @@ grasp_multiset.hyperdesign <- function(data,
     if (s == anchor_idx) {
       direct_map[[s]]
     } else {
-      if (m <= 3) {
-        return(direct_map[[s]])
-      }
       candidates <- list(direct_map[[s]])
-      if (m > 2) {
-        for (t in seq_len(m)) {
-          if (t %in% c(anchor_idx, s)) next
-          perm_anchor_to_t <- direct_map[[t]]
-          perm_t_to_s <- pairwise_perm[[t]][[s]]
-          candidates[[length(candidates) + 1L]] <- perm_t_to_s[perm_anchor_to_t]
-        }
+      for (t in seq_len(m)) {
+        if (t %in% c(anchor_idx, s)) next
+        # anchor -> t -> s; an NA at either hop leaves the anchor row unvoted
+        candidates[[length(candidates) + 1L]] <- pairwise_perm[[t]][[s]][direct_map[[t]]]
       }
 
       if (length(candidates) == 1L) {
@@ -317,7 +334,7 @@ grasp_multiset.hyperdesign <- function(data,
           cand <- as.integer(cand)
           for (j in seq_len(n_anchor)) {
             idx <- cand[j]
-            if (idx > 0L && idx <= n_target) {
+            if (!is.na(idx) && idx > 0L && idx <= n_target) {
               vote_counts[j, idx] <- vote_counts[j, idx] + 1L
             }
           }
@@ -325,15 +342,19 @@ grasp_multiset.hyperdesign <- function(data,
 
         row_scores <- apply(vote_counts, 1, max)
         order_rows <- order(row_scores, decreasing = TRUE)
-        perm_final <- integer(n_anchor)
+        perm_final <- rep(NA_integer_, n_anchor)
         used <- rep(FALSE, n_target)
+        # At most n_target anchor rows can be matched one-to-one.
+        n_match <- min(n_anchor, n_target)
+        valid_target <- function(j) !is.na(j) && j > 0L && j <= n_target
 
         for (row in order_rows) {
+          if (sum(used) >= n_match) break
           counts <- vote_counts[row, ]
           # Prefer direct map on ties to avoid degrading a good direct assignment
           direct_candidate <- direct_map[[s]][row]
           maxc <- max(counts)
-          if (sum(counts == maxc) > 1L && direct_candidate > 0L && direct_candidate <= n_target) {
+          if (sum(counts == maxc) > 1L && valid_target(direct_candidate)) {
             # Place direct candidate first among tied maxima
             tied <- which(counts == maxc)
             candidate_order <- c(direct_candidate, setdiff(order(counts, decreasing = TRUE), direct_candidate))
@@ -353,7 +374,7 @@ grasp_multiset.hyperdesign <- function(data,
 
           if (!assigned) {
             direct_candidate <- direct_map[[s]][row]
-            if (direct_candidate > 0L && direct_candidate <= n_target && !used[direct_candidate]) {
+            if (valid_target(direct_candidate) && !used[direct_candidate]) {
               perm_final[row] <- direct_candidate
               used[direct_candidate] <- TRUE
               assigned <- TRUE
@@ -365,8 +386,6 @@ grasp_multiset.hyperdesign <- function(data,
             if (length(fallback) > 0L) {
               perm_final[row] <- fallback[1L]
               used[fallback[1L]] <- TRUE
-            } else {
-              perm_final[row] <- direct_map[[s]][row]
             }
           }
         }
@@ -376,6 +395,7 @@ grasp_multiset.hyperdesign <- function(data,
     }
   })
 
+  permutations <- .sanitize_anchor_maps(permutations, embeddings)
   embeddings_aligned <- align_embeddings_to_anchor(embeddings, permutations, anchor_idx)
 
   # Return grasp_multiset object
@@ -386,6 +406,7 @@ grasp_multiset.hyperdesign <- function(data,
       assignment_embeddings = assignment_features,
       permutations = permutations,
       rotations = rotations,
+      rotation_source = rotation_source,
       mapping_diag = C_list,
       anchor = anchor,
       iterations = alignment_result$iterations,
@@ -461,11 +482,12 @@ grasp_multiset.default <- function(data, ...) {
 #' @param lambda Regularization parameter
 #' @param max_iter Maximum iterations
 #' @param tol Convergence tolerance
+#' @param verbose Logical; report convergence via message()
 #'
 #' @return List with rotations and convergence info
 #' @keywords internal
 align_bases_multiset <- function(bases, descriptors, lambda,
-                                max_iter = 100, tol = 1e-6) {
+                                max_iter = 100, tol = 1e-6, verbose = FALSE) {
 
   m <- length(bases)
   k <- ncol(bases[[1]]$vectors)
@@ -543,7 +565,7 @@ align_bases_multiset <- function(bases, descriptors, lambda,
 
     rel <- abs(obj_start_iter - cur_obj) / max(1, abs(obj_start_iter))
     if (iter > 5 && rel < tol) {
-      message("Joint alignment converged after ", iter, " iterations")
+      if (isTRUE(verbose)) message("Joint alignment converged after ", iter, " iterations")
       return(list(rotations = Ms, iterations = iter, converged = TRUE))
     }
     prev_obj <- cur_obj
@@ -650,29 +672,16 @@ solve_diagonal_map <- function(desc, basis, M, Z) {
 #' @param E1 First embedding matrix
 #' @param E2 Second embedding matrix
 #' @param distance Distance metric: "cosine" or "euclidean"
-#' @param solver Assignment solver: "auction" or "linear"
+#' @param solver Assignment solver; only "linear" (exact Hungarian) is available
 #' @param alpha Weight on cosine vs. Euclidean distance when distance = "cosine"
 #'
 #' @return Assignment vector
 #' @keywords internal
 solve_assignment_multiset <- function(E1, E2, distance = "cosine",
-                                      solver = "auction", alpha = 0.5) {
+                                      solver = "linear", alpha = 0.5) {
+  .check_lsap_solver(solver)
   cost <- compute_assignment_cost(E1, E2, distance, alpha = alpha)
-
-  if (!requireNamespace("clue", quietly = TRUE)) {
-    stop("clue package is required for assignment computation. ",
-         "Please install it with: install.packages('clue')", call. = FALSE)
-  }
-
-  method_arg <- if (solver == "auction") "auction" else NULL
-  assignment <- tryCatch(
-    solve_lsap_with_padding(cost, method = method_arg),
-    error = function(e) {
-      solve_lsap_with_padding(cost, method = NULL)
-    }
-  )
-
-  as.integer(assignment)
+  as.integer(solve_lsap_with_padding(cost))
 }
 
 compute_assignment_cost <- function(E_source, E_target, distance = "cosine",
@@ -698,6 +707,17 @@ compute_assignment_cost <- function(E_source, E_target, distance = "cosine",
   }
 }
 
+# Anchor-to-domain maps: entries outside 1..n_s (padding matches) become NA.
+.sanitize_anchor_maps <- function(permutations, embeddings) {
+  lapply(seq_along(permutations), function(s) {
+    perm <- as.integer(permutations[[s]])
+    perm[is.na(perm) | perm < 1L | perm > nrow(embeddings[[s]])] <- NA_integer_
+    perm
+  })
+}
+
+# Domain embeddings listed in anchor row order. Anchor rows without a match in
+# domain s are NA rather than fabricated zero coordinates.
 align_embeddings_to_anchor <- function(embeddings, permutations, anchor_idx) {
   n_anchor <- nrow(embeddings[[anchor_idx]])
   lapply(seq_along(embeddings), function(s) {
@@ -709,8 +729,8 @@ align_embeddings_to_anchor <- function(embeddings, permutations, anchor_idx) {
     if (length(perm) != n_anchor) {
       return(emb)
     }
-    out <- matrix(0, nrow = n_anchor, ncol = ncol(emb))
-    valid <- perm > 0L & perm <= nrow(emb)
+    out <- matrix(NA_real_, nrow = n_anchor, ncol = ncol(emb))
+    valid <- !is.na(perm) & perm > 0L & perm <= nrow(emb)
     if (any(valid)) {
       out[valid, ] <- emb[perm[valid], , drop = FALSE]
     }

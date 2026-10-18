@@ -184,20 +184,17 @@ test_that("grasp_multiset produces reasonable alignment quality", {
 
 test_that("grasp_multiset handles solver options", {
   set.seed(5678)
-  
-  # Create larger graphs to test auction solver
+
   ms <- lapply(1:3, function(i) matrix(rnorm(100 * 5), 100, 5))
-  
-  result_auction <- grasp_multiset(ms, ncomp = 5, q_descriptors = 10, 
-                                   solver = "auction", max_iter = 20)
-  result_linear <- grasp_multiset(ms, ncomp = 5, q_descriptors = 10, 
-                                  solver = "linear", max_iter = 20)
-  
-  expect_s3_class(result_auction, "grasp_multiset")
+
+  # clue::solve_LSAP() has no auction backend; the option is rejected.
+  expect_error(grasp_multiset(ms, ncomp = 5, q_descriptors = 10,
+                              solver = "auction", max_iter = 20),
+               "not available")
+  result_linear <- suppressWarnings(grasp_multiset(ms, ncomp = 5, q_descriptors = 10,
+                                                   solver = "linear", max_iter = 20))
+
   expect_s3_class(result_linear, "grasp_multiset")
-  
-  # Both should produce valid permutations
-  expect_equal(sort(result_auction$permutations[[2]]), 1:100)
   expect_equal(sort(result_linear$permutations[[2]]), 1:100)
 })
 
