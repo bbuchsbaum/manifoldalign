@@ -828,3 +828,62 @@ test_that("cv_alignment_rows validates external feature row counts", {
     "Feature block `a` has 4 rows"
   )
 })
+
+test_that("cv_alignment_rows projects targets with the query map, not stored scores", {
+  skip_if_not_installed("multidesign")
+
+  fixture <- .make_dual_mode_fixture(seed = 20260420)
+  rows <- list(list(a = 1:3), list(a = 4:6, b = 7:8))
+
+  # Same model, but the stored training scores are scaled and stored with the
+  # blocks in the opposite order. Neither may influence the score: queries are
+  # projected with oos_predict(), so the targets must be too.
+  fit_fn_scrambled <- function(analysis) {
+    fit <- fixture$fit_fn(analysis)
+    resolved <- manifoldalign:::resolve_hyperdesign(analysis)
+    fit$s <- 10 * rbind(as.matrix(resolved$domains[[2]]$x),
+                        as.matrix(resolved$domains[[1]]$x))
+    fit
+  }
+
+  args <- list(fixture$hd, rows = rows, features = fixture$features, k = 3,
+               target_pool = "analysis", prediction_mode = "embedding")
+  res <- do.call(cv_alignment_rows, c(args, list(fit_fn = fixture$fit_fn)))
+  res_scrambled <- do.call(cv_alignment_rows, c(args, list(fit_fn = fit_fn_scrambled)))
+
+  expect_equal(res_scrambled$scores$mean_top1_similarity, res$scores$mean_top1_similarity,
+               tolerance = 1e-12)
+  expect_equal(res_scrambled$scores$mean_topk_similarity, res$scores$mean_topk_similarity,
+               tolerance = 1e-12)
+})
+
+test_that("cv_alignment_rows accepts positional held-out folds and rejects unknown blocks", {
+  feature_blocks <- list(a = matrix(0, 5, 1), b = matrix(0, 4, 1))
+  row_sets <- manifoldalign:::.cv_alignment_row_sets
+
+  named <- row_sets(feature_blocks, list(a = c(1L, 3L), b = 2L))
+  positional <- row_sets(feature_blocks, list(c(1L, 3L), 2L))
+  expect_identical(positional, named)
+  expect_identical(named$a$analysis, c(2L, 4L, 5L))
+  expect_identical(named$b$assessment, 2L)
+
+  # `row_ids` metadata from cv_rows(preserve_row_ids = TRUE) is not a block.
+  with_ids <- row_sets(feature_blocks, list(a = c(1L, 3L), b = 2L,
+                                            row_ids = list(a = 1:2, b = 1L)))
+  expect_identical(with_ids, named)
+
+  expect_error(row_sets(feature_blocks, list(a = 1L, c = 2L)), "unknown block\\(s\\): c")
+  expect_error(row_sets(feature_blocks, list(1L, 2L, 3L)), "3 positional entries")
+})
+
+test_that("cv_alignment_rows checks fold splits against held-out indices", {
+  feature_blocks <- list(a = matrix(0, 5, 1), b = matrix(0, 4, 1))
+  rs <- manifoldalign:::.cv_alignment_row_sets(feature_blocks, list(a = 1:2))
+  split_ok <- list(domain_names = c("a", "b"),
+                   domains = list(list(x = matrix(0, 3, 1)), list(x = matrix(0, 4, 1))))
+  expect_true(manifoldalign:::.cv_alignment_check_split_sizes(rs, split_ok, "analysis"))
+  split_bad <- split_ok
+  split_bad$domains[[1]]$x <- matrix(0, 4, 1)
+  expect_error(manifoldalign:::.cv_alignment_check_split_sizes(rs, split_bad, "analysis", 1L),
+               "has 4 rows but the fold's held-out indices imply 3")
+})

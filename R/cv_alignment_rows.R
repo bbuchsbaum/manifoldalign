@@ -61,6 +61,13 @@
 #' procedure uses explicit correspondence tables keyed by original rows, include
 #' a stable row identifier in each block's design before calling this function.
 #'
+#' In embedding mode, held-out queries and every target pool (training rows
+#' as well as held-out rows) are projected with the same [oos_predict()] map
+#' of the fitted model; stored training scores are not used, so no assumption
+#' is made about the row or block order of `fit$s`. Each fold's analysis and
+#' assessment splits are checked against its held-out indices, which may be
+#' given by block name or by block position; unknown block names are errors.
+#'
 #' @export
 cv_alignment_rows <- function(data,
                               rows,
@@ -240,8 +247,10 @@ cv_alignment_rows <- function(data,
   }
 
   row_sets <- .cv_alignment_row_sets(feature_blocks, fold$held_out)
+  .cv_alignment_check_split_sizes(row_sets, analysis_resolved, "analysis", fold_id)
+  .cv_alignment_check_split_sizes(row_sets, assessment_resolved, "assessment", fold_id)
   assessment_projection_cache <- new.env(parent = emptyenv())
-  analysis_score_cache <- NULL
+  analysis_projection_cache <- new.env(parent = emptyenv())
   mode_order <- .cv_alignment_mode_order(fit, target_pool, prediction_mode)
 
   pair_metrics <- list()
@@ -303,15 +312,9 @@ cv_alignment_rows <- function(data,
         }
 
         embedding_res <- tryCatch({
-          if (is.null(analysis_score_cache)) {
-            analysis_score_cache <- .cv_alignment_extract_analysis_scores(
-              fit = fit,
-              analysis = analysis_resolved
-            )
-          }
-          query_scores <- .cv_alignment_get_assessment_projection(
+          query_scores <- .cv_alignment_get_projection(
             fit = fit,
-            assessment = assessment_resolved,
+            split = assessment_resolved,
             block_name = query_block,
             block_names = all_block_names,
             cache = assessment_projection_cache,
@@ -325,7 +328,7 @@ cv_alignment_rows <- function(data,
             row_sets = row_sets,
             target_block = target_block,
             target_pool = target_pool,
-            analysis_scores = analysis_score_cache,
+            analysis_cache = analysis_projection_cache,
             projection_cache = assessment_projection_cache,
             block_names = all_block_names,
             fold_id = fold_id
@@ -447,10 +450,41 @@ cv_alignment_rows <- function(data,
 }
 
 .cv_alignment_row_sets <- function(feature_blocks, held_out) {
-  out <- vector("list", length(feature_blocks))
-  names(out) <- names(feature_blocks)
+  block_names <- names(feature_blocks)
+  if (is.null(held_out)) held_out <- list()
+  if (!is.list(held_out)) {
+    stop("Fold `held_out` must be a list of per-block row indices.", call. = FALSE)
+  }
 
-  for (block_name in names(feature_blocks)) {
+  # `row_ids` is metadata added by cv_rows(preserve_row_ids = TRUE).
+  if (!is.null(names(held_out))) {
+    held_out <- held_out[names(held_out) != "row_ids"]
+  }
+  nms <- names(held_out)
+  if (length(held_out)) {
+    if (is.null(nms) || all(!nzchar(nms))) {
+      # Positional folds: the i-th entry belongs to the i-th block.
+      if (length(held_out) > length(block_names)) {
+        stop("Fold `held_out` has ", length(held_out), " positional entries but the data has ",
+             length(block_names), " blocks.", call. = FALSE)
+      }
+      names(held_out) <- block_names[seq_along(held_out)]
+    } else {
+      if (any(!nzchar(nms))) {
+        stop("Fold `held_out` mixes named and unnamed block entries.", call. = FALSE)
+      }
+      unknown <- setdiff(nms, block_names)
+      if (length(unknown)) {
+        stop("Fold `held_out` names unknown block(s): ", paste(unknown, collapse = ", "),
+             ". Known blocks: ", paste(block_names, collapse = ", "), ".", call. = FALSE)
+      }
+    }
+  }
+
+  out <- vector("list", length(feature_blocks))
+  names(out) <- block_names
+
+  for (block_name in block_names) {
     n <- nrow(feature_blocks[[block_name]])
     idx <- held_out[[block_name]]
     if (is.null(idx)) {
@@ -468,6 +502,27 @@ cv_alignment_rows <- function(data,
   out
 }
 
+# The analysis/assessment splits must contain exactly the rows implied by the
+# fold's held-out indices; anything else would pair features with the wrong
+# rows.
+.cv_alignment_check_split_sizes <- function(row_sets, resolved, split, fold_id = NULL) {
+  for (i in seq_along(resolved$domain_names)) {
+    block <- resolved$domain_names[[i]]
+    if (is.null(row_sets[[block]])) {
+      stop("The ", split, " split contains block `", block,
+           "`, which is not a block of `data`.", call. = FALSE)
+    }
+    expected <- length(row_sets[[block]][[split]])
+    got <- nrow(resolved$domains[[i]]$x)
+    if (!identical(as.integer(got), as.integer(expected))) {
+      stop("Fold ", if (is.null(fold_id)) "<unknown>" else fold_id, ": the ", split,
+           " split of block `", block, "` has ", got, " rows but the fold's held-out ",
+           "indices imply ", expected, ".", call. = FALSE)
+    }
+  }
+  invisible(TRUE)
+}
+
 .cv_alignment_block_matrix <- function(resolved, block_name) {
   idx <- match(block_name, resolved$domain_names)
   if (is.na(idx)) {
@@ -476,48 +531,21 @@ cv_alignment_rows <- function(data,
   as.matrix(resolved$domains[[idx]]$x)
 }
 
-.cv_alignment_extract_analysis_scores <- function(fit, analysis) {
-  scores <- fit$s
-  if (is.null(scores)) {
-    stop("Fit object does not contain training scores in `s`.", call. = FALSE)
-  }
-  scores <- as.matrix(scores)
-
-  block_names <- analysis$domain_names
-  block_sizes <- vapply(analysis$domains, function(dom) nrow(dom$x), integer(1))
-  total_rows <- sum(block_sizes)
-
-  if (nrow(scores) != total_rows) {
-    stop(
-      "Fit stores ", nrow(scores), " training score rows but the analysis split has ",
-      total_rows, ".",
-      call. = FALSE
-    )
-  }
-
-  starts <- cumsum(c(1L, head(block_sizes, -1L)))
-  out <- vector("list", length(block_names))
-  names(out) <- block_names
-
-  for (i in seq_along(block_names)) {
-    rows <- seq.int(starts[[i]], length.out = block_sizes[[i]])
-    out[[block_names[[i]]]] <- scores[rows, , drop = FALSE]
-  }
-
-  out
-}
-
-.cv_alignment_get_assessment_projection <- function(fit,
-                                                    assessment,
-                                                    block_name,
-                                                    block_names,
-                                                    cache,
-                                                    fold_id = NULL) {
+# Project the rows of one block of a split (analysis or assessment) with the
+# fitted model's out-of-sample map. Query and target rows are always projected
+# with the same map, so their latent coordinates are comparable; stored
+# training scores (`fit$s`) are never mixed with projected rows.
+.cv_alignment_get_projection <- function(fit,
+                                         split,
+                                         block_name,
+                                         block_names,
+                                         cache,
+                                         fold_id = NULL) {
   if (exists(block_name, envir = cache, inherits = FALSE)) {
     return(get(block_name, envir = cache, inherits = FALSE))
   }
 
-  Xi <- .cv_alignment_block_matrix(assessment, block_name)
+  Xi <- .cv_alignment_block_matrix(split, block_name)
   side_idx <- match(block_name, block_names)
   if (is.na(side_idx)) {
     stop("Unknown block `", block_name, "`.", call. = FALSE)
@@ -530,7 +558,7 @@ cv_alignment_rows <- function(data,
         as.matrix(oos_predict(fit, Xi, side = side_idx)),
         error = function(e_idx) {
           stop(
-            "Failed to project held-out rows for block `", block_name, "` in fold ",
+            "Failed to project rows for block `", block_name, "` in fold ",
             if (is.null(fold_id)) "<unknown>" else fold_id,
             ". Ensure `fit_fn` returns an object with oos_predict() support. Original errors: ",
             e_name$message, " / ", e_idx$message,
@@ -540,6 +568,11 @@ cv_alignment_rows <- function(data,
       )
     }
   )
+
+  if (nrow(proj) != nrow(Xi)) {
+    stop("oos_predict() returned ", nrow(proj), " rows for ", nrow(Xi),
+         " rows of block `", block_name, "`.", call. = FALSE)
+  }
 
   assign(block_name, proj, envir = cache)
   proj
@@ -552,20 +585,29 @@ cv_alignment_rows <- function(data,
                                                  row_sets,
                                                  target_block,
                                                  target_pool,
-                                                 analysis_scores,
+                                                 analysis_cache,
                                                  projection_cache,
                                                  block_names,
                                                  fold_id = NULL) {
   score_parts <- list()
   feature_parts <- list()
 
-  if (target_pool %in% c("analysis", "both")) {
-    target_scores <- analysis_scores[[target_block]]
+  if (target_pool %in% c("analysis", "both") &&
+      target_block %in% analysis$domain_names &&
+      length(row_sets[[target_block]]$analysis)) {
+    target_scores <- .cv_alignment_get_projection(
+      fit = fit,
+      split = analysis,
+      block_name = target_block,
+      block_names = block_names,
+      cache = analysis_cache,
+      fold_id = fold_id
+    )
     target_features <- feature_blocks[[target_block]][row_sets[[target_block]]$analysis, , drop = FALSE]
 
     if (nrow(target_scores) != nrow(target_features)) {
       stop(
-        "Training score rows for block `", target_block, "` do not match the analysis target feature rows.",
+        "Training rows for block `", target_block, "` do not match the analysis target feature rows.",
         call. = FALSE
       )
     }
@@ -579,9 +621,9 @@ cv_alignment_rows <- function(data,
   if (target_pool %in% c("assessment", "both") &&
       target_block %in% assessment$domain_names &&
       length(row_sets[[target_block]]$assessment)) {
-    target_scores <- .cv_alignment_get_assessment_projection(
+    target_scores <- .cv_alignment_get_projection(
       fit = fit,
-      assessment = assessment,
+      split = assessment,
       block_name = target_block,
       block_names = block_names,
       cache = projection_cache,
