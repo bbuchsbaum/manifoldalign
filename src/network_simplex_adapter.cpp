@@ -3,62 +3,9 @@
 #include <vector>
 #include <cstdint>
 #include <cmath>
-#include <cassert>
 #include <limits>
 #include <algorithm>
-
-namespace {
-
-arma::mat rebalance_plan(const arma::mat& P,
-                         const arma::vec& a,
-                         const arma::vec& b,
-                         double tol = 1e-12,
-                         int max_iter = 10) {
-  arma::mat R = P;
-  if (R.is_empty()) {
-    return R;
-  }
-
-  for (int iter = 0; iter < max_iter; ++iter) {
-    arma::vec row_sums = arma::sum(R, 1);
-    for (arma::uword i = 0; i < row_sums.n_elem; ++i) {
-      double denom = row_sums(i);
-      if (!std::isfinite(denom) || denom < tol) {
-        continue;
-      }
-      double scale = a(i) / denom;
-      if (std::abs(scale - 1.0) > tol) {
-        R.row(i) *= scale;
-      }
-    }
-
-    arma::vec col_sums = arma::sum(R, 0).t();
-    for (arma::uword j = 0; j < col_sums.n_elem; ++j) {
-      double denom = col_sums(j);
-      if (!std::isfinite(denom) || denom < tol) {
-        continue;
-      }
-      double scale = b(j) / denom;
-      if (std::abs(scale - 1.0) > tol) {
-        R.col(j) *= scale;
-      }
-    }
-
-    double row_err = arma::max(arma::abs(a - arma::sum(R, 1)));
-    double col_err = arma::max(arma::abs(b - arma::sum(R, 0).t()));
-    if (row_err < tol && col_err < tol) {
-      break;
-    }
-  }
-
-  R.transform([tol](double val) {
-    return (std::abs(val) < tol) ? 0.0 : val;
-  });
-
-  return R;
-}
-
-}  // namespace
+#include <numeric>
 
 // Check if we have the LEMON headers available
 #ifdef __has_include
@@ -76,244 +23,189 @@ arma::mat rebalance_plan(const arma::mat& P,
   #include "full_bipartitegraph.h"
 #endif
 
+std::vector<int64_t> NetworkSimplexAdapter::quantize_masses(const arma::vec& w,
+                                                            double scale,
+                                                            int64_t total) {
+  const arma::uword n = w.n_elem;
+  std::vector<int64_t> out(n, 0);
+  std::vector<double> frac(n, -1.0);
+  int64_t assigned = 0;
+  arma::uword n_pos = 0;
+  for (arma::uword i = 0; i < n; ++i) {
+    if (w(i) <= 0.0) continue;  // zero masses stay exactly zero
+    ++n_pos;
+    double x = w(i) * scale;
+    double fl = std::floor(x);
+    out[i] = static_cast<int64_t>(fl);
+    frac[i] = x - fl;
+    assigned += out[i];
+  }
+  int64_t rem = total - assigned;
+  if (rem == 0 || n_pos == 0) {
+    return out;
+  }
+
+  // Largest remainder: hand out the missing units to the largest fractional
+  // parts (or take surplus units from the smallest ones). Only positive masses
+  // take part, so a zero mass never receives flow.
+  std::vector<arma::uword> order;
+  order.reserve(n_pos);
+  for (arma::uword i = 0; i < n; ++i) {
+    if (frac[i] >= 0.0) order.push_back(i);
+  }
+  if (rem > 0) {
+    std::stable_sort(order.begin(), order.end(), [&](arma::uword x, arma::uword y) {
+      return frac[x] > frac[y];
+    });
+    while (rem > 0) {
+      for (std::size_t k = 0; k < order.size() && rem > 0; ++k) {
+        out[order[k]] += 1;
+        --rem;
+      }
+    }
+  } else {
+    std::stable_sort(order.begin(), order.end(), [&](arma::uword x, arma::uword y) {
+      return frac[x] < frac[y];
+    });
+    bool progressed = true;
+    while (rem < 0 && progressed) {
+      progressed = false;
+      for (std::size_t k = 0; k < order.size() && rem < 0; ++k) {
+        if (out[order[k]] > 0) {
+          out[order[k]] -= 1;
+          ++rem;
+          progressed = true;
+        }
+      }
+    }
+    if (rem != 0) {
+      Rcpp::stop("Network simplex: internal error while quantising masses.");
+    }
+  }
+  return out;
+}
+
+namespace {
+
+void validate_inputs(const arma::mat& cost, const arma::vec& a, const arma::vec& b) {
+  if (cost.n_rows != a.n_elem || cost.n_cols != b.n_elem) {
+    Rcpp::stop("Network simplex: cost must be %d x %d to match the marginals.",
+               static_cast<int>(a.n_elem), static_cast<int>(b.n_elem));
+  }
+  if (!a.is_finite() || !b.is_finite()) {
+    Rcpp::stop("Network simplex: marginals must be finite.");
+  }
+  if (!cost.is_finite()) {
+    Rcpp::stop("Network simplex: cost matrix must be finite.");
+  }
+}
+
+// Check the returned plan against the original (unquantised) marginals.
+void validate_plan(const arma::mat& P, const arma::vec& a, const arma::vec& b,
+                   double tol) {
+  arma::vec rs = arma::sum(P, 1);
+  arma::vec cs = arma::sum(P, 0).t();
+  double row_err = a.n_elem ? arma::max(arma::abs(rs - a)) : 0.0;
+  double col_err = b.n_elem ? arma::max(arma::abs(cs - b)) : 0.0;
+  if (!P.is_finite() || P.min() < 0.0 || row_err > tol || col_err > tol) {
+    Rcpp::stop("Network simplex returned a plan that violates the marginals "
+               "(row error %g, column error %g, tolerance %g).",
+               row_err, col_err, tol);
+  }
+}
+
+}  // namespace
+
 // Implementation of the adapter
-arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost, 
-                                       const arma::vec& a, 
+arma::mat NetworkSimplexAdapter::solve(const arma::mat& cost,
+                                       const arma::vec& a,
                                        const arma::vec& b,
                                        double eps) {
-  
-  // Check marginals first
-  check_marginals(a, b);
-  
-  int n_orig = a.n_elem;
-  int m_orig = b.n_elem;
-  
-#if LEMON_AVAILABLE
-  // Use LEMON implementation with padding for odd sizes
-  
-  // Check if we need padding
-  if (needsPadding(n_orig, m_orig)) {
-    // Pad to even sizes to avoid performance issues
-    arma::vec a_padded, b_padded;
-    padMarginals(a_padded, b_padded, a, b);
-    
-    int n_pad = a_padded.n_elem;
-    int m_pad = b_padded.n_elem;
-    
-    // Pad cost matrix
-    arma::mat cost_padded = padCostMatrix(cost, n_pad, m_pad);
-    
-    // Create bipartite graph
-    typedef lemon::FullBipartiteDigraph Digraph;
-    Digraph graph(n_pad, m_pad);
-    
-    // Set up types - use int64_t for costs and flows to avoid overflow
-    typedef int64_t FlowType;
-    typedef int64_t CostType;
-    
-    // Create the network simplex solver
-    typedef lemon::NetworkSimplexSimple<Digraph, FlowType, CostType> NetworkSimplex;
-    
-    // Scale to integers for precision
-    const double scale = 1e6;
-    
-    // Create cost and supply vectors
-    std::vector<CostType> costs(n_pad * m_pad);
-    std::vector<FlowType> supplies_src(n_pad);
-    std::vector<FlowType> supplies_dst(m_pad);
-    
-    // Set costs
-    size_t arc_id = 0;
-    for (int i = 0; i < n_pad; i++) {
-      for (int j = 0; j < m_pad; j++) {
-        if (arc_id >= costs.size()) {
-          Rcpp::stop("Internal error: arc_id out of bounds while filling cost vector.");
-        }
-        costs[arc_id] = static_cast<CostType>(std::round(cost_padded(i, j) * scale));
-        arc_id++;
-      }
-    }
-    
-    // Set supplies - sources positive, sinks negative
-    FlowType total_supply = 0;
-    FlowType total_demand = 0;
-    for (int i = 0; i < n_pad; i++) {
-      supplies_src[i] = static_cast<FlowType>(std::round(a_padded(i) * scale));
-      total_supply += supplies_src[i];
-    }
-    for (int j = 0; j < m_pad; j++) {
-      supplies_dst[j] = -static_cast<FlowType>(std::round(b_padded(j) * scale));
-      total_demand -= supplies_dst[j];  // Note: subtracting negative = adding
-    }
-    
-    // Debug: check mass balance
-    if (total_supply != total_demand) {
-      // Fix imbalance by adjusting last supply
-      if (n_pad > 0) {
-        supplies_src[n_pad - 1] -= (total_supply - total_demand);
-      }
-    }
-    
-    // Create and configure solver
-    NetworkSimplex ns(graph, true, n_pad + m_pad, n_pad * m_pad);
-    
-    // Set all arc costs using LEMON's arc indexing
-    for (int i = 0; i < n_pad; i++) {
-      for (int j = 0; j < m_pad; j++) {
-        // LEMON uses arc_id = source * n2 + (target - n1)
-        // where source is in [0, n1) and target is in [n1, n1+n2)
-        int lemon_arc_id = i * m_pad + j;
-        int cost_idx = i * m_pad + j;  // Our sequential index for costs array
-        if (cost_idx < 0 || static_cast<size_t>(cost_idx) >= costs.size()) {
-          Rcpp::stop("Internal error: cost index out of bounds while setting costs.");
-        }
-        
-        // Debug: verify arc is valid before using it
-        if (lemon_arc_id >= n_pad * m_pad) {
-          Rcpp::stop("Arc ID out of bounds while setting costs (arc=%d, max=%d).",
-                     lemon_arc_id, (n_pad * m_pad - 1));
-        }
-        
-        try {
-          ns.setCost(graph.arcFromId(lemon_arc_id), costs[cost_idx]);
-        } catch (const std::exception& e) {
-          Rcpp::stop("Failed to set cost for arc %d (i=%d, j=%d): %s", lemon_arc_id, i, j, e.what());
-        } catch (...) {
-          Rcpp::stop("Failed to set cost for arc %d (i=%d, j=%d).", lemon_arc_id, i, j);
-        }
-      }
-    }
-    
-    // Set supplies
-    ns.supplyMap(&supplies_src[0], n_pad, &supplies_dst[0], m_pad);
-    
-    // Run solver
-    int result = ns.run();
-    if (result != NetworkSimplex::OPTIMAL) {
-      if (result == NetworkSimplex::INFEASIBLE) {
-        Rcpp::stop("Network simplex: Problem is infeasible (%d x %d).", n_pad, m_pad);
-      } else if (result == NetworkSimplex::UNBOUNDED) {
-        Rcpp::stop("Network simplex: Problem is unbounded (%d x %d).", n_pad, m_pad);
-      } else {
-        Rcpp::stop("Network simplex: Error code %d for problem %d x %d.", result, n_pad, m_pad);
-      }
-    }
-    
-    // Extract solution using LEMON's arc indexing
-    arma::mat P_padded(n_pad, m_pad, arma::fill::zeros);
-    for (int i = 0; i < n_pad; i++) {
-      for (int j = 0; j < m_pad; j++) {
-        int lemon_arc_id = i * m_pad + j;
-        FlowType flow = ns.flow(graph.arcFromId(lemon_arc_id));
-        P_padded(i, j) = static_cast<double>(flow) / scale;
-      }
-    }
-    
-    // Remove padding and return
-    arma::mat P = extractSolution(P_padded, n_orig, m_orig);
-    return rebalance_plan(P, a, b);
-    
-  } else {
-    // Even sizes - no padding needed
-    int n = n_orig;
-    int m = m_orig;
-    
-    // Create bipartite graph
-    typedef lemon::FullBipartiteDigraph Digraph;
-    Digraph graph(n, m);
-    
-    // Set up types - use int64_t for costs and flows to avoid overflow
-    typedef int64_t FlowType;
-    typedef int64_t CostType;
-    
-    // Create the network simplex solver
-    typedef lemon::NetworkSimplexSimple<Digraph, FlowType, CostType> NetworkSimplex;
-    
-    // Scale to integers for precision
-    const double scale = 1e6;
-    
-    // Create cost and supply vectors
-    std::vector<CostType> costs(n * m);
-    std::vector<FlowType> supplies_src(n);
-    std::vector<FlowType> supplies_dst(m);
-    
-    // Set costs
-    int arc_id = 0;
-    for (int i = 0; i < n; i++) {
-      for (int j = 0; j < m; j++) {
-        if (arc_id < 0 || static_cast<size_t>(arc_id) >= costs.size()) {
-          Rcpp::stop("Internal error: arc_id out of bounds while filling cost vector.");
-        }
-        costs[arc_id] = static_cast<CostType>(std::round(cost(i, j) * scale));
-        arc_id++;
-      }
-    }
-    
-    // Set supplies - sources positive, sinks negative
-    FlowType total_supply = 0;
-    FlowType total_demand = 0;
-    for (int i = 0; i < n; i++) {
-      supplies_src[i] = static_cast<FlowType>(std::round(a(i) * scale));
-      total_supply += supplies_src[i];
-    }
-    for (int j = 0; j < m; j++) {
-      supplies_dst[j] = -static_cast<FlowType>(std::round(b(j) * scale));
-      total_demand -= supplies_dst[j];  // Note: subtracting negative = adding
-    }
-    
-    // Debug: check mass balance
-    if (total_supply != total_demand) {
-      // Fix imbalance by adjusting last supply
-      if (n > 0) {
-        supplies_src[n - 1] -= (total_supply - total_demand);
-      }
-    }
-    
-    // Create and configure solver
-    NetworkSimplex ns(graph, true, n + m, n * m);
-    
-    // Set all arc costs using LEMON's arc indexing
-    for (int i = 0; i < n; i++) {
-      for (int j = 0; j < m; j++) {
-        int lemon_arc_id = i * m + j;
-        int cost_idx = i * m + j;
-        ns.setCost(graph.arcFromId(lemon_arc_id), costs[cost_idx]);
-      }
-    }
-    
-    // Set supplies
-    ns.supplyMap(&supplies_src[0], n, &supplies_dst[0], m);
-    
-    // Run solver
-    int result = ns.run();
-    if (result != NetworkSimplex::OPTIMAL) {
-      if (result == NetworkSimplex::INFEASIBLE) {
-        Rcpp::stop("Network simplex: Problem is infeasible (%d x %d).", n, m);
-      } else if (result == NetworkSimplex::UNBOUNDED) {
-        Rcpp::stop("Network simplex: Problem is unbounded (%d x %d).", n, m);
-      } else {
-        Rcpp::stop("Network simplex: Error code %d for problem %d x %d.", result, n, m);
-      }
-    }
-    
-    // Extract solution using LEMON's arc indexing
-    arma::mat P(n, m, arma::fill::zeros);
-    for (int i = 0; i < n; i++) {
-      for (int j = 0; j < m; j++) {
-        int lemon_arc_id = i * m + j;
-        FlowType flow = ns.flow(graph.arcFromId(lemon_arc_id));
-        P(i, j) = static_cast<double>(flow) / scale;
-      }
-    }
-    
-    return rebalance_plan(P, a, b);
+  validate_inputs(cost, a, b);
+  check_marginals(a, b, eps);
+
+  const int n = static_cast<int>(a.n_elem);
+  const int m = static_cast<int>(b.n_elem);
+  if (n == 0 || m == 0) {
+    return arma::mat(n, m, arma::fill::zeros);
   }
-  
+
+  const double sum_a = arma::sum(a);
+  const double sum_b = arma::sum(b);
+  const double total = 0.5 * (sum_a + sum_b);
+  if (!(total > 0.0)) {
+    return arma::mat(n, m, arma::fill::zeros);
+  }
+
+#if LEMON_AVAILABLE
+  typedef lemon::FullBipartiteDigraph Digraph;
+  typedef int64_t FlowType;   // exact integer flows
+  typedef double CostType;    // costs are not quantised
+  typedef lemon::NetworkSimplexSimple<Digraph, FlowType, CostType, int64_t> NetworkSimplex;
+
+  // --- Masses: integer units, scaled independently of the costs ------------
+  const double units = mass_units();
+  const int64_t total_units = static_cast<int64_t>(units);
+  std::vector<int64_t> sup_a = quantize_masses(a, units / sum_a, total_units);
+  std::vector<int64_t> sup_b = quantize_masses(b, units / sum_b, total_units);
+  std::vector<FlowType> supplies_src(n);
+  std::vector<FlowType> supplies_dst(m);
+  for (int i = 0; i < n; ++i) supplies_src[i] = sup_a[i];
+  for (int j = 0; j < m; ++j) supplies_dst[j] = -sup_b[j];
+
+  // --- Costs: shift/scale to [0, 1] (does not change the optimal plans) ----
+  const double cmin = cost.min();
+  const double cmax = cost.max();
+  const double crange = cmax - cmin;
+  const double cscale = (crange > 0.0) ? 1.0 / crange : 0.0;
+
+  Digraph graph(n, m);
+  const int64_t n_arcs = static_cast<int64_t>(n) * static_cast<int64_t>(m);
+  NetworkSimplex ns(graph, true, n + m, n_arcs);
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < m; ++j) {
+      int64_t arc_id = static_cast<int64_t>(i) * m + j;
+      ns.setCost(graph.arcFromId(arc_id), (cost(i, j) - cmin) * cscale);
+    }
+  }
+  ns.supplyMap(&supplies_src[0], n, &supplies_dst[0], m);
+
+  int result = ns.run();
+  if (result != NetworkSimplex::OPTIMAL) {
+    if (result == NetworkSimplex::INFEASIBLE) {
+      Rcpp::stop("Network simplex: problem is infeasible (%d x %d).", n, m);
+    } else if (result == NetworkSimplex::UNBOUNDED) {
+      Rcpp::stop("Network simplex: problem is unbounded (%d x %d).", n, m);
+    }
+    Rcpp::stop("Network simplex: error code %d for problem %d x %d.", result, n, m);
+  }
+
+  // Integer vertex -> plan. Rows are divided by the row scale, which keeps
+  // each row sum within one unit of the original marginal.
+  const double inv_scale = total / units;
+  arma::mat P(n, m, arma::fill::zeros);
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < m; ++j) {
+      int64_t arc_id = static_cast<int64_t>(i) * m + j;
+      FlowType flow = ns.flow(graph.arcFromId(arc_id));
+      if (flow != 0) {
+        P(i, j) = static_cast<double>(flow) * inv_scale;
+      }
+    }
+  }
+
+  // Quantisation bound: one unit per node plus the input mass imbalance and
+  // floating-point summation error.
+  const double tol = std::abs(sum_a - sum_b) +
+    total * (4.0 / units + 4.0 * (n + m) * std::numeric_limits<double>::epsilon());
+  validate_plan(P, a, b, tol);
+  return P;
+
 #else
-  // Fallback to existing implementation with warning
-  Rcpp::warning("LEMON network simplex not available, using fallback solver (may be less accurate)");
-  arma::mat fallback_plan = fallback::network_simplex_ot(cost, a, b, eps);
-  return rebalance_plan(fallback_plan, a, b);
+  Rcpp::warning("LEMON network simplex not available, using lpSolve fallback");
+  arma::mat P = fallback::network_simplex_ot(cost, a, b, eps);
+  validate_plan(P, a, b, std::abs(sum_a - sum_b) + 1e-9 * total);
+  return P;
 #endif
 }
 

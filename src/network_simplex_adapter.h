@@ -3,108 +3,53 @@
 
 #include <RcppArmadillo.h>
 #include <vector>
-#include <algorithm>
-#include <cmath>
+#include <cstdint>
 
-// Forward declare the LEMON network simplex class
-namespace lemon {
-  template<typename GR, typename V, typename C>
-  class NetworkSimplex;
-  
-  class FullBipartiteDigraph;
-}
-
-// Adapter class for nbonneel/network_simplex library
+// Adapter around the vendored LEMON / Bonneel network simplex
+// (network_simplex_simple.h, full_bipartitegraph.h) for balanced discrete
+// optimal transport.
+//
+// Numerical contract
+//  * Costs are passed to the solver as doubles (no integer quantisation); they
+//    are shifted and scaled to [0, 1], which leaves the set of optimal plans of
+//    a balanced problem unchanged.
+//  * Masses are quantised to 64-bit integers with a scale chosen separately
+//    from the costs: the common total mass is mapped to `mass_units()` integer
+//    units and each marginal is rounded with the largest-remainder method so
+//    that both integer marginals sum exactly to that total. No residual is
+//    dumped on a single node and no masses are rounded to zero unless they are
+//    below one unit (about 1e-15 of the total).
+//  * The returned plan is the solver's integer vertex divided by the scale; it
+//    is not rebalanced afterwards. It is validated against the original
+//    (unquantised) marginals and an error is raised if the deviation exceeds the
+//    quantisation bound.
 class NetworkSimplexAdapter {
-private:
-  // Padding strategy for odd-sized problems
-  static bool needsPadding(int n, int m) {
-    return (n % 2 == 1) || (m % 2 == 1);
-  }
-  
-  // Pad marginals to even size by adding dummy node with zero mass
-  static void padMarginals(arma::vec& a_padded, arma::vec& b_padded,
-                          const arma::vec& a, const arma::vec& b) {
-    int n = a.n_elem;
-    int m = b.n_elem;
-    
-    // Determine padding needed
-    int n_pad = (n % 2 == 1) ? n + 1 : n;
-    int m_pad = (m % 2 == 1) ? m + 1 : m;
-    
-    // Initialize padded vectors
-    a_padded = arma::vec(n_pad, arma::fill::zeros);
-    b_padded = arma::vec(m_pad, arma::fill::zeros);
-    
-    // Copy original values
-    a_padded.head(n) = a;
-    b_padded.head(m) = b;
-    
-    // Add tiny mass to dummy nodes to maintain feasibility
-    double eps = 1e-12;
-    if (n_pad > n) a_padded(n) = eps;
-    if (m_pad > m) b_padded(m) = eps;
-    
-    // Adjust marginals to maintain balance
-    // Use a simpler approach: ensure total sums match
-    double sum_a = arma::sum(a_padded);
-    double sum_b = arma::sum(b_padded);
-    
-    if (std::abs(sum_a - sum_b) > 1e-15) {
-      // Add difference to dummy node if available, otherwise to first element
-      if (sum_a > sum_b) {
-        if (m_pad > m) {
-          b_padded(m) += (sum_a - sum_b);  // Add to dummy sink
-        } else {
-          b_padded(0) += (sum_a - sum_b);  // Add to first element
-        }
-      } else {
-        if (n_pad > n) {
-          a_padded(n) += (sum_b - sum_a);  // Add to dummy source
-        } else {
-          a_padded(0) += (sum_b - sum_a);  // Add to first element
-        }
-      }
-    }
-  }
-  
-  // Pad cost matrix with high costs for dummy nodes
-  static arma::mat padCostMatrix(const arma::mat& cost, int n_pad, int m_pad) {
-    int n = cost.n_rows;
-    int m = cost.n_cols;
-    
-    // Create padded matrix with high default cost
-    double high_cost = cost.max() * 1000;
-    arma::mat cost_padded(n_pad, m_pad);
-    cost_padded.fill(high_cost);
-    
-    // Copy original costs
-    cost_padded.submat(0, 0, n-1, m-1) = cost;
-    
-    return cost_padded;
-  }
-  
-  // Extract solution removing padding
-  static arma::mat extractSolution(const arma::mat& P_padded, int n, int m) {
-    return P_padded.submat(0, 0, n-1, m-1);
-  }
-
 public:
-  // Main solver interface
-  static arma::mat solve(const arma::mat& cost, 
-                        const arma::vec& a, 
-                        const arma::vec& b,
-                        double eps = 1e-9);
-  
+  // Solve min <cost, P> s.t. P 1 = a, P' 1 = b, P >= 0.
+  // `eps` is the tolerance used when checking that sum(a) == sum(b).
+  static arma::mat solve(const arma::mat& cost,
+                         const arma::vec& a,
+                         const arma::vec& b,
+                         double eps = 1e-9);
+
   // Check if LEMON library is available at compile time
   static bool isAvailable();
+
+  // Number of integer units the total mass is mapped to.
+  static double mass_units() { return 1125899906842624.0; }  // 2^50
+
+  // Largest-remainder rounding of `w * scale` to non-negative integers that
+  // sum exactly to `total`. Exposed for testing.
+  static std::vector<int64_t> quantize_masses(const arma::vec& w,
+                                              double scale,
+                                              int64_t total);
 };
 
-// Fallback implementation using our existing network simplex
-// (to be used if LEMON is not available)
+// Fallback implementation using lpSolve via the R helper classical_ot_lp_r()
+// (used if LEMON is not available).
 namespace fallback {
-  arma::mat network_simplex_ot(const arma::mat& cost, 
-                               const arma::vec& a, 
+  arma::mat network_simplex_ot(const arma::mat& cost,
+                               const arma::vec& a,
                                const arma::vec& b,
                                double eps = 1e-9);
 }
