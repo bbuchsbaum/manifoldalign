@@ -10,14 +10,28 @@ library(multidesign)
 library(multivarious)
 library(tibble)
 
-# Loosen tolerance for R/C++ equivalence testing due to floating point differences
-EQUIVALENCE_TOL <- 1e-2
+# Both backends run the same algorithm on the same (unscaled) inputs, so they
+# must agree to rounding error. Each comparison skips when the compiled symbol
+# is unavailable and otherwise asserts that the compiled backend actually ran.
 
 cpp_backend_available <- function(symbol) {
-  isTRUE(is.loaded(symbol))
+  isTRUE(manifoldalign:::.cpp_symbol_available(symbol))
 }
 
+last_backend <- function(kernel) manifoldalign:::.last_cpp_backend(kernel)
+
 ## Performance/benchmark gating is centralized in helper-benchmarks.R
+
+# Direct double-loop squared distances (independent oracle).
+proxy_free_sqdist <- function(X1, X2) {
+  D <- matrix(0, nrow(X1), nrow(X2))
+  for (i in seq_len(nrow(X1))) {
+    for (j in seq_len(nrow(X2))) {
+      D[i, j] <- sum((X1[i, ] - X2[j, ])^2)
+    }
+  }
+  D
+}
 
 # Helper to create a hyperdesign with anchors for testing
 create_test_hyperdesign_anchors <- function(X1, X2, anchor_pairs) {
@@ -53,18 +67,18 @@ run_both_implementations <- function(fun_name, ...) {
   
   # Run C++ version
   symbol_map <- list(
-    solve_sinkhorn_stabilized = "_manifoldalign_solve_sinkhorn_stabilized_cpp",
+    solve_sinkhorn_stabilized = "_manifoldalign_sinkhorn_unified_potentials",
     compute_edge_gradient = "_manifoldalign_compute_edge_gradient_cpp",
     compute_parrot_cost = "_manifoldalign_compute_parrot_cost_cpp",
     compute_rwr_vectorized = "_manifoldalign_compute_rwr_vectorized_cpp"
   )
   cpp_symbol <- symbol_map[[fun_name]]
-  if (!is.null(cpp_symbol) && !cpp_backend_available(cpp_symbol)) {
-    result_cpp <- result_r
-  } else {
-    result_cpp <- fun_dispatch(..., use_cpp = TRUE)
+  if (!cpp_backend_available(cpp_symbol)) {
+    skip(paste("compiled kernel unavailable:", cpp_symbol))
   }
-  
+  result_cpp <- fun_dispatch(..., use_cpp = TRUE)
+  expect_identical(last_backend(fun_name), "cpp")
+
   list(r = result_r, cpp = result_cpp)
 }
 
@@ -77,26 +91,31 @@ test_that("Sinkhorn R and C++ produce equivalent results", {
   
   for (n in sizes) {
     for (tau in tau_values) {
-      # Create test cost matrix
-      C <- matrix(runif(n * n), n, n)
+      # Cost range != 1, so a hidden rescaling in either backend would show.
+      C <- matrix(runif(n * n, 0, 3), n, n)
       C <- (C + t(C)) / 2  # Make symmetric for consistency
-      
+
       # Run both implementations
       results <- run_both_implementations(
         "solve_sinkhorn_stabilized",
         C = C, tau = tau, max_iter = 100, tol = 1e-6
       )
-      
-      # Check equivalence
-      expect_equal(
-        results$r, results$cpp,
-        tolerance = EQUIVALENCE_TOL,
-        info = sprintf("Sinkhorn equivalence failed for n=%d, tau=%.3f", n, tau)
-      )
-      
-      # Verify properties are preserved
-      expect_lt(max(abs(rowSums(results$cpp) - 1 / n)), 1e-2)
-      expect_lt(max(abs(colSums(results$cpp) - 1 / n)), 1e-2)
+
+      info <- sprintf("Sinkhorn equivalence failed for n=%d, tau=%.3f", n, tau)
+      expect_equal(results$r$plan, results$cpp$plan, tolerance = 1e-8, info = info)
+      expect_identical(results$r$iterations, results$cpp$iterations, info = info)
+      expect_identical(results$r$converged, results$cpp$converged, info = info)
+      expect_equal(results$r$marginal_error, results$cpp$marginal_error,
+                   tolerance = 1e-6, info = info)
+
+      # Rows are exact after the final update; the reported residual is honest.
+      plan <- results$cpp$plan
+      expect_lt(max(abs(rowSums(plan) - 1 / n)), 1e-12)
+      expect_equal(max(abs(c(rowSums(plan), colSums(plan)) - 1 / n)),
+                   results$cpp$marginal_error, tolerance = 1e-6)
+      if (results$cpp$converged) {
+        expect_lt(max(abs(colSums(plan) - 1 / n)), 1e-6)
+      }
     }
   }
 })
@@ -140,7 +159,7 @@ test_that("Edge gradient R and C++ produce equivalent results", {
   # Check equivalence
   expect_equal(
     results$r, results$cpp,
-    tolerance = EQUIVALENCE_TOL,
+    tolerance = 1e-12,
     info = "Edge gradient equivalence failed"
   )
 })
@@ -159,23 +178,19 @@ test_that("Squared distance computation R and C++ are equivalent", {
     X1 <- matrix(rnorm(n1 * d), n1, d)
     X2 <- matrix(rnorm(n2 * d), n2, d)
     
-    # R implementation
-    X1_sq <- rowSums(X1^2)
-    X2_sq <- rowSums(X2^2)
-    D_r <- outer(X1_sq, X2_sq, "+") - 2 * X1 %*% t(X2)
-    
+    D_r <- manifoldalign:::compute_squared_distances(X1, X2, use_cpp = FALSE)
+
     if (!cpp_backend_available("_manifoldalign_compute_squared_distances_cpp")) {
-      D_cpp <- D_r
-    } else {
-      D_cpp <- manifoldalign:::compute_squared_distances_cpp(X1, X2)
+      skip("compiled squared-distance kernel unavailable")
     }
-    
-    # Check equivalence
-    expect_equal(
-      D_r, D_cpp,
-      tolerance = EQUIVALENCE_TOL,
-      info = sprintf("Distance computation failed for %dx%d", n1, n2)
-    )
+    D_cpp <- manifoldalign:::compute_squared_distances(X1, X2, use_cpp = TRUE)
+    expect_identical(last_backend("compute_squared_distances"), "cpp")
+
+    # Check equivalence against each other and an independent oracle
+    expect_equal(D_r, D_cpp, tolerance = 1e-12,
+                 info = sprintf("Distance computation failed for %dx%d", n1, n2))
+    D_oracle <- as.matrix(proxy_free_sqdist(X1, X2))
+    expect_equal(D_cpp, D_oracle, tolerance = 1e-10)
   }
 })
 
@@ -223,17 +238,17 @@ test_that("RWR computation R and C++ are equivalent", {
   }
   
   if (!cpp_backend_available("_manifoldalign_compute_rwr_vectorized_cpp")) {
-    R_cpp <- R_r
-  } else {
-    R_cpp <- manifoldalign:::compute_rwr_vectorized_cpp(
-      as.matrix(WT), as.matrix(E), sigma, 20, 1e-6
-    )
+    skip("compiled RWR kernel unavailable")
   }
-  
+  R_cpp <- manifoldalign:::compute_rwr_vectorized_cpp_fallback(
+    as.matrix(WT), as.matrix(E), sigma, 20, 1e-6
+  )
+  expect_identical(last_backend("compute_rwr_vectorized"), "cpp")
+
   # Check equivalence
   expect_equal(
     R_r, R_cpp,
-    tolerance = EQUIVALENCE_TOL,
+    tolerance = 1e-12,
     info = "RWR computation equivalence failed"
   )
 })
@@ -251,23 +266,31 @@ test_that("Full PARROT pipeline R and C++ are equivalent", {
   # Create hyperdesign with anchors
   hd <- create_test_hyperdesign_anchors(X1, X2, cbind(1:3, 1:3))
   
-  result_r <- parrot(hd, anchors = anchor_col, tau = 0.1, max_iter = 20, use_cpp = FALSE)
-  result_cpp <- parrot(hd, anchors = anchor_col, tau = 0.1, max_iter = 20, use_cpp = TRUE)
+  if (!cpp_backend_available("_manifoldalign_compute_parrot_cost_cpp")) {
+    skip("compiled PARROT kernels unavailable")
+  }
+  result_r <- parrot(hd, anchors = anchor_col, tau = 0.1, max_iter = 5000, use_cpp = FALSE)
+  result_cpp <- parrot(hd, anchors = anchor_col, tau = 0.1, max_iter = 5000, use_cpp = TRUE)
+  expect_identical(last_backend("solve_sinkhorn_stabilized"), "cpp")
+  expect_identical(last_backend("compute_parrot_cost"), "cpp")
 
   plan_r <- as.matrix(result_r$transport_plan)
   plan_cpp <- as.matrix(result_cpp$transport_plan)
-  
-  # Check key outputs are equivalent
+
+  # Same problem, same algorithm: agreement to rounding error.
   expect_equal(
     plan_r,
     plan_cpp,
-    tolerance = 5e-3,  # Slightly relaxed for full pipeline
+    tolerance = 1e-6,
     info = "Full PARROT pipeline equivalence failed"
   )
-  
+  expect_equal(result_r$objective_history, result_cpp$objective_history, tolerance = 1e-8)
+
   # Check that both produce valid transport plans
   expect_true(all(plan_cpp >= 0))
-  expect_equal(rowSums(plan_cpp), rep(1 / n_nodes, n_nodes), tolerance = 5e-3)
+  expect_true(result_cpp$convergence$sinkhorn_converged)
+  expect_lt(max(abs(rowSums(plan_cpp) - 1 / n_nodes)), 1e-6)
+  expect_lt(max(abs(colSums(plan_cpp) - 1 / n_nodes)), 1e-6)
 })
 
 test_that("Performance improvement is achieved with C++", {

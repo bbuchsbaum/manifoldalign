@@ -33,15 +33,18 @@ parrot_aligner <- function() {
 #' @param ncomp Number of spectral components (currently unused)
 #' @param sigma RWR restart probability
 #' @param lambda Overall regularization weight
-#' @param lambda_e Edge/attribute cost weight (defaults to lambda * 0.5)
-#' @param lambda_n Network/Laplacian regularization (defaults to lambda * 0.5)
+#' @param lambda_e Edge consistency weight (defaults to lambda * 0.5)
+#' @param lambda_n Neighborhood consistency (KL) weight (defaults to lambda * 0.5)
 #' @param lambda_p Anchor prior weight (defaults to lambda)
-#' @param tau Entropic regularization parameter for Sinkhorn
-#' @param alpha Mixing parameter for cost matrix
-#' @param gamma Network structure penalty weight
-#' @param solver Transport solver method ("sinkhorn")
-#' @param max_iter Maximum iterations for RWR and Sinkhorn
-#' @param tol Convergence tolerance
+#' @param tau Proximal (KL) step weight of the outer loop; see [parrot()]
+#' @param alpha Weight of the attribute cost in the node cost (RWR cost gets
+#'   `1 - alpha`)
+#' @param gamma Cross-graph discount factor of the Sylvester iteration
+#' @param solver Transport solver method (only "sinkhorn")
+#' @param max_iter Maximum iterations for RWR and each Sinkhorn solve
+#' @param max_outer Maximum number of outer proximal steps
+#' @param tol Convergence tolerance (RWR, Sinkhorn marginal residual, plan
+#'   change between outer steps)
 #' @param use_cpp Logical; use C++ implementation if available
 #' @param anchors_policy Policy when no anchors provided: "warn", "off", "error"
 #' @param unsup_strategy Unsupervised seeding strategy: "mnn_bootstrap",
@@ -52,8 +55,9 @@ parrot_aligner <- function() {
 #' @param laplacian_reg Alternative to lambda_n for Laplacian regularization
 #' @param ... Additional arguments (unused)
 #' @return An object of class parrot_pair_fit containing transport (n1 x n2
-#'   matrix), objective (final cost), n1 (samples in domain i), and n2
-#'   (samples in domain j).
+#'   matrix), objective (final PARROT objective), objective_history,
+#'   convergence diagnostics, n1 (samples in domain i), and n2 (samples in
+#'   domain j).
 #' @examples
 #' \donttest{
 #' set.seed(456)
@@ -75,7 +79,8 @@ fit_pair.parrot_aligner <- function(algo, X_i, X_j, links = NULL,
                                     alpha = 0.2,
                                     gamma = 0.1,
                                     solver = c("sinkhorn"),
-                                    max_iter = 100,
+                                    max_iter = 1000,
+                                    max_outer = 10,
                                     tol = 1e-6,
                                     use_cpp = FALSE,
                                     anchors_policy = c("warn","off","error"),
@@ -155,11 +160,15 @@ fit_pair.parrot_aligner <- function(algo, X_i, X_j, links = NULL,
   tr <- solve_parrot_transport(networks, rwr_features, anchor_info,
                                lambda_e, lambda_n, lambda_p,
                                tau, alpha, sigma, gamma, solver,
-                               max_iter, tol = tol, use_cpp = use_cpp)
+                               max_iter, max_outer = max_outer,
+                               tol = tol, use_cpp = use_cpp)
+  convergence <- .parrot_convergence_report(tr, max_iter, tol)
 
   structure(list(
     transport = tr$transport_plan,
     objective = tr$final_objective %||% NA_real_,
+    objective_history = tr$objective_history,
+    convergence = convergence,
     n1 = n1, n2 = n2
   ), class = "parrot_pair_fit")
 }
