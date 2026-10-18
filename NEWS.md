@@ -83,6 +83,22 @@ These fix defects found in a package review; several change fitted output.
   formal argument; unsupported groups and consensus modes error.
   `relative_transform()` for GRASP pair fits returns the transpose of its
   previous operator.
+* **MMA (`mma_align_multiple()`)**: `assignment` maps each domain row to its
+  reference row (it was inverted, and meaningless for non-square
+  posteriors); EM posteriors and the log-likelihood include the full
+  Gaussian normalisation; the M-step and the starting rotation were
+  transposed, so EM results change; `converged` is reported correctly.
+* **CONE-Align and GRASP**: score rows keep each domain's input order and the
+  assignment is returned separately (`NA` when unmatched); `v` is a
+  least-squares bridge to the aligned scores in CONE, CONE multiple, GRASP and
+  MMA; the default `center()` preprocessing is fitted and stored, and
+  preprocessors are concatenated by feature block, so out-of-sample projection
+  works. GRASP's `lambda`, `max_iter` and `tol` now take effect, unequal node
+  counts work, and `grasp_multiset()` handles four or more domains of unequal
+  size. `solver = "auction"` now errors everywhere (it never worked).
+* **Eigensolvers**: graph-alignment methods share one symmetric eigensolver
+  that returns the requested end of the spectrum and checks convergence;
+  coupled diagonalisation uses the smallest algebraic eigenvalues.
 * **`linear_sim_embed()`**: convergence no longer depends on `verbose` (the
   default run used to stop after one update); gradients are exact in R and
   C++; non-convergence is reported; `tol` reaches L-BFGS-B as `pgtol`.

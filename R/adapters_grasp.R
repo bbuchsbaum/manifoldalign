@@ -37,7 +37,8 @@ grasp_aligner <- function() {
 #' @param sigma Bandwidth parameter for descriptor weighting
 #' @param lambda Regularization parameter for rotation alignment
 #' @param use_laplacian Logical; if TRUE use graph Laplacian, else adjacency
-#' @param solver Assignment solver: "linear", "hungarian", or "auction"
+#' @param solver Assignment solver: `"linear"` or `"hungarian"`; both run the
+#'   exact linear assignment solver.
 #' @param ... Additional arguments (unused)
 #' @return An object of class grasp_pair_fit containing rotation (kxk signed
 #'   permutation `M` with `C_j %*% M ~ C_i`), the descriptor coefficients
@@ -62,7 +63,7 @@ fit_pair.grasp_aligner <- function(algo, X_i, X_j, links = NULL,
                                    sigma = 0.73,
                                    lambda = 0.1,
                                    use_laplacian = TRUE,
-                                   solver = c("linear", "hungarian", "auction"),
+                                   solver = c("linear", "hungarian"),
                                    ...) {
   solver <- match.arg(solver)
 

@@ -86,8 +86,8 @@ str(cone_fit, max.level = 1)
 
 ### Assignment Quality
 
-`cone_align()` returns a permutation vector (`assignment`) that maps nodes in the
-second domain to nodes in the first (reference) domain.  The latent class labels
+`cone_align()` returns an assignment vector: `assignment[i]` is the node of the
+second domain matched to node `i` of the first (reference) domain.  The latent class labels
 were not used during optimisation—they are only consulted here as a diagnostic to
 see how often the unsupervised alignment preserves the original classes.
 
@@ -96,7 +96,7 @@ assignment <- cone_fit$assignment
 ref_labels <- pair_multidesign[[1]]$design$condition
 cmp_labels <- pair_multidesign[[2]]$design$condition
 
-condition_accuracy <- mean(ref_labels[assignment] == cmp_labels)
+condition_accuracy <- mean(ref_labels == cmp_labels[assignment], na.rm = TRUE)
 identity_fraction <- mean(assignment == seq_along(assignment))
 
 tibble(
@@ -107,7 +107,8 @@ tibble(
 
 ### Visualising the Aligned Embeddings
 
-The aligned embeddings (`cone_fit$s`) stack the two domains.  We visualise the
+The aligned embeddings (`cone_fit$s`) stack the two domains, each in its own
+input row order.  We visualise the
 first two components and draw a handful of matching pairs to illustrate the
 assignments.
 
@@ -121,7 +122,7 @@ colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
 scores <- score_tbl %>%
   mutate(
     domain = rep(pair_names, times = node_counts),
-    condition = rep(ref_labels, length(pair_names))
+    condition = c(ref_labels, cmp_labels)
   )
 
 # pick 15 nodes to visualise correspondences

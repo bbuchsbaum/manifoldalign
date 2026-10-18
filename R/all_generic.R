@@ -344,7 +344,7 @@ grasp <- function(data, ...) {
 #'   \item \code{ncomp}: Dimension of spectral embeddings
 #'   \item \code{sigma}: Bandwidth for embedding computation
 #'   \item \code{lambda}: Regularization for numerical stability
-#'   \item \code{solver}: Assignment algorithm ("linear" or "auction")
+#'   \item \code{solver}: Assignment algorithm (\code{"linear"}, the exact solver)
 #' }
 #'
 #' @return A \code{multiblock_biprojector} object containing:
@@ -513,7 +513,7 @@ parrot <- function(data, anchors, ...) {
 #'     \item \code{sigma}: Diffusion parameter
 #'     \item \code{lambda}: Regularization parameter
 #'     \item \code{use_laplacian}: Whether to use Laplacian normalization
-#'     \item \code{solver}: Assignment solver ("linear" or "auction")
+#'     \item \code{solver}: Assignment solver (\code{"linear"}, the exact solver)
 #'     \item \code{max_iter}: Maximum iterations
 #'     \item \code{tol}: Convergence tolerance
 #'     \item \code{knn}: Number of nearest neighbors
@@ -556,7 +556,7 @@ cone_align_multiple <- function(data, ...) {
 #'     \item \code{lambda}: Regularization parameter for base alignment (default: 0.1)
 #'     \item \code{use_laplacian}: Whether to use Laplacian normalization (default: TRUE)
 #'     \item \code{anchor}: Index of reference graph or "mean" for barycenter (default: 1)
-#'     \item \code{solver}: Assignment method: "auction" (default) or "linear"
+#'     \item \code{solver}: Assignment method (\code{"linear"}, the exact solver; \code{"auction"} is rejected)
 #'     \item \code{max_iter}: Maximum iterations for joint alignment (default: 100)
 #'     \item \code{tol}: Convergence tolerance (default: 1e-6)
 #'   }

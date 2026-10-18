@@ -85,8 +85,8 @@ str(grasp_internal$assignment)
 
 ### Assignment Diagnostics
 
-The `assignment` component maps nodes in the second domain to nodes in the first
-(reference) domain.  We compare the assigned pairs with the underlying class
+In the `assignment` component, `assignment[i]` is the node of the second domain
+matched to node `i` of the first (reference) domain (`NA` when unmatched).  We compare the assigned pairs with the underlying class
 labels to quantify alignment quality—remember that the optimiser itself never
 sees these labels.
 
@@ -95,7 +95,7 @@ assignment <- grasp_internal$assignment
 ref_design <- pair_multidesign[[1]]$design
 cmp_design <- pair_multidesign[[2]]$design
 
-class_accuracy <- mean(ref_design$condition == cmp_design$condition[assignment])
+class_accuracy <- mean(ref_design$condition == cmp_design$condition[assignment], na.rm = TRUE)
 identity_fraction <- mean(assignment == seq_along(assignment))
 
 tibble(
@@ -107,8 +107,12 @@ tibble(
 ```{r grasp-error}
 n_ref <- node_counts[1]
 embed1 <- grasp_internal$s[seq_len(n_ref), , drop = FALSE]
-embed2 <- grasp_internal$s[n_ref + seq_len(n_ref), , drop = FALSE]
-final_err <- sqrt(mean(rowSums((embed1 - embed2)^2)))
+embed2 <- grasp_internal$s[n_ref + seq_len(node_counts[2]), , drop = FALSE]
+# Score rows follow each domain's input order; compare each reference node with
+# the node it was matched to.
+matched <- !is.na(assignment)
+final_err <- sqrt(mean(rowSums((embed1[matched, , drop = FALSE] -
+                                 embed2[assignment[matched], , drop = FALSE])^2)))
 
 tibble(
   metric = "Post-alignment RMS error",
@@ -123,7 +127,7 @@ colour points by their latent class.
 
 ```{r grasp-plot, fig.width = 6, fig.height = 4}
 embed1 <- grasp_internal$s[seq_len(n_ref), , drop = FALSE]
-embed2 <- grasp_internal$s[n_ref + seq_len(n_ref), , drop = FALSE]
+embed2 <- grasp_internal$s[n_ref + seq_len(node_counts[2]), , drop = FALSE]
 
 score_tbl <- as_tibble(rbind(embed1, embed2), .name_repair = "minimal")
 colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
@@ -131,8 +135,8 @@ colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
 scores <- score_tbl %>%
   mutate(
     sample = seq_len(nrow(.)),
-    domain = rep(pair_names, each = nrow(embed1)),
-    condition = c(ref_design$condition, cmp_design$condition[assignment])
+    domain = rep(pair_names, times = c(nrow(embed1), nrow(embed2))),
+    condition = c(ref_design$condition, cmp_design$condition)
   )
 
  ggplot(scores, aes(x = comp1, y = comp2, colour = condition, shape = domain)) +
