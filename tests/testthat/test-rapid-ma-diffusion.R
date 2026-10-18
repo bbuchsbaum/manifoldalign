@@ -253,6 +253,39 @@ test_that("directed relations create capped forward and reverse channels", {
   )
 })
 
+test_that("directedness of channels follows the relation metadata", {
+  set.seed(1131)
+  n <- 30L
+  X <- matrix(stats::rnorm(n * 4L), nrow = n)
+  for (normalization in c("random_walk", "symmetric")) {
+    relations <- rapid_prepare_diffusion_relations(
+      X,
+      relations = list(cycle = directed_cycle(n)),
+      build_feature = TRUE,
+      feature_k = 5L,
+      custom_symmetrize = "none",
+      normalization = normalization
+    )
+    expect_false(relations$metadata$feature$directed)
+    expect_true(relations$metadata$cycle$directed)
+    fit <- rapid_diffusion_encode(
+      X, relations,
+      control = list(steps = c(0L, 1L), output_dim = 3L, gate = "uniform")
+    )
+    # The undirected kNN graph keeps one channel even though its random-walk
+    # operator is asymmetric; the directed cycle gets both directions.
+    expect_setequal(
+      fit$diagnostics$channels,
+      c("feature", "cycle__forward", "cycle__reverse")
+    )
+    summary <- relations$diagnostics$summary
+    expect_identical(
+      summary$directed[match(c("feature", "cycle"), summary$relation)],
+      c(FALSE, TRUE)
+    )
+  }
+})
+
 test_that("fixed-hop work and retained storage scale with sparse edges", {
   make_fit <- function(n) {
     X <- cbind(seq_len(n) / n, sin(seq_len(n) / 13), cos(seq_len(n) / 17))
