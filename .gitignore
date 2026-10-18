@@ -26,8 +26,20 @@ Thumbs.db
 .omc/
 .claude/
 
-# Documentation build artifacts
-docs/
+# Documentation build artifacts. Keep hand-authored evidence policy sources.
+docs/*
+!docs/BENCHMARK_PROTOCOL.md
+!docs/ALIGNMENT_LIFECYCLE.md
+!docs/ALIGNMENT_METHOD_SUNSET_REVIEW.md
+!docs/METHOD_COMPARISON_TABLE.md
+!docs/ORACLE_CI_POLICY.md
+!docs/REAL_DATA_BENCHMARKS.md
+!docs/rapid-ma-validation-summary.csv
+!docs/rapid-ma-scaling-summary.csv
+!docs/evidence/
+!docs/evidence/alignment-tournament-v2/
+!docs/evidence/alignment-tournament-v2/**
+docs/evidence/alignment-tournament-v2/checkpoints/
 _site/
 inst/doc/
 
@@ -47,6 +59,7 @@ inst/doc/
 notes/
 EXAMPLES_ADDED.md
 METHOD_COMPARISON_TABLE.md
+!docs/METHOD_COMPARISON_TABLE.md
 PRD_MultiSetUOTAlign_V2_Gaps.md
 ms_diffusion.md
 ruleset.md
@@ -60,5 +73,4 @@ repomix-output.txt
 
 # Test strategy docs (not test code)
 tests/TESTING_GUIDE.md
-tests/TESTING_STRATEGY.md
 tests/testthat/COUPLED_DIAG_MATH_TESTS.md

@@ -310,9 +310,15 @@ test_that("benchmark_graph_alignment_methods runs (fpgw only)", {
   )
   expect_s3_class(res, "data.frame")
   expect_true(all(res$method == "fpgw"))
+  expect_identical(res$status, "ok")
   expect_true(is.na(res$error))
-  expect_equal(res$top1_accuracy, 1)
+  expect_true(is.finite(res$top1_accuracy))
+  expect_gte(res$top1_accuracy, 0)
+  expect_lte(res$top1_accuracy, 1)
   expect_equal(res$coverage, 1)
+  expect_identical(res$topology_disposition, "not_applicable")
+  expect_false(res$observed_topology_used)
+  expect_true(res$row_identity_preserved)
 })
 
 test_that("benchmark_graph_alignment_methods runs (ssma only)", {

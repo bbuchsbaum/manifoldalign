@@ -28,8 +28,7 @@ set.seed(1234)
 # ---------------------------------------------------------------------------
 # 1. Helper - objective value that does not rely on package internals
 # ---------------------------------------------------------------------------
-objective_fpgw <- function(gamma, C_feat, Cx, Cy,
-                          omega1 = 0.5, lambda = 0, rho = NULL) {
+objective_fpgw <- function(gamma, C_feat, Cx, Cy, omega1 = 0.5) {
   
   struct_wt <- 1 - omega1
   # term 1 - feature
@@ -43,10 +42,7 @@ objective_fpgw <- function(gamma, C_feat, Cx, Cy,
   gw_term <- sum((const - 2 * Cx %*% gamma %*% t(Cy)) * gamma)
   strc <- struct_wt * gw_term
   
-  # term 3 - TV penalty
-  tv <- if (lambda > 0) lambda * sum(gamma) else 0
-  
-  ftr + strc + tv
+  ftr + strc
 }
 
 # ---------------------------------------------------------------------------
@@ -241,7 +237,7 @@ test_that("FPGW distance is symmetric and satisfies triangle inequality", {
 # ---------------------------------------------------------------------------
 # 8. Limiting behavior: FPGW collapses to FGW
 # ---------------------------------------------------------------------------
-test_that("FPGW with rho=1 or huge lambda equals classical FGW", {
+test_that("FPGW with rho=1 equals classical FGW", {
   skip_on_cran()
   skip_if_missing_fpgw_deps()
   set.seed(42)  # Ensure deterministic test
@@ -272,9 +268,9 @@ test_that("FPGW with rho=1 or huge lambda equals classical FGW", {
 })
 
 # ---------------------------------------------------------------------------
-# 9. TV penalty effect: transported mass decreases with lambda
+# 9. Withdrawn penalized route is rejected
 # ---------------------------------------------------------------------------
-test_that("Mass penalty decreases transported mass as lambda grows", {
+test_that("Penalized FPGW is withdrawn in favor of exact rho", {
   skip_on_cran()
   skip_if_missing_fpgw_deps()
 
@@ -283,23 +279,14 @@ test_that("Mass penalty decreases transported mass as lambda grows", {
   X2 <- matrix(rnorm(20), 5, 4)
   hd <- create_test_hyperdesign(list(X1, X2))
 
-  result_lambda0 <- fpgw(hd, omega1 = 0.4, lambda = 0.0, max_iter = 60)
-  result_lambda1 <- suppressWarnings(
-    fpgw(hd, omega1 = 0.4, lambda = 0.5, max_iter = 60)
+  expect_error(
+    fpgw(hd, omega1 = 0.4, lambda = 0.5, max_iter = 60),
+    "lambda > 0.*withdrawn.*rho"
   )
-  result_lambda5 <- suppressWarnings(
-    fpgw(hd, omega1 = 0.4, lambda = 2.0, max_iter = 60)
+  expect_error(
+    fpgw(hd, omega1 = 0.4, lambda = 2.0, rho = 0.6, max_iter = 60),
+    "lambda > 0.*withdrawn.*rho"
   )
-
-  mass0 <- sum(result_lambda0$transport_plans[[1]])
-  mass1 <- sum(result_lambda1$transport_plans[[1]])
-  mass5 <- sum(result_lambda5$transport_plans[[1]])
-
-  tol <- 1e-6
-  expect_lte(mass1, mass0 + tol,
-             label = sprintf("λ=0.5 mass (%.4f) should not exceed λ=0 mass (%.4f)", mass1, mass0))
-  expect_lte(mass5, mass1 + tol,
-             label = sprintf("λ=2.0 mass (%.4f) should not exceed λ=0.5 mass (%.4f)", mass5, mass1))
 })
 
 # ---------------------------------------------------------------------------
@@ -336,9 +323,7 @@ test_that("FPGW is numerically stable", {
   hd <- create_test_hyperdesign(list(X1, X2))
   
   expect_no_error({
-    result <- suppressWarnings(
-      fpgw(hd, omega1 = 0.5, lambda = 0.1)
-    )
+    result <- fpgw(hd, omega1 = 0.5, rho = 0.8)
   })
   
   # Check for valid output

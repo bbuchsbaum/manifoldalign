@@ -1,9 +1,35 @@
 #' Multiscale manifold alignment (Wang-Mahadevan style)
 #'
-#' Experimental multiset manifold alignment with a QR-free spectral hierarchy.
-#' The implementation builds a joint graph Laplacian, compresses each domain
-#' with truncated SVD, forms a reduced operator, and extracts nested multiscale
-#' bases from its spectrum.
+#' Deprecated experimental multiset manifold alignment with a QR-free spectral
+#' hierarchy. This implementation is retained temporarily for reproducibility,
+#' but it has unresolved solver/completion failures and is not recommended.
+#' Use [rapid_ma()] for supplied sparse relations and structured attributes,
+#' [ssma_align()] for semi-supervised feature manifolds, or
+#' [spectral_mnn_align()] for an unsupervised spectral baseline. Removal is
+#' scheduled for manifoldalign 1.0.0.
+#'
+#' @section Migration:
+#' Given a list `domains` of feature matrices, choose the replacement by input
+#' contract:
+#' ```r
+#' # Supplied sparse relations, positions, or structured attributes
+#' rapid_ma(domains, relations = relations, positions = positions,
+#'          attributes = attributes)
+#'
+#' # Semi-supervised feature manifolds
+#' ssma_align(domains, correspondences = correspondences)
+#'
+#' # Unsupervised feature-derived spectral alignment
+#' spectral_mnn_align(domains)
+#' ```
+#'
+#' @section Bounded repair gate:
+#' A repair will be considered only with a coherent algorithmic owner and
+#' specification, zero malformed-formula or convergence-code errors on all
+#' mandatory fixtures, at least 95 percent completion on applicable frozen
+#' cases, passing numerical invariants and an independent oracle, and evidence
+#' of a unique capability or non-dominated regime. Otherwise removal remains
+#' scheduled for manifoldalign 1.0.0.
 #'
 #' @param data A `hyperdesign` object or list of matrices.
 #' @param ... Additional arguments passed to methods.
@@ -12,7 +38,55 @@
 #'   `multiscale_manifold_align`.
 #' @export
 multiscale_manifold_align <- function(data, ...) {
+  .Deprecated(
+    new = "rapid_ma",
+    package = "manifoldalign",
+    msg = .multiscale_deprecation_message()
+  )
   UseMethod("multiscale_manifold_align")
+}
+
+.multiscale_lifecycle_record <- function() {
+  list(
+    method = "multiscale_manifold_align",
+    state = "deprecated",
+    recommended = FALSE,
+    quarantined = FALSE,
+    api_enabled = TRUE,
+    findings = c("incoherent_solver", "low_accuracy"),
+    evidence = list(
+      correctness = "smoke",
+      accuracy = "comparative",
+      scalability = "comparative",
+      oracle_ids = character(),
+      benchmark_ids = c(
+        "docs/rapid-ma-validation-summary.csv",
+        "docs/rapid-ma-scaling-raw.csv"
+      ),
+      reviewed_by = "alignment-evidence-audit",
+      reviewed_on = "2026-07-22"
+    ),
+    deprecation = list(
+      reason = "incoherent_implementation",
+      replacement = "rapid_ma",
+      warning_since = "0.1.0",
+      warning_through = "0.2.0",
+      removal_at = "1.0.0",
+      migration = paste0(
+        "Use rapid_ma() for supplied relations/positions/attributes, ",
+        "ssma_align() for semi-supervised feature manifolds, or ",
+        "spectral_mnn_align() for an unsupervised spectral baseline."
+      ),
+      archive = paste0(
+        "R/multiscale_manifold_align.R and ",
+        "tests/testthat/test-multiscale-manifold-align-control.R"
+      )
+    )
+  )
+}
+
+.multiscale_deprecation_message <- function() {
+  .alignment_deprecation_message(.multiscale_lifecycle_record())
 }
 
 .msa_preprocess_domains <- function(domains, preproc) {

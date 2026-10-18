@@ -10,7 +10,10 @@ aligner_capabilities(algo)
 \item{algo}{An aligner object created by new_aligner or an aligner constructor}
 }
 \value{
-A list with elements group (character) and supports_multi (logical)
+A list with elements group (character) and supports_multi (logical).
+  Use [alignment_method_info()] for the complete capability and lifecycle
+  contract; registry meta-tests verify that these adapter fields agree with
+  that record.
 }
 \description{
 Capabilities for an aligner

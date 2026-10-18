@@ -7,25 +7,53 @@
 
 **manifoldalign** is an R package for aligning data from multiple domains into a shared latent space. It implements a broad family of manifold alignment and domain adaptation methods — from kernel-based and spectral approaches to optimal transport — preserving local manifold structure while matching samples across domains.
 
-## Alignment Methods
+## Alignment methods
 
-| Method | Function | Description |
-|--------|----------|-------------|
-| **KEMA** | `kema()` | Kernel Manifold Alignment with exact and regression-based solvers |
-| **GPCA** | `gpca_align()` | Generalized PCA alignment via shared subspace estimation |
-| **GPA** | `generalized_procrustes()` | Generalized Procrustes Analysis for partial observations |
-| **CONE** | `cone_align()`, `cone_align_multiple()` | Spectral graph alignment with anchor-based matching |
-| **GRASP** | `grasp()`, `grasp_multiset()` | Graph Spectral alignment using structural descriptors |
-| **PARROT** | `parrot()` | Position-Aware Regularized OT alignment |
-| **FPGW** | `fpgw()` | Fused Partial Gromov-Wasserstein transport |
-| **Gromov-Wasserstein** | `gromov_wasserstein()` | Structure-preserving optimal transport |
-| **Low-Rank** | `lowrank_align()` | Memory-efficient alignment via low-rank factorization |
-| **MMA** | `mma_align_multiple()` | Multiset Manifold Alignment for >2 domains |
-| **Coupled Diag.** | `coupled_diagonalization()` | Joint diagonalization across modalities |
-| **Spectral MNN** | `spectral_mnn_align()` | Mutual nearest neighbor spectral alignment |
-| **Token-OT Graph** | `token_ot_graph_align()` | Token-level OT with graph structure |
-| **SSMA** | `ssma_align()` | Semi-Supervised Manifold Alignment |
-| **RAPID-MA** | `rapid_ma()`, `rapid_ma_feature_scores()` | Scalable structure-aware alignment of many unmatched domains with custom sparse relations; feature-side (dual) coordinates via barycentres |
+No method is currently classified as stable or recommended. The table below
+states the input model instead of treating every method as an observed-graph
+aligner. See the [complete capability inventory](https://bbuchsbaum.github.io/manifoldalign/METHOD_COMPARISON_TABLE.html)
+and [lifecycle decision record](https://github.com/bbuchsbaum/manifoldalign/blob/main/docs/ALIGNMENT_METHOD_SUNSET_REVIEW.md).
+
+| Method | Function | Input contract | Lifecycle |
+|---|---|---|---|
+| **RAPID-MA** | `rapid_ma()`, `rapid_ma_feature_scores()` | Supplied sparse weighted relations, positions, and mixed attributes | Experimental |
+| **KEMA** | `kema()` | Supervised feature-derived kernel manifolds | Experimental |
+| **GPCA** | `gpca_align()` | Supervised feature manifolds | Experimental |
+| **GPA** | `generalized_procrustes()` | Orthogonal feature-task alignment with partial observations | Experimental |
+| **CONE** | `cone_align()`, `cone_align_multiple()` | Spectral graphs derived from features | Legacy/reference |
+| **GlobalGeo** | `global_geo_align()` | Correspondence-linked geometry derived from features | Legacy/reference |
+| **GRASP** | `grasp()`, `grasp_multiset()` | Functional maps on feature-derived graphs | Experimental |
+| **PARROT** | `parrot()` | Anchor-guided dense OT on feature-derived networks | Experimental |
+| **FPGW** | `fpgw()` | Partial metric-measure OT | Experimental |
+| **Gromov-Wasserstein** | `gromov_wasserstein()` | Balanced metric-measure OT | Experimental |
+| **Low-Rank** | `lowrank_align()` | Supervised low-rank feature manifolds | Experimental |
+| **MMA** | `mma_align_multiple()` | Multiset feature-derived manifolds | Experimental |
+| **Coupled Diag.** | `coupled_diagonalization()` | Joint feature-derived spectral bases | Experimental |
+| **Spectral MNN** | `spectral_mnn_align()` | Feature-derived spectral graphs | Experimental |
+| **Token-OT Graph** | `token_ot_graph_align()` | Sparse OT on feature-derived graphs | Experimental |
+| **SSMA** | `ssma_align()` | Semi-supervised feature-derived manifolds | Experimental |
+| **Multiset UOT** | `multiset_uot_align()` | Unbalanced metric-measure/template OT | Experimental |
+| **LSE** | `linear_sim_embed()` | Single-domain target-similarity embedding | Experimental utility |
+| **Multiscale** | `multiscale_manifold_align()` | Incoherent experimental hierarchy retained for reproduction | Deprecated; removal 1.0.0 |
+
+## Current evidence
+
+The frozen alignment tournament contains 588 typed rows: 42 attributed-graph
+cases by 14 methods, with zero missing result rows and zero validation
+problems. It records failures, unsupported tasks, runtime, peak RSS, controls,
+paired effects, and checksums for every published receipt file. Resumable binary
+checkpoints and the debug log remain local operational state. Read the
+[checked interpretation](https://github.com/bbuchsbaum/manifoldalign/blob/main/docs/evidence/alignment-tournament-v2/INTERPRETATION.md)
+or inspect the [raw results](https://github.com/bbuchsbaum/manifoldalign/blob/main/docs/evidence/alignment-tournament-v2/raw_results.csv).
+
+RAPID-MA completed 42/42 and is the only tournament method that consumed the
+supplied weighted relations together with positions and mixed attributes. It
+is not a universal accuracy winner: a position-only control beat its node
+matching in every non-oracle regime. Its frozen downstream classification probe
+did beat source-only transfer in every non-oracle regime. The current
+full-scoring scale receipt reaches 22,600 total nodes; an older runner reached
+220,000, while the one-million-node and blocked-inductive promotion gates
+failed. Those limitations are part of the public evidence contract.
 
 ## Installation
 
@@ -54,8 +82,8 @@ hd <- as_hyperdesign(
   labels = list(labels1, labels2)
 )
 
-# Align with KEMA
-result <- kema(hd, ncomp = 5)
+# Align with KEMA (an experimental supervised feature-manifold method)
+result <- kema(hd, y = label, ncomp = 5)
 
 # Or align with Generalized Procrustes
 result <- generalized_procrustes(hd, ncomp = 5)
@@ -77,19 +105,21 @@ dual$pooled           # equal-weight mean across domains
 dual$dispersion       # how consistently each feature is placed across domains
 ```
 
-## Unified Aligner Interface
+## Unified aligner interface
 
-All pairwise alignment methods share a consistent adapter interface:
+Adapter-backed methods share a consistent interface:
 
 ```r
 # Create an aligner
-aligner <- parrot_aligner(ncomp = 5)
+aligner <- grasp_aligner()
 
 # Fit a pair of domains
-fit <- fit_pair(aligner, X1, X2, labels1, labels2)
+fit <- fit_pair(aligner, X1, X2, ncomp = 5)
 
-# Align many domains at once
-fit_many(aligner, list(X1, X2, X3), list(l1, l2, l3))
+# Use a native multi-domain adapter when aligning more than two domains
+X3 <- matrix(rnorm(90 * 10), 90, 10)
+multi_aligner <- spectral_mnn_aligner()
+fit_many(multi_aligner, list(X1, X2, X3), ncomp = 5)
 ```
 
 ## Articles

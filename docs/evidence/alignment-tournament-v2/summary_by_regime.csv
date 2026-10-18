@@ -1,0 +1,253 @@
+"tier","family","overlap_regime","method_id","method","n_rows","n_intended","n_ok","n_error","n_timeout","n_crash","completion_rate","conditional_top1","intent_top1","intent_top1_ci_low","intent_top1_ci_high","intent_top1_sd","conditional_mrr","conditional_coverage","conditional_classification_oa","intent_classification_oa","median_runtime_sec","median_peak_rss_mb","max_peak_rss_mb"
+"large_scaling","geometric","partial_overlap","cone_align","CONE-Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","fpgw","Fused Partial Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","global_geo_align","GlobalGeo",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","gpca_align","GPCA Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","grasp","GRASP",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","gromov_wasserstein","Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","lowrank_align","Low-rank Alignment",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","parrot","PARROT",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.00325,0.00325,-0.0113621354466009,0.0178621354466009,0.00162634559672906,,0.54535,0.526118421052632,0.526118421052632,27.8545,1112.3046875,1174.75
+"large_scaling","geometric","partial_overlap","spectral_mnn_align","Spectral MNN Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","ssma_align","SSMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","geometric","partial_overlap","token_ot_graph_align","Token-OT Graph Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","cone_align","CONE-Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","fpgw","Fused Partial Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","global_geo_align","GlobalGeo",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","gpca_align","GPCA Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","grasp","GRASP",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","gromov_wasserstein","Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","lowrank_align","Low-rank Alignment",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","parrot","PARROT",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.00335,0.00335,-0.00745027402574849,0.0141502740257485,0.00120208152801713,,0.37865,0.436381578947368,0.436381578947368,23.1435,1279.5546875,1622.09375
+"large_scaling","sbm","partial_overlap","spectral_mnn_align","Spectral MNN Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","ssma_align","SSMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","sbm","partial_overlap","token_ot_graph_align","Token-OT Graph Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","cone_align","CONE-Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","fpgw","Fused Partial Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","global_geo_align","GlobalGeo",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","gpca_align","GPCA Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","grasp","GRASP",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","gromov_wasserstein","Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","lowrank_align","Low-rank Alignment",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","parrot","PARROT",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.0064,0.0064,-0.0469660598919337,0.0597660598919337,0.005939696961967,,0.52605,0.555131578947368,0.555131578947368,23.4195,1723.5859375,2069.8125
+"large_scaling","scale_free","partial_overlap","spectral_mnn_align","Spectral MNN Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","ssma_align","SSMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"large_scaling","scale_free","partial_overlap","token_ot_graph_align","Token-OT Graph Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","cone_align","CONE-Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","fpgw","Fused Partial Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","global_geo_align","GlobalGeo",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","gpca_align","GPCA Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","grasp","GRASP",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","gromov_wasserstein","Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","lowrank_align","Low-rank Alignment",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","parrot","PARROT",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","closed_world","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.0225,0.0225,-0.0569137796010918,0.101913779601092,0.00883883476483185,0.0335780639597034,0.92375,0.425,0.425,2.84049999999999,594.0078125,596.71875
+"medium_robustness","geometric","closed_world","spectral_mnn_align","Spectral MNN Align",2,2,2,0,0,0,1,0.009375,0.009375,0.00143362203989082,0.0173163779601092,0.000883883476483184,0.0503657974507207,1,0.545833333333333,0.545833333333333,0.206500000000005,424.203125,425.046875
+"medium_robustness","geometric","closed_world","ssma_align","SSMA",2,2,2,0,0,0,1,0.00375,0.00375,-0.0280155118404367,0.0355155118404367,0.00353553390593274,0.0159247700218441,1,0.658333333333333,0.658333333333333,0.267500000000013,440.1328125,451.9375
+"medium_robustness","geometric","closed_world","token_ot_graph_align","Token-OT Graph Align",2,2,2,0,0,0,1,0.005,0.005,0.005,0.005,0,0.0248803357801919,1,0.822916666666667,0.822916666666667,0.339499999999987,472.40625,475.171875
+"medium_robustness","sbm","closed_world","cone_align","CONE-Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","fpgw","Fused Partial Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","global_geo_align","GlobalGeo",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","gpca_align","GPCA Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","grasp","GRASP",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","gromov_wasserstein","Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","lowrank_align","Low-rank Alignment",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","parrot","PARROT",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","closed_world","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.036875,0.036875,-0.225190472683603,0.298940472683603,0.0291681547239451,0.0478424766888553,0.874375,0.675,0.675,3.2295,589.4609375,609.125
+"medium_robustness","sbm","closed_world","spectral_mnn_align","Spectral MNN Align",2,2,2,0,0,0,1,0.010625,0.010625,-0.0608474016409827,0.0820974016409827,0.00795495128834866,0.0473768520343084,1,0.414583333333333,0.414583333333333,0.361999999999966,447.484375,469.359375
+"medium_robustness","sbm","closed_world","ssma_align","SSMA",2,2,2,0,0,0,1,0.00125,0.00125,0.00125,0.00125,0,0.0095173108950699,1,0.671875,0.671875,0.198500000000024,424.6484375,430.8125
+"medium_robustness","sbm","closed_world","token_ot_graph_align","Token-OT Graph Align",2,2,2,0,0,0,1,0.000625,0.000625,-0.00731637796010918,0.00856637796010918,0.000883883476483184,0.00726020667894336,1,0.515625,0.515625,0.478499999999997,490.375,499.3125
+"medium_robustness","scale_free","closed_world","cone_align","CONE-Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","fpgw","Fused Partial Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","global_geo_align","GlobalGeo",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","gpca_align","GPCA Align",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","grasp","GRASP",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","gromov_wasserstein","Gromov-Wasserstein",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","kema","KEMA / REKEMA",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","lowrank_align","Low-rank Alignment",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","parrot","PARROT",2,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","closed_world","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.02,0.02,0.02,0.02,0,0.0296192225808101,0.89125,0.421875,0.421875,2.9085,666.2734375,681.828125
+"medium_robustness","scale_free","closed_world","spectral_mnn_align","Spectral MNN Align",2,2,2,0,0,0,1,0.015,0.015,-0.0802965355213102,0.11029653552131,0.0106066017177982,0.0623654204443531,1,0.307291666666667,0.307291666666667,0.207999999999998,460.8125,494.703125
+"medium_robustness","scale_free","closed_world","ssma_align","SSMA",2,2,2,0,0,0,1,0.0025,0.0025,-0.0133827559202184,0.0183827559202184,0.00176776695296637,0.0132057388131779,1,0.660416666666667,0.660416666666667,0.254500000000007,449.0234375,479.65625
+"medium_robustness","scale_free","closed_world","token_ot_graph_align","Token-OT Graph Align",2,2,2,0,0,0,1,0.01,0.01,-0.117062047361747,0.137062047361747,0.014142135623731,0.0277601986610927,1,0.671875,0.671875,0.527000000000015,504.5546875,508
+"medium_robustness","geometric","partial_overlap","cone_align","CONE-Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","fpgw","Fused Partial Gromov-Wasserstein",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","global_geo_align","GlobalGeo",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","gpca_align","GPCA Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","grasp","GRASP",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","gromov_wasserstein","Gromov-Wasserstein",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","linear_sim_embed","Linear Similarity Embedding",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","lowrank_align","Low-rank Alignment",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","parrot","PARROT",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","rapid_ma","RAPID-MA",3,3,3,0,0,0,1,0.0175,0.0175,0.00928448674033946,0.0257155132596605,0.00330718913883074,0.0279512166045179,0.902083333333333,0.418333333333333,0.418333333333333,2.39500000000004,679.65625,688.03125
+"medium_robustness","geometric","partial_overlap","spectral_mnn_align","Spectral MNN Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","ssma_align","SSMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","geometric","partial_overlap","token_ot_graph_align","Token-OT Graph Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","cone_align","CONE-Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","fpgw","Fused Partial Gromov-Wasserstein",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","global_geo_align","GlobalGeo",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","gpca_align","GPCA Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","grasp","GRASP",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","gromov_wasserstein","Gromov-Wasserstein",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","linear_sim_embed","Linear Similarity Embedding",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","lowrank_align","Low-rank Alignment",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","parrot","PARROT",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","rapid_ma","RAPID-MA",3,3,3,0,0,0,1,0.0291666666666667,0.0291666666666667,0.00331094160395536,0.055022391729378,0.0104083299973307,0.0399567855359519,0.867916666666667,0.529444444444444,0.529444444444444,2.75799999999998,652.640625,713.34375
+"medium_robustness","sbm","partial_overlap","spectral_mnn_align","Spectral MNN Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","ssma_align","SSMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","sbm","partial_overlap","token_ot_graph_align","Token-OT Graph Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","cone_align","CONE-Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","fpgw","Fused Partial Gromov-Wasserstein",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","global_geo_align","GlobalGeo",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","gpca_align","GPCA Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","grasp","GRASP",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","gromov_wasserstein","Gromov-Wasserstein",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","linear_sim_embed","Linear Similarity Embedding",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","lowrank_align","Low-rank Alignment",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","parrot","PARROT",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","rapid_ma","RAPID-MA",3,3,3,0,0,0,1,0.0308333333333333,0.0308333333333333,-0.00921415894991253,0.0708808256165792,0.0161212851017943,0.0413452210871039,0.872916666666667,0.421111111111111,0.421111111111111,2.59800000000001,676.15625,691.984375
+"medium_robustness","scale_free","partial_overlap","spectral_mnn_align","Spectral MNN Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","ssma_align","SSMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"medium_robustness","scale_free","partial_overlap","token_ot_graph_align","Token-OT Graph Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"oracle","geometric","closed_world","cone_align","CONE-Align",2,2,2,0,0,0,1,0.5,0.5,0.5,0.5,0,0.615246212121212,1,0.3,0.3,0.0554999999999994,176.40625,180.1875
+"oracle","geometric","closed_world","fpgw","Fused Partial Gromov-Wasserstein",2,2,2,0,0,0,1,0,0,0,0,0,0.13892797017797,1,0.1,0.1,0.583,138.2265625,165.75
+"oracle","geometric","closed_world","global_geo_align","GlobalGeo",2,2,2,0,0,0,1,0.25,0.25,-0.808850394681224,1.30885039468122,0.117851130197758,0.42829335016835,1,0.5,0.5,0.016,109.6796875,114.828125
+"oracle","geometric","closed_world","gpca_align","GPCA Align",2,2,2,0,0,0,1,0.375,0.375,-0.154425197340612,0.904425197340612,0.058925565098879,0.538988095238095,1,0.2,0.2,0.131500000000001,276.1640625,290.984375
+"oracle","geometric","closed_world","grasp","GRASP",2,2,2,0,0,0,1,0.125,0.125,-0.404425197340612,0.654425197340612,0.058925565098879,0.329002825877826,1,0.2,0.2,0.122,281.3125,301.53125
+"oracle","geometric","closed_world","gromov_wasserstein","Gromov-Wasserstein",2,2,2,0,0,0,1,0.708333333333333,0.708333333333333,-0.879942258688503,2.29660892535517,0.176776695296637,0.833333333333333,1,0.3,0.3,0.0114999999999998,91.6015625,93.59375
+"oracle","geometric","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.291666666666667,0.291666666666667,-0.237758530673945,0.821091864007279,0.058925565098879,0.439303751803752,1,0.3,0.3,0.145,283.7734375,299.390625
+"oracle","geometric","closed_world","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"oracle","geometric","closed_world","lowrank_align","Low-rank Alignment",2,2,2,0,0,0,1,0.333333333333333,0.333333333333333,0.333333333333333,0.333333333333333,0,0.408519721019721,1,0.4,0.4,0.203,317.9296875,320.296875
+"oracle","geometric","closed_world","parrot","PARROT",2,2,2,0,0,0,1,0,0,0,0,0,0.209111952861953,1,0.1,0.1,0.171999999999999,317.640625,320.6875
+"oracle","geometric","closed_world","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.416666666666667,0.416666666666667,-0.642183728014558,1.47551706134789,0.117851130197758,0.551554232804233,1,0.2,0.2,0.345000000000001,341.0390625,369.96875
+"oracle","geometric","closed_world","spectral_mnn_align","Spectral MNN Align",2,2,2,0,0,0,1,0.875,0.875,-0.713275592021837,2.46327559202184,0.176776695296637,0.930555555555556,1,0.4,0.4,0.12,271.1953125,302.34375
+"oracle","geometric","closed_world","ssma_align","SSMA",2,2,2,0,0,0,1,0.0833333333333333,0.0833333333333333,0.0833333333333333,0.0833333333333333,0,0.25860088985089,1,0.2,0.2,0.1295,299.734375,300.6875
+"oracle","geometric","closed_world","token_ot_graph_align","Token-OT Graph Align",2,2,2,0,0,0,1,0,0,0,0,0,0.105349627224627,1,0,0,0.199000000000001,305.46875,373.9375
+"oracle","sbm","closed_world","cone_align","CONE-Align",2,2,2,0,0,0,1,0.75,0.75,-0.308850394681225,1.80885039468122,0.117851130197758,0.796527777777778,1,0,0,0.0670000000000006,214.109375,258.265625
+"oracle","sbm","closed_world","fpgw","Fused Partial Gromov-Wasserstein",2,2,2,0,0,0,1,0,0,0,0,0,0.168656806156806,1,0.1,0.1,0.8105,169.8203125,238.046875
+"oracle","sbm","closed_world","global_geo_align","GlobalGeo",2,2,2,0,0,0,1,0.333333333333333,0.333333333333333,0.333333333333333,0.333333333333333,0,0.540611471861472,1,0.5,0.5,0.0150000000000006,175.5234375,240.46875
+"oracle","sbm","closed_world","gpca_align","GPCA Align",2,2,2,0,0,0,1,0.416666666666667,0.416666666666667,0.416666666666667,0.416666666666667,0,0.559821428571429,1,0.3,0.3,0.129,272.2109375,291.359375
+"oracle","sbm","closed_world","grasp","GRASP",2,2,2,0,0,0,1,0.125,0.125,-1.46327559202184,1.71327559202184,0.176776695296637,0.287914862914863,1,0.1,0.1,0.128,249.96875,251.484375
+"oracle","sbm","closed_world","gromov_wasserstein","Gromov-Wasserstein",2,2,2,0,0,0,1,0.166666666666667,0.166666666666667,0.166666666666667,0.166666666666667,0,0.320475589225589,1,0.1,0.1,0.0150000000000001,98.1484375,106.046875
+"oracle","sbm","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.291666666666667,0.291666666666667,-1.29660892535517,1.8799422586885,0.176776695296637,0.449123677248677,1,0.1,0.1,0.145,284.59375,298.171875
+"oracle","sbm","closed_world","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"oracle","sbm","closed_world","lowrank_align","Low-rank Alignment",2,2,2,0,0,0,1,0.333333333333333,0.333333333333333,0.333333333333333,0.333333333333333,0,0.417681277056277,1,0.8,0.8,0.164,295.2265625,314.25
+"oracle","sbm","closed_world","parrot","PARROT",2,2,2,0,0,0,1,0.25,0.25,-0.808850394681224,1.30885039468122,0.117851130197758,0.40215398027898,1,0.6,0.6,0.1715,311.671875,313.65625
+"oracle","sbm","closed_world","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.333333333333333,0.333333333333333,0.333333333333333,0.333333333333333,0,0.492379148629149,1,0.2,0.2,0.229,331.75,355.421875
+"oracle","sbm","closed_world","spectral_mnn_align","Spectral MNN Align",2,2,2,0,0,0,1,0.625,0.625,-0.963275592021837,2.21327559202184,0.176776695296637,0.78125,1,0.8,0.8,0.1105,287.0703125,292.578125
+"oracle","sbm","closed_world","ssma_align","SSMA",2,2,2,0,0,0,1,0.0833333333333333,0.0833333333333333,0.0833333333333333,0.0833333333333333,0,0.25860088985089,1,0.2,0.2,0.1155,271.7734375,295.4375
+"oracle","sbm","closed_world","token_ot_graph_align","Token-OT Graph Align",2,2,2,0,0,0,1,0,0,0,0,0,0.139587842712843,1,0,0,0.137,285.390625,293.9375
+"oracle","scale_free","closed_world","cone_align","CONE-Align",2,2,2,0,0,0,1,0.5,0.5,-1.61770078936245,2.61770078936245,0.235702260395516,0.598776455026455,1,0.1,0.1,0.0744999999999987,238.546875,286.78125
+"oracle","scale_free","closed_world","fpgw","Fused Partial Gromov-Wasserstein",2,2,2,0,0,0,1,0.0416666666666667,0.0416666666666667,-0.487758530673945,0.571091864007279,0.058925565098879,0.20053360990861,1,0,0,0.522,112.875,114.8125
+"oracle","scale_free","closed_world","global_geo_align","GlobalGeo",2,2,2,0,0,0,1,0.291666666666667,0.291666666666667,-1.29660892535517,1.8799422586885,0.176776695296637,0.470919011544012,1,0.1,0.1,0.016,113.703125,113.796875
+"oracle","scale_free","closed_world","gpca_align","GPCA Align",2,2,2,0,0,0,1,0.416666666666667,0.416666666666667,0.416666666666667,0.416666666666667,0,0.558250661375661,1,0.1,0.1,0.1235,301.09375,311.0625
+"oracle","scale_free","closed_world","grasp","GRASP",2,2,2,0,0,0,1,0.125,0.125,-0.404425197340612,0.654425197340612,0.058925565098879,0.275814694564695,1,0.2,0.2,0.140000000000001,293.8515625,321
+"oracle","scale_free","closed_world","gromov_wasserstein","Gromov-Wasserstein",2,2,2,0,0,0,1,0.333333333333333,0.333333333333333,-2.84321785071034,3.50988451737701,0.353553390593274,0.508285233285233,1,0.3,0.3,0.0180000000000007,103.8125,105.65625
+"oracle","scale_free","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.25,0.25,0.25,0.25,0,0.413840788840789,1,0.2,0.2,0.1485,296.9375,318.171875
+"oracle","scale_free","closed_world","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"oracle","scale_free","closed_world","lowrank_align","Low-rank Alignment",2,2,2,0,0,0,1,0.333333333333333,0.333333333333333,0.333333333333333,0.333333333333333,0,0.404450757575758,1,0.1,0.1,0.224000000000002,334.015625,340.109375
+"oracle","scale_free","closed_world","parrot","PARROT",2,2,2,0,0,0,1,0.0833333333333333,0.0833333333333333,-0.975517061347891,1.14218372801456,0.117851130197758,0.27890361952862,1,0.1,0.1,0.1625,320.1484375,322.015625
+"oracle","scale_free","closed_world","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.666666666666667,0.666666666666667,-1.45103412269578,2.78436745602912,0.235702260395516,0.768915343915344,1,0.2,0.2,0.2835,317.734375,319.21875
+"oracle","scale_free","closed_world","spectral_mnn_align","Spectral MNN Align",2,2,2,0,0,0,1,0.75,0.75,-0.308850394681225,1.80885039468122,0.117851130197758,0.875,1,0.2,0.2,0.102499999999999,310.9765625,312.0625
+"oracle","scale_free","closed_world","ssma_align","SSMA",2,2,2,0,0,0,1,0.0833333333333333,0.0833333333333333,0.0833333333333333,0.0833333333333333,0,0.25860088985089,1,0.1,0.1,0.145,310.4453125,315.578125
+"oracle","scale_free","closed_world","token_ot_graph_align","Token-OT Graph Align",2,2,2,0,0,0,1,0,0,0,0,0,0.166621572871573,1,0,0,0.156000000000001,278.9921875,295.671875
+"small_accuracy","geometric","closed_world","cone_align","CONE-Align",2,2,1,1,0,0,0.5,0.133333333333333,0.0666666666666667,-0.780413649078313,0.913746982411646,0.0942809041582063,0.172118585156188,1,0.402777777777778,0.201388888888889,0.0605000000000047,198.1328125,201.5625
+"small_accuracy","geometric","closed_world","fpgw","Fused Partial Gromov-Wasserstein",2,2,2,0,0,0,1,0.00416666666666667,0.00416666666666667,-0.0487758530673945,0.0571091864007279,0.0058925565098879,0.0324110860612719,1,0.138888888888889,0.138888888888889,13.826,377.5703125,407.0625
+"small_accuracy","geometric","closed_world","global_geo_align","GlobalGeo",2,2,0,2,0,0,0,,0,0,0,0,,,,0,0.0180000000000007,106.2578125,111.640625
+"small_accuracy","geometric","closed_world","gpca_align","GPCA Align",2,2,2,0,0,0,1,0.0541666666666667,0.0541666666666667,0.00122414693260547,0.107109186400728,0.0058925565098879,0.100286563094736,1,0.201388888888889,0.201388888888889,0.156500000000008,327.234375,339
+"small_accuracy","geometric","closed_world","grasp","GRASP",2,2,2,0,0,0,1,0,0,0,0,0,0.0365129196175762,1,0.208333333333333,0.208333333333333,0.265499999999989,338.7578125,350.203125
+"small_accuracy","geometric","closed_world","gromov_wasserstein","Gromov-Wasserstein",2,2,2,0,0,0,1,0.0666666666666667,0.0666666666666667,-0.145103412269578,0.278436745602911,0.0235702260395516,0.188058331146404,1,0.868055555555556,0.868055555555556,0.0770000000000124,330.609375,381.234375
+"small_accuracy","geometric","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.00416666666666667,0.00416666666666667,-0.0487758530673945,0.0571091864007279,0.0058925565098879,0.0283267409611542,1,0.111111111111111,0.111111111111111,0.152500000000018,354.21875,366.640625
+"small_accuracy","geometric","closed_world","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","closed_world","lowrank_align","Low-rank Alignment",2,2,2,0,0,0,1,0.0708333333333333,0.0708333333333333,0.0178908135992721,0.123775853067395,0.0058925565098879,0.156774333661046,1,0.694444444444444,0.694444444444444,0.284000000000006,355.859375,364.71875
+"small_accuracy","geometric","closed_world","parrot","PARROT",2,2,2,0,0,0,1,0.0583333333333333,0.0583333333333333,-0.0475517061347891,0.164218372801456,0.0117851130197758,0.150746619193076,1,0.8125,0.8125,0.274000000000015,388.765625,391.375
+"small_accuracy","geometric","closed_world","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.304166666666667,0.304166666666667,-2.39590183977046,3.00423517310379,0.300520382004283,0.356913771763841,0.9875,0.638888888888889,0.638888888888889,0.746499999999997,365.34375,370.75
+"small_accuracy","geometric","closed_world","spectral_mnn_align","Spectral MNN Align",2,2,2,0,0,0,1,0.116666666666667,0.116666666666667,-0.518643570142068,0.751976903475401,0.0707106781186548,0.256228747097168,1,0.597222222222222,0.597222222222222,0.146000000000001,300.6328125,314.4375
+"small_accuracy","geometric","closed_world","ssma_align","SSMA",2,2,2,0,0,0,1,0.00833333333333333,0.00833333333333333,0.00833333333333333,0.00833333333333333,0,0.044201929995296,1,0.388888888888889,0.388888888888889,0.157499999999985,302.3203125,342.296875
+"small_accuracy","geometric","closed_world","token_ot_graph_align","Token-OT Graph Align",2,2,2,0,0,0,1,0,0,0,0,0,0.0188909950938278,1,0.118055555555556,0.118055555555556,0.162000000000006,336.3125,343.546875
+"small_accuracy","sbm","closed_world","cone_align","CONE-Align",2,2,1,1,0,0,0.5,0.416666666666667,0.208333333333333,-2.43879265336973,2.85545932003639,0.294627825494395,0.431126393571993,1,0.291666666666667,0.145833333333333,0.0544999999999902,279.9140625,280.875
+"small_accuracy","sbm","closed_world","fpgw","Fused Partial Gromov-Wasserstein",2,2,2,0,0,0,1,0,0,0,0,0,0.0174694602208209,1,0,0,12.5315,455.8984375,490.53125
+"small_accuracy","sbm","closed_world","global_geo_align","GlobalGeo",2,2,0,2,0,0,0,,0,0,0,0,,,,0,0.0405000000000086,205.8203125,272.421875
+"small_accuracy","sbm","closed_world","gpca_align","GPCA Align",2,2,2,0,0,0,1,0.0583333333333333,0.0583333333333333,0.0583333333333333,0.0583333333333333,0,0.101801757771497,1,0.513888888888889,0.513888888888889,0.171000000000006,332.84375,333.875
+"small_accuracy","sbm","closed_world","grasp","GRASP",2,2,2,0,0,0,1,0.0125,0.0125,-0.0404425197340612,0.0654425197340612,0.0058925565098879,0.0520890137272839,1,0.270833333333333,0.270833333333333,0.183499999999995,345.6953125,346.578125
+"small_accuracy","sbm","closed_world","gromov_wasserstein","Gromov-Wasserstein",2,2,2,0,0,0,1,0.0333333333333333,0.0333333333333333,-0.0725517061347891,0.139218372801456,0.0117851130197758,0.135066727690624,1,0.652777777777778,0.652777777777778,0.105999999999995,402.9375,403.1875
+"small_accuracy","sbm","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.0166666666666667,0.0166666666666667,-0.0892183728014558,0.122551706134789,0.0117851130197758,0.0609468093082037,1,0.201388888888889,0.201388888888889,0.168999999999997,359.4296875,360.953125
+"small_accuracy","sbm","closed_world","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","closed_world","lowrank_align","Low-rank Alignment",2,2,2,0,0,0,1,0.0708333333333333,0.0708333333333333,0.0178908135992721,0.123775853067395,0.0058925565098879,0.150242870380701,1,0.729166666666667,0.729166666666667,0.305999999999997,352.8125,357.65625
+"small_accuracy","sbm","closed_world","parrot","PARROT",2,2,2,0,0,0,1,0.0708333333333333,0.0708333333333333,0.0178908135992721,0.123775853067395,0.0058925565098879,0.174997243111444,1,0.979166666666667,0.979166666666667,0.234499999999997,392.875,396.640625
+"small_accuracy","sbm","closed_world","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.1,0.1,0.1,0.1,0,0.16521604647492,0.975,0.493055555555556,0.493055555555556,0.713999999999999,391.828125,414.03125
+"small_accuracy","sbm","closed_world","spectral_mnn_align","Spectral MNN Align",2,2,2,0,0,0,1,0.0458333333333333,0.0458333333333333,-0.11299422586885,0.204660892535517,0.0176776695296637,0.124318118886779,1,0.458333333333333,0.458333333333333,0.197999999999993,338.15625,340.34375
+"small_accuracy","sbm","closed_world","ssma_align","SSMA",2,2,2,0,0,0,1,0.00833333333333333,0.00833333333333333,0.00833333333333333,0.00833333333333333,0,0.0452377597589809,1,0.368055555555556,0.368055555555556,0.111000000000004,324.5703125,333.375
+"small_accuracy","sbm","closed_world","token_ot_graph_align","Token-OT Graph Align",2,2,2,0,0,0,1,0.00416666666666667,0.00416666666666667,-0.0487758530673945,0.0571091864007279,0.0058925565098879,0.0180641250440799,1,0,0,0.191500000000005,371.734375,397.6875
+"small_accuracy","scale_free","closed_world","cone_align","CONE-Align",2,2,2,0,0,0,1,0.229166666666667,0.229166666666667,-0.564971129344252,1.02330446267759,0.0883883476483185,0.250398518625933,1,0.256944444444444,0.256944444444444,0.0690000000000026,298.8046875,299.34375
+"small_accuracy","scale_free","closed_world","fpgw","Fused Partial Gromov-Wasserstein",2,2,2,0,0,0,1,0.00833333333333333,0.00833333333333333,-0.0975517061347891,0.114218372801456,0.0117851130197758,0.0407608646099808,1,0.347222222222222,0.347222222222222,11.597,435.875,440.5625
+"small_accuracy","scale_free","closed_world","global_geo_align","GlobalGeo",2,2,0,2,0,0,0,,0,0,0,0,,,,0,0.0195000000000078,140.2421875,147.34375
+"small_accuracy","scale_free","closed_world","gpca_align","GPCA Align",2,2,2,0,0,0,1,0.0625,0.0625,0.0095574802659388,0.115442519734061,0.0058925565098879,0.105275282254238,1,0.361111111111111,0.361111111111111,0.17049999999999,337.2421875,339.671875
+"small_accuracy","scale_free","closed_world","grasp","GRASP",2,2,2,0,0,0,1,0.00833333333333333,0.00833333333333333,-0.0975517061347891,0.114218372801456,0.0117851130197758,0.0417319195509572,1,0.222222222222222,0.222222222222222,0.189999999999998,348.578125,351.125
+"small_accuracy","scale_free","closed_world","gromov_wasserstein","Gromov-Wasserstein",2,2,2,0,0,0,1,0.0333333333333333,0.0333333333333333,-0.0725517061347891,0.139218372801456,0.0117851130197758,0.1313267700617,1,0.326388888888889,0.326388888888889,0.0459999999999923,272.34375,355.421875
+"small_accuracy","scale_free","closed_world","kema","KEMA / REKEMA",2,2,2,0,0,0,1,0.0166666666666667,0.0166666666666667,-0.0892183728014558,0.122551706134789,0.0117851130197758,0.0577514013551167,1,0.222222222222222,0.222222222222222,0.154999999999987,358.828125,366.359375
+"small_accuracy","scale_free","closed_world","linear_sim_embed","Linear Similarity Embedding",2,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","closed_world","lowrank_align","Low-rank Alignment",2,2,2,0,0,0,1,0.0791666666666667,0.0791666666666667,0.0262241469326055,0.132109186400728,0.0058925565098879,0.150639576353699,1,0.694444444444444,0.694444444444444,0.329000000000008,362.3984375,362.953125
+"small_accuracy","scale_free","closed_world","parrot","PARROT",2,2,2,0,0,0,1,0.0791666666666667,0.0791666666666667,-0.079660892535517,0.23799422586885,0.0176776695296637,0.197137240273512,1,0.784722222222222,0.784722222222222,0.296499999999995,405.1640625,409.296875
+"small_accuracy","scale_free","closed_world","rapid_ma","RAPID-MA",2,2,2,0,0,0,1,0.2375,0.2375,-1.4037181117559,1.8787181117559,0.182669251806525,0.300588367945137,1,0.673611111111111,0.673611111111111,0.847000000000008,391.921875,418.546875
+"small_accuracy","scale_free","closed_world","spectral_mnn_align","Spectral MNN Align",2,2,2,0,0,0,1,0.0375,0.0375,-0.121327559202184,0.196327559202184,0.0176776695296637,0.103396495239722,1,0.375,0.375,0.141000000000005,327.1953125,338.859375
+"small_accuracy","scale_free","closed_world","ssma_align","SSMA",2,2,2,0,0,0,1,0.00833333333333333,0.00833333333333333,0.00833333333333333,0.00833333333333333,0,0.0447418294782023,1,0.409722222222222,0.409722222222222,0.139499999999984,338.3359375,339.78125
+"small_accuracy","scale_free","closed_world","token_ot_graph_align","Token-OT Graph Align",2,2,2,0,0,0,1,0,0,0,0,0,0.030557396455464,1,0.423611111111111,0.423611111111111,0.182999999999993,363.1796875,399.859375
+"small_accuracy","geometric","partial_overlap","cone_align","CONE-Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","fpgw","Fused Partial Gromov-Wasserstein",3,3,3,0,0,0,1,0.00277777777777778,0.00277777777777778,-0.00917403536041517,0.0147295909159707,0.00481125224324688,0.0264852942174626,1,0.193415637860082,0.193415637860082,13.083,406.671875,410.40625
+"small_accuracy","geometric","partial_overlap","global_geo_align","GlobalGeo",3,3,0,3,0,0,0,,0,0,0,0,,,,0,0.0190000000000055,126.953125,254.875
+"small_accuracy","geometric","partial_overlap","gpca_align","GPCA Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","grasp","GRASP",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","gromov_wasserstein","Gromov-Wasserstein",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","linear_sim_embed","Linear Similarity Embedding",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","lowrank_align","Low-rank Alignment",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","parrot","PARROT",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","rapid_ma","RAPID-MA",3,3,3,0,0,0,1,0.0805555555555555,0.0805555555555555,0.0489340302755826,0.112177080835529,0.0127293769304329,0.142029286694543,0.991666666666667,0.390946502057613,0.390946502057613,0.658999999999992,367.953125,368.546875
+"small_accuracy","geometric","partial_overlap","spectral_mnn_align","Spectral MNN Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","ssma_align","SSMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","geometric","partial_overlap","token_ot_graph_align","Token-OT Graph Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","cone_align","CONE-Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","fpgw","Fused Partial Gromov-Wasserstein",3,3,3,0,0,0,1,0.00555555555555555,0.00555555555555555,-0.0183480707208303,0.0294591818319415,0.00962250448649376,0.0263044759844247,1,0.135802469135802,0.135802469135802,13.208,421.3125,455.828125
+"small_accuracy","sbm","partial_overlap","global_geo_align","GlobalGeo",3,3,0,3,0,0,0,,0,0,0,0,,,,0,0.0180000000000007,237.828125,238.59375
+"small_accuracy","sbm","partial_overlap","gpca_align","GPCA Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","grasp","GRASP",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","gromov_wasserstein","Gromov-Wasserstein",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","linear_sim_embed","Linear Similarity Embedding",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","lowrank_align","Low-rank Alignment",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","parrot","PARROT",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","rapid_ma","RAPID-MA",3,3,3,0,0,0,1,0.0972222222222222,0.0972222222222222,-0.0167908085831012,0.211235253027546,0.0458964212273842,0.172608320976443,0.997222222222222,0.54320987654321,0.54320987654321,0.779999999999994,369.890625,400.171875
+"small_accuracy","sbm","partial_overlap","spectral_mnn_align","Spectral MNN Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","ssma_align","SSMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","sbm","partial_overlap","token_ot_graph_align","Token-OT Graph Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","cone_align","CONE-Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","fpgw","Fused Partial Gromov-Wasserstein",3,3,3,0,0,0,1,0.00555555555555556,0.00555555555555556,-0.0063962575826374,0.0175073686937485,0.00481125224324688,0.0295601046532428,1,0.111111111111111,0.111111111111111,12.648,418.703125,508.1875
+"small_accuracy","scale_free","partial_overlap","global_geo_align","GlobalGeo",3,3,2,1,0,0,0.666666666666667,0.0416666666666667,0.0277777777777778,-0.031981287913187,0.0875368434687425,0.0240562612162344,0.159590097942719,1,0.759259259259259,0.506172839506173,0.0250000000000057,239.4375,309.171875
+"small_accuracy","scale_free","partial_overlap","gpca_align","GPCA Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","grasp","GRASP",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","gromov_wasserstein","Gromov-Wasserstein",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","kema","KEMA / REKEMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","linear_sim_embed","Linear Similarity Embedding",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","lowrank_align","Low-rank Alignment",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","parrot","PARROT",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","rapid_ma","RAPID-MA",3,3,3,0,0,0,1,0.111111111111111,0.111111111111111,0.0274484191437604,0.194773803078462,0.0336787657027282,0.177717047305578,0.997222222222222,0.403292181069959,0.403292181069959,0.917999999999992,375.625,446.609375
+"small_accuracy","scale_free","partial_overlap","spectral_mnn_align","Spectral MNN Align",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","ssma_align","SSMA",3,0,0,0,0,0,,,,,,,,,,,,,
+"small_accuracy","scale_free","partial_overlap","token_ot_graph_align","Token-OT Graph Align",3,0,0,0,0,0,,,,,,,,,,,,,

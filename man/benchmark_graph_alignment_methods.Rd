@@ -2,7 +2,7 @@
 % Please edit documentation in R/graph_alignment_benchmark.R
 \name{benchmark_graph_alignment_methods}
 \alias{benchmark_graph_alignment_methods}
-\title{Benchmark graph alignment methods on synthetic permuted graphs}
+\title{Benchmark alignment methods on attributed graph protocol v2 cases}
 \usage{
 benchmark_graph_alignment_methods(
   sizes = c(50L, 100L),
@@ -11,8 +11,8 @@ benchmark_graph_alignment_methods(
   structure = c("ring", "grid", "random", "community"),
   permute_fraction = 1,
   n_anchors = 0L,
-  methods = c("token_ot_graph", "fpgw", "cone_align", "grasp", "parrot", "ssma", "lra",
-    "gpca"),
+  methods = c("rapid_ma", "token_ot_graph", "fpgw", "cone_align", "grasp", "parrot",
+    "ssma", "lra", "gpca"),
   decode_mode = c("native", "common_nn", "common_procrustes_lap"),
   ssma_procrustes = FALSE,
   candidate_k = 80L,
@@ -50,15 +50,21 @@ benchmark_graph_alignment_methods(
 \item{noise_sd}{Numeric noise standard deviation added to target features.}
 
 \item{structure}{Character vector of synthetic geometries for base node
-coordinates: `"ring"`, `"grid"`, `"random"`, or `"community"`.}
+coordinates or v2 graph families: `"ring"`, `"grid"`, `"random"`,
+`"community"`, `"sbm"`, `"geometric"`, or `"scale_free"`. Legacy names
+map to v2 geometric, scale-free, or SBM cases.}
 
-\item{permute_fraction}{Fraction of nodes to permute (in `(0,1]`).}
+\item{permute_fraction}{Legacy row-permutation fraction. Protocol v2 freezes
+full row permutation, so this must currently be `1`.}
 
 \item{n_anchors}{Integer number of anchor correspondences to add (0 allowed).}
 
 \item{methods}{Character vector of methods to run. Options include:
-`"token_ot_graph"`, `"cone_align"`, `"grasp"`, `"parrot"`, `"fpgw"`,
-`"ssma"`, `"lra"`, `"gpca"`.}
+`"rapid_ma"`, `"token_ot_graph"`, `"cone_align"`, `"grasp"`,
+`"parrot"`, `"fpgw"`, `"gw"`, `"spectral_mnn"`, `"ssma"`,
+`"kema"`, `"global_geo"`, `"lra"`, `"gpca"`, and `"lse"`.
+LSE is recorded as unsupported because its registered contract is a
+single-domain target-similarity problem, not cross-domain alignment.}
 
 \item{decode_mode}{Decoding mode for mapping source nodes to targets:
 `"native"` uses each method's native assignment/transport decoding;
@@ -126,13 +132,28 @@ hard masking when `ssma_use_serial = TRUE`.}
 \item{verbose}{Logical; print per-run progress.}
 }
 \value{
-A data.frame with per-run runtime and accuracy metrics.
+A data.frame with per-run runtime and accuracy metrics plus typed
+  outcome fields. `status` is one of `"ok"`, `"unsupported"`,
+  `"not_available"`, or `"error"`; `status_code` is machine-readable and
+  `status_detail` is explanatory text. Accuracy is meaningful only when
+  `status == "ok"`. `method_id`, `input_class`, and
+  `topology_disposition` link each row to the method registry and distinguish
+  supplied-graph, feature-derived, and metric-measure comparisons.
+  `adapter_input_hash` makes edge-sensitivity auditable. Identity-bearing
+  prediction hashes, anchor/non-anchor accuracy, private-node rejection,
+  convergence, frozen search-space IDs, equal tier wall-clock budgets, and
+  external-memory-measurement status normalize result semantics. Protocol
+  version, case ID/hash, split, tier, family, preprocessing ID, and observed
+  edge count preserve benchmark provenance. The legacy
+  `error` column is retained and populated only for execution/output errors.
 }
 \description{
-Generates paired domains where the target is a permuted/noisy copy of the
-source and compares multiple alignment methods available in this package.
+Generates paired attributed graph domains with observed weighted relations,
+positions, mixed attributes, row identities, overlap truth, and controlled
+perturbations, then compares alignment methods available in this package.
 }
 \details{
-Benchmarks are intended for interactive profiling and method comparison
-rather than automated CI.
+Interactive calls use development cases from frozen protocol v2 semantics.
+Final benchmark cases and seeds are held in immutable manifests and are not
+available for tuning.
 }

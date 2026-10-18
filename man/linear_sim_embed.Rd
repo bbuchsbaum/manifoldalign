@@ -26,9 +26,11 @@ linear_sim_embed(
 \arguments{
 \item{X}{Input data matrix (n x d), where n is samples, d is features.}
 
-\item{T}{Target similarity matrix (n x n). If NULL, will be computed from data.}
+\item{T}{Symmetric target similarity matrix (n x n). If NULL, will be
+computed from data.}
 
-\item{M}{Mask matrix (n x n), 1 to consider pair (i,j), 0 to ignore. If NULL, uses all pairs.}
+\item{M}{Symmetric non-negative mask matrix (n x n), with positive entries
+selecting or weighting pairs. If NULL, uses all off-diagonal pairs.}
 
 \item{sigma_P}{Numeric scalar > 0 or "auto". Scale parameter for Gaussian kernel. 
 If "auto", uses log-space grid search with histogram-spread heuristic (default: "auto").}
@@ -50,7 +52,8 @@ For L-BFGS-B (C++): gradient norm tolerance (default: 1e-6).}
 (default: 1, i.e., full batch).}
 
 \item{use_cpp}{Logical. If TRUE and C++ backend is available, use L-BFGS-B from C++.
-Otherwise, use the R ADAM implementation (default: FALSE).}
+A failed compiled fit is retried with exact-objective base-R L-BFGS-B.
+If FALSE, use the R ADAM implementation (default: FALSE).}
 
 \item{verbose}{Logical. Print optimization progress (default: FALSE).}
 
@@ -73,19 +76,28 @@ A \code{simembed} object (S3 class) containing:
   - \code{sigma_P}: Final sigma_P value used (important if auto-selected).
   - \code{alpha_p}: Final alpha_p value used.
   - \code{objective_trace}: Vector of objective function values during optimization.
-  - Metadata: \code{target_sim}, \code{mask}, \code{optimizer}, \code{convergence}.
+  - Metadata: \code{target_sim}, \code{mask}, \code{optimizer}, and
+    \code{convergence}; the latter records normalized status, backend,
+    objective, evaluation counts when available, and any fallback source.
 }
 \description{
 Performs linear dimensionality reduction by optimizing a weight matrix W (d x m)
-such that the pairwise similarities P computed from the projected data (Y = X %*% W)
+such that the pairwise similarities P computed from the projected data
+(`Y = X %*% W`)
 match a target similarity matrix T as closely as possible, considering a mask M.
 The optimization balances similarity preservation (Js) with an orthogonality
 constraint (Jp) on W, minimizing (1-alpha_p)*Js + alpha_p*Jp.
 }
 \details{
 The algorithm follows the Linear Similarity Embedding Framework (SEF) from 
-Passalis & Tefas (2016). The optimization uses either ADAM (R implementation) 
+Passalis & Tefas (2016). The optimization uses either ADAM (R implementation)
 or L-BFGS-B (C++ implementation).
+
+Compiled L-BFGS-B status codes are reported as `converged` (0),
+`iteration_limit` (1), `optimizer_warning` (51), `optimizer_error` (52), or
+`unknown_failure`. A nonzero compiled status triggers an exact-objective
+base-R L-BFGS-B retry. The function returns a fit only if one backend
+converges; otherwise it stops instead of returning unchecked weights.
 
 Similarities are computed using a Gaussian kernel: P_ij = exp(-||Y_i - Y_j||^2 / sigma_P).
 The orthogonality penalty is Jp = ||W'W - I||^2_F / (2*m^2).

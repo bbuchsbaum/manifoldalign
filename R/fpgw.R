@@ -2,7 +2,8 @@
 #'
 #' Computes the Fused-Partial Gromov-Wasserstein (FPGW) distance between domains
 #' in a hyperdesign object. This method extends Gromov-Wasserstein by combining
-#' feature and structural information, and supporting partial transport.
+#' feature and structural information. Partial transport is supported through
+#' an explicit transported-mass budget, \code{rho}.
 #'
 #' @param data A hyperdesign object containing multiple data domains
 #' @param ... Additional arguments passed to methods:
@@ -10,16 +11,14 @@
 #'     \item \code{omega1}: Weight of the feature term (0 ≤ omega1 ≤ 1).
 #'       The structural term weight omega2 = 1 - omega1 is computed
 #'       automatically (default: 0.001)
-#'     \item \code{lambda}: Non-negative total variation penalty for the
-#'       penalized FPGW variant. Set \code{lambda = 0} to disable and use
-#'       \code{rho} instead (default: 0).
-#'       NOTE: The TV penalty is experimental and may not produce expected 
-#'       sparsity-inducing behavior due to its quadratic formulation
+#'     \item \code{lambda}: Retained for API compatibility and required to be
+#'       zero. The former \code{lambda > 0} route is withdrawn because it used
+#'       a balanced transport oracle and therefore could not produce a partial
+#'       coupling. Use \code{rho} instead (default: 0).
 #'     \item \code{rho}: Mass budget in (0, min(|μ|,|ν|)] for the
 #'       mass-constrained variant. If \code{rho} is supplied, the solver
-#'       runs the mass-constrained variant; otherwise it uses the
-#'       penalized variant (\eqn{\lambda > 0}) or classical FGW when both
-#'       \eqn{\lambda = 0} and \code{rho} is \code{NULL}
+#'       transports exactly that mass; otherwise it uses classical balanced
+#'       FGW.
 #'     \item \code{epsilon}: Initial entropic regularization for warm-start
 #'       (default: 0.01). Set to 0 to disable warm-start
 #'     \item \code{metric}: Distance metric for within-domain distances (default: "euclidean")
@@ -39,7 +38,7 @@
 #'   \item \code{converged}: Convergence status for each optimization
 #'   \item \code{n_samples}: Number of samples per domain
 #'   \item \code{omega1}: Feature weight used
-#'   \item \code{lambda}: TV penalty (if penalized variant)
+#'   \item \code{lambda}: Compatibility field; always zero for new fits
 #'   \item \code{rho}: Mass budget (if mass-constrained variant)
 #'   \item \code{domain_names}: Names of the domains
 #'   \item \code{training_data}: Original domain matrices for prediction
@@ -47,24 +46,31 @@
 #' }
 #'
 #' @details
-#' The FPGW distance combines feature and structural information through:
+#' The verified fixed-mass FPGW objective combines feature and structural
+#' information through:
 #' \deqn{L(\gamma) = \omega_1 \langle C, \gamma \rangle + 
-#'       \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2 \gamma_{ij} \gamma_{i'j'} + 
-#'       \lambda(|\mu|^2 + |\nu|^2 - 2|\gamma|^2)}
+#'       \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2
+#'       \gamma_{ij} \gamma_{i'j'}}
 #' 
-#' where C is the feature cost matrix and C_X, C_Y are within-domain distance matrices.
+#' where C is the feature cost matrix and C_X, C_Y are within-domain distance
+#' matrices. With \code{rho}, the coupling has row and column marginals bounded
+#' by the input masses and satisfies \eqn{|\gamma| = \rho}. Without \code{rho},
+#' the coupling has the full balanced marginals.
 #' 
-#' The algorithm supports two variants:
+#' The implementation supports two verified modes:
 #' \itemize{
-#'   \item Mass-constrained: Transports exactly rho mass between domains
-#'   \item Penalized: Uses TV regularization with parameter lambda
+#'   \item Mass-constrained FPGW: transports exactly \code{rho} mass
+#'   \item Classical FGW: transports the full balanced mass
 #' }
 #' 
-#' The Frank-Wolfe algorithm is used with closed-form step sizes for efficiency.
+#' The former penalized mode selected balanced Frank-Wolfe vertices, fixing the
+#' transported mass at one and making \code{lambda} ineffective as a partial
+#' transport control. It is rejected rather than silently returning a balanced
+#' result. The Frank-Wolfe algorithm uses closed-form step sizes.
 #'
 #' @references
-#' Bai et al. (2025). Fused-Partial Gromov-Wasserstein for Heterogeneous Domain 
-#' Adaptation. arXiv preprint.
+#' Bai et al. (2025). Fused Partial Gromov-Wasserstein for Structured Objects.
+#' arXiv:2502.09934.
 #'
 #' @examples
 #' \donttest{
@@ -132,10 +138,27 @@ fpgw <- function(data, ...) {
   UseMethod("fpgw")
 }
 
+validate_fpgw_lambda <- function(lambda) {
+  if (!is.numeric(lambda) || length(lambda) != 1L ||
+      is.na(lambda) || !is.finite(lambda) || lambda < 0) {
+    stop("`lambda` must be one finite non-negative number", call. = FALSE)
+  }
+  if (lambda > 0) {
+    stop(
+      "`lambda > 0` is withdrawn: the former solver used a balanced ",
+      "transport oracle and could not produce a partial coupling. Use `rho` ",
+      "for a fixed transported-mass budget.",
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
+}
+
 #' @rdname fpgw
 #' @method fpgw hyperdesign
 #' @param omega1 Weight of the feature term (0 ≤ omega1 ≤ 1). Default: 0.001
-#' @param lambda Non-negative total variation penalty. Default: 0
+#' @param lambda Compatibility parameter that must be zero. Use \code{rho} for
+#'   partial transport. Default: 0
 #' @param rho Mass budget in (0, min(|μ|,|ν|)] for mass-constrained variant
 #' @param epsilon Initial entropic regularization for warm-start. Default: 0.01
 #' @param metric Distance metric for within-domain distances. Default: "euclidean"
@@ -159,16 +182,16 @@ fpgw.hyperdesign <- function(data,
   if (!inherits(data, "hyperdesign")) {
     stop("fpgw requires a hyperdesign object", call. = FALSE)
   }
-  
-  if (!is.null(rho) && lambda > 0) {
-    stop("Choose *either* rho (mass-constrained) or lambda (penalized), not both", 
-         call. = FALSE)
+
+  validate_fpgw_lambda(lambda)
+  if (!is.numeric(omega1) || length(omega1) != 1L ||
+      is.na(omega1) || !is.finite(omega1) || omega1 < 0 || omega1 > 1) {
+    stop("`omega1` must be one finite number in [0, 1]", call. = FALSE)
   }
-  
-  if (lambda > 0) {
-    warning("TV penalty (lambda > 0) is experimental and may not produce expected ",
-            "sparsity-inducing behavior. Consider using rho for mass-constrained transport.",
-            call. = FALSE)
+  if (!is.null(rho) &&
+      (!is.numeric(rho) || length(rho) != 1L || is.na(rho) ||
+       !is.finite(rho) || rho <= 0 || rho > 1)) {
+    stop("`rho` must be one finite number in (0, 1]", call. = FALSE)
   }
   
   # Prepare data using shared utilities
@@ -220,6 +243,24 @@ fpgw.hyperdesign <- function(data,
       if (epsilon > 0) {
         P0 <- sinkhorn_fgw_warmstart(C_feat, Cx, Cy, p, q, omega1, epsilon, 20)
       }
+
+      # A Frank-Wolfe start must belong to the same feasible set as its linear
+      # oracle. The historical partial path started at full mass; scaling the
+      # balanced warm start gives an exact-rho subcoupling.
+      if (!is.null(rho)) {
+        P0_mass <- sum(P0)
+        if (!is.finite(P0_mass) || P0_mass <= 0) {
+          P0 <- outer(p, q)
+          P0_mass <- sum(P0)
+        }
+        P0 <- P0 * (rho / P0_mass)
+        feasibility_tol <- 1e-8
+        if (min(P0) < -feasibility_tol ||
+            max(rowSums(P0) - p) > feasibility_tol ||
+            max(colSums(P0) - q) > feasibility_tol) {
+          P0 <- rho * outer(p, q)
+        }
+      }
       
       ## ---- SOLVER ---- Frank-Wolfe
       sol <- fw_fpgw(C_feat, Cx, Cy, p, q,
@@ -260,12 +301,9 @@ fpgw.hyperdesign <- function(data,
 #'
 #' @return A list with transport plan P, distance, convergence status, iterations, and final gradient.
 #'
-#' @details
-#' For TV penalty (lambda > 0), the objective includes the smooth quadratic term:
-#' lambda * (|mu|^2 + |nu|^2 - 2|gamma|^2)
-#' where |gamma| = sum(gamma) is the total transported mass.
-#' This is NOT an L1 penalty but a smooth penalty that encourages partial transport.
-#' The Frank-Wolfe oracle remains standard OT, with the penalty handled in step size.
+#' @details \code{lambda} is retained in this internal signature for
+#' compatibility and must be zero. Supply \code{rho} for the fixed-mass partial
+#' feasible set.
 #'
 #' @keywords internal
 fw_fpgw <- function(C, Cx, Cy, p, q,
@@ -275,17 +313,31 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
                     inner_max_iter = 50,
                     tol = 1e-6,
                     verbose = FALSE) {
-  
+
+  validate_fpgw_lambda(lambda)
   n1 <- length(p)
   n2 <- length(q)
   P <- P0
-  
-  # Pre-compute pieces that never change
+
+  if (!is.null(rho)) {
+    feasibility_tol <- 1e-8 * max(1, sum(abs(p)), sum(abs(q)), abs(rho))
+    if (!is.numeric(rho) || length(rho) != 1L || is.na(rho) ||
+        !is.finite(rho) || rho <= 0 || rho > min(sum(p), sum(q)) ||
+        any(!is.finite(P)) || min(P) < -feasibility_tol ||
+        abs(sum(P) - rho) > feasibility_tol ||
+        max(rowSums(P) - p) > feasibility_tol ||
+        max(colSums(P) - q) > feasibility_tol) {
+      stop(
+        "For partial FPGW, `P0` must be a non-negative feasible ",
+        "subcoupling with total mass `rho`.",
+        call. = FALSE
+      )
+    }
+  }
+
+  # Pre-compute squared within-domain costs
   Cx2 <- Cx^2
   Cy2 <- Cy^2
-  const1 <- as.vector(Cx2 %*% p)
-  const2 <- as.vector(Cy2 %*% q)
-  const <- outer(const1, rep(1, n2)) + outer(rep(1, n1), const2)
   
   feature_weight <- omega1
   struct_weight <- 1 - omega1
@@ -299,10 +351,6 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
   const_P <- outer(const1_P, rep(1, n2)) + outer(rep(1, n1), const2_P)
   M_P <- const_P - 2 * Cx %*% P %*% t(Cy)
   obj_init <- sum(P * (feature_weight * C + struct_weight * M_P))
-  if (lambda > 0) {
-    # Add TV penalty: lambda * (|mu|^2 + |nu|^2 - 2|gamma|^2)
-    obj_init <- obj_init + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P)^2)
-  }
   obj_trace[1] <- obj_init
   
   for (iter in seq_len(max_iter)) {
@@ -318,10 +366,6 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
     
     # Compute current objective for line search
     current_obj <- sum(P * (feature_weight * C + struct_weight * M_P))
-    if (lambda > 0) {
-      # Add TV penalty: lambda * (|mu|^2 + |nu|^2 - 2|gamma|^2)
-      current_obj <- current_obj + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P)^2)
-    }
     
     ## ---- PERF ---- linear sub-problem (partial OT oracle)
     G <- grad
@@ -331,8 +375,7 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
       G <- G - min(G)  # shift improves numerics
       gamma_star <- partial_ot_mass(G, p, q, rho)
     } else {
-      # Classical FGW or TV-penalized - both use standard OT oracle
-      # For TV penalty, the lambda term is smooth and handled in step size
+      # Classical balanced FGW
       G <- G - min(G)  # shift improves numerics
       gamma_star <- classical_ot_lp(G, p, q)
     }
@@ -352,18 +395,6 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
     
     a <- struct_weight * (term1 + term2 + term3)
     b <- sum(grad * dP)
-    
-    # Add TV penalty contribution if lambda > 0
-    # The TV penalty is lambda * (|mu|^2 + |nu|^2 - 2|gamma|^2)
-    # For step size, we need derivatives:
-    # d/d(alpha) of -2*lambda*|P + alpha*dP|^2 gives:
-    # -4*lambda*|P|*sum(dP) - 2*lambda*alpha*sum(dP)^2
-    if (lambda > 0) {
-      mass_P <- sum(P)
-      mass_dP <- sum(dP)
-      a <- a + 2 * lambda * mass_dP^2  # quadratic term
-      b <- b - 4 * lambda * mass_P * mass_dP  # linear term
-    }
     
     # Note: a can be negative for non-convex GW objective
     # This is not a bug, but a property of the problem
@@ -400,9 +431,6 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
           const_test <- outer(const1_test, rep(1, n2)) + outer(rep(1, n1), const2_test)
           M_test <- const_test - 2 * Cx %*% P_test %*% t(Cy)
           obj_test <- sum(P_test * (feature_weight * C + struct_weight * M_test))
-          if (lambda > 0) {
-            obj_test <- obj_test + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P_test)^2)
-          }
           
           # Check Armijo condition
           if (obj_test <= current_obj + c1 * alpha * b) {
@@ -436,9 +464,6 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
       const_P <- outer(const1_P, rep(1, n2)) + outer(rep(1, n1), const2_P)
       M_P_new <- const_P - 2 * Cx %*% P %*% t(Cy)
       obj_val <- sum(P * (feature_weight * C + struct_weight * M_P_new))
-      if (lambda > 0) {
-        obj_val <- obj_val + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P)^2)
-      }
       obj_trace[iter + 1] <- obj_val
       obj_trace <- obj_trace[1:(iter + 1)]  # Trim to actual length
       break
@@ -451,9 +476,6 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
     const_P <- outer(const1_P, rep(1, n2)) + outer(rep(1, n1), const2_P)
     M_P_new <- const_P - 2 * Cx %*% P %*% t(Cy)
     obj_val <- sum(P * (feature_weight * C + struct_weight * M_P_new))
-    if (lambda > 0) {
-      obj_val <- obj_val + lambda * (sum(p)^2 + sum(q)^2 - 2 * sum(P)^2)
-    }
     obj_trace[iter + 1] <- obj_val
   }
   
@@ -603,77 +625,16 @@ classical_ot_lp_r <- function(cost, p, q) {
   plan
 }
 
-#' TV-penalized oracle
-#' @return A numeric matrix representing the optimal transport plan.
+#' Withdrawn TV-penalized transport oracle
+#' @return This function always errors; use \code{partial_ot_mass()}.
 #' @keywords internal
 partial_ot_tv <- function(cost, p, q, lambda) {
-  # For TV-penalized transport, we solve partial OT using augmentation method
-  # This transforms the partial OT problem into a full OT problem on augmented space
-  # 
-  # Mathematical formulation:
-  # Original: min <cost, gamma> subject to partial OT constraints
-  # TV-penalized: min <cost, gamma> + lambda * ||gamma||_1
-  # Augmented: min <cost + lambda, gamma> with zero-cost escape routes
-  
-  n <- length(p)
-  m <- length(q)
-  
-  # Create augmented cost matrix (n+1) x (m+1)
-  # Zero cost for escape routes (dummy nodes) - allows mass to NOT be transported
-  C_aug <- matrix(0, nrow = n + 1, ncol = m + 1)
-  
-  # Add lambda to transport costs to penalize transported mass
-  # This makes transport more expensive as lambda increases
-  C_aug[1:n, 1:m] <- cost + lambda
-  
-  # Augmented marginals
-  # The dummy source gets the total mass of sinks
-  # The dummy sink gets the total mass of sources
-  p_aug <- c(p, sum(q))
-  q_aug <- c(q, sum(p))
-  
-  # Solve augmented full OT problem
-  # Important: Use lpSolve directly for augmented problems
-  # The C++ solver may not handle the augmented formulation correctly
-  if (!requireNamespace("lpSolve", quietly = TRUE)) {
-    stop("Install 'lpSolve' for the TV-penalized OT LP", call. = FALSE)
-  }
-  
-  n_aug <- length(p_aug)
-  m_aug <- length(q_aug)
-  f.obj <- as.vector(C_aug)
-  
-  # Constraints for full OT
-  row_constraints <- matrix(0, n_aug, n_aug * m_aug)
-  for (i in 1:n_aug) {
-    # NOTE: R vectorizes matrices in column-major order, so the variable
-    # corresponding to (i, j) in gamma_aug is at index i + (j-1) * n_aug.
-    idx <- i + (0:(m_aug - 1)) * n_aug
-    row_constraints[i, idx] <- 1
-  }
-  
-  col_constraints <- matrix(0, m_aug, n_aug * m_aug)
-  for (j in 1:m_aug) {
-    idx <- ((j - 1) * n_aug + 1):(j * n_aug)
-    col_constraints[j, idx] <- 1
-  }
-  
-  Amat <- rbind(row_constraints, col_constraints)
-  rhs <- c(p_aug, q_aug)
-  sense <- rep("=", n_aug + m_aug)
-  
-  lp <- lpSolve::lp("min", f.obj, Amat, sense, rhs)
-  
-  if (lp$status != 0) {
-    warning("lpSolve did not find optimal solution for augmented problem, status = ", lp$status)
-  }
-  
-  gamma_aug <- matrix(lp$solution, n_aug, m_aug)
-  
-  # Extract the partial transport plan (top-left n x m block)
-  gamma <- gamma_aug[1:n, 1:m]
-  
-  return(gamma)
+  stop(
+    "`partial_ot_tv()` is withdrawn because it did not implement the FPGW ",
+    "penalized subcoupling objective. Use `partial_ot_mass()` with an explicit ",
+    "`rho` budget.",
+    call. = FALSE
+  )
 }
 
 #' Warm-start with entropic FGW
@@ -737,7 +698,7 @@ print.fpgw <- function(x, ...) {
   if (!is.null(x$rho)) {
     cat("Mode: Mass-constrained (rho =", x$rho, ")\n")
   } else if (x$lambda > 0) {
-    cat("Mode: TV-penalized (lambda =", x$lambda, ")\n")  
+    cat("Mode: Withdrawn legacy TV-penalized result (lambda =", x$lambda, ")\n")
   } else {
     cat("Mode: Classical Fused GW\n")
   }

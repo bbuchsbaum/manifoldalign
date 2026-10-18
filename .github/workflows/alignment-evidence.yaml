@@ -1,0 +1,129 @@
+name: Alignment evidence
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: Evidence tier to run
+        required: true
+        default: nightly
+        type: choice
+        options:
+          - nightly
+          - release
+      run_real_data:
+        description: Run the 1 GB Chikusei real-scene benchmark (release only)
+        required: true
+        default: false
+        type: boolean
+      accept_chikusei_license:
+        description: Confirm review and acceptance of the Chikusei CC BY 3.0 terms
+        required: true
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+
+permissions: read-all
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      ALIGNMENT_EVIDENCE_TIER: ${{ github.event_name == 'push' && 'release' || github.event.inputs.tier || 'nightly' }}
+      R_KEEP_PKG_SOURCE: yes
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: |
+            any::testthat
+            any::pkgload
+            any::ps
+          needs: check
+
+      - name: Run tiered tests and emit method-level status
+        run: Rscript tools/run-alignment-test-tier.R "${ALIGNMENT_EVIDENCE_TIER}"
+
+      - name: Regenerate frozen synthetic accuracy, matching, and RSS evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_dir="artifacts/alignment-ci/${ALIGNMENT_EVIDENCE_TIER}/benchmarks"
+          mkdir -p "${evidence_dir}"
+          export RAPID_MA_PROFILE=full
+          if [[ "${ALIGNMENT_EVIDENCE_TIER}" == "nightly" ]]; then
+            export RAPID_MA_COMMON_SIZES=250,500,1000,2500
+            export RAPID_MA_RAPID_SIZES=5000,10000
+            export RAPID_MA_REPETITIONS=1
+          fi
+          Rscript inst/benchmarks/rapid_ma_accuracy.R "${evidence_dir}/rapid-ma-validation"
+          Rscript inst/benchmarks/rapid_ma_matching.R "${evidence_dir}/rapid-ma-matching"
+          Rscript inst/benchmarks/rapid_ma_scaling.R "${evidence_dir}/rapid-ma-scaling"
+          if [[ "${ALIGNMENT_EVIDENCE_TIER}" == "release" ]]; then
+            Rscript inst/benchmarks/rapid_ma_ablation.R "${evidence_dir}/rapid-ma-ablation"
+          fi
+
+      - name: Reject unaccepted real-data requests
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_real_data && !inputs.accept_chikusei_license }}
+        run: |
+          echo "Chikusei execution requires explicit acceptance of its CC BY 3.0 terms."
+          exit 1
+
+      - name: Run leakage-safe Chikusei blocked-inductive evidence
+        if: ${{ env.ALIGNMENT_EVIDENCE_TIER == 'release' && github.event_name == 'workflow_dispatch' && inputs.run_real_data && inputs.accept_chikusei_license }}
+        env:
+          RAPID_MA_ACCEPT_CHIKUSEI_LICENSE: 'yes'
+          RAPID_MA_PROFILE: full
+        shell: bash
+        run: |
+          set -euo pipefail
+          data_dir="${RUNNER_TEMP}/rapid-ma-data"
+          evidence_dir="artifacts/alignment-ci/release/benchmarks"
+          Rscript inst/benchmarks/download_rapid_ma_scene.R "${data_dir}"
+          Rscript inst/benchmarks/rapid_ma_blocked_inductive.R \
+            "${data_dir}/Chikusei_ENVI" \
+            "${evidence_dir}/rapid-ma-blocked-inductive"
+
+      - name: Record real-data availability honestly
+        if: always()
+        shell: bash
+        run: |
+          evidence_dir="artifacts/alignment-ci/${ALIGNMENT_EVIDENCE_TIER}/benchmarks"
+          mkdir -p "${evidence_dir}"
+          status=not_requested
+          severity=warning
+          detail="Real-scene execution is manual because data are external and license-gated."
+          if [[ -f "${evidence_dir}/rapid-ma-blocked-inductive-summary.csv" ]]; then
+            status=available
+            severity=ok
+            detail="Blocked-inductive Chikusei evidence completed."
+          elif [[ "${ALIGNMENT_EVIDENCE_TIER}" == "release" && "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.run_real_data }}" == "true" ]]; then
+            status=not_available
+            detail="Real-scene evidence was requested but did not complete."
+          fi
+          printf 'method,status,severity,detail\nrapid_ma,%s,%s,"%s"\n' \
+            "${status}" \
+            "${severity}" \
+            "${detail}" \
+            > "${evidence_dir}/real-data-status.csv"
+
+      - name: Upload complete alignment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alignment-evidence-${{ env.ALIGNMENT_EVIDENCE_TIER }}
+          path: artifacts/alignment-ci/${{ env.ALIGNMENT_EVIDENCE_TIER }}/
+          if-no-files-found: error

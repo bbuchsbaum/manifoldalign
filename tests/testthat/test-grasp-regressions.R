@@ -54,6 +54,24 @@ test_that("compute_grasp_assignment euclidean cost is finite and non-negative", 
   expect_true(all(out$cost_matrix >= 0))
 })
 
+test_that("GRASP adapter uses the common non-trivial spectral subspace", {
+  set.seed(1)
+  X1 <- matrix(rnorm(50), 25, 2)
+  X2 <- matrix(rnorm(50), 25, 2)
+
+  bases <- manifoldalign:::compute_grasp_basis(
+    list(list(x = X1), list(x = X2)),
+    ncomp = 30
+  )
+  expect_false(identical(ncol(bases[[1]]$vectors), ncol(bases[[2]]$vectors)))
+
+  fit <- fit_pair(grasp_aligner(), X1, X2)
+  expect_s3_class(fit, "grasp_pair_fit")
+  expect_equal(fit$k, min(vapply(bases, function(x) ncol(x$vectors), integer(1))))
+  expect_true(is.finite(fit$loss))
+  expect_equal(dim(fit$rotation), c(fit$k, fit$k))
+})
+
 test_that("grasp_multiset stores anchor-aligned embeddings consistent with permutations", {
   set.seed(303)
 

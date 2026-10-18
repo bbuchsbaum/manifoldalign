@@ -2,14 +2,14 @@
 % Please edit documentation in R/fpgw.R
 \name{partial_ot_tv}
 \alias{partial_ot_tv}
-\title{TV-penalized oracle}
+\title{Withdrawn TV-penalized transport oracle}
 \usage{
 partial_ot_tv(cost, p, q, lambda)
 }
 \value{
-A numeric matrix representing the optimal transport plan.
+This function always errors; use \code{partial_ot_mass()}.
 }
 \description{
-TV-penalized oracle
+Withdrawn TV-penalized transport oracle
 }
 \keyword{internal}

@@ -167,6 +167,14 @@ resolve_global_geo_align_control <- function(control) {
 #' Aligns multiple domains by preserving global graph geometry induced by
 #' within-domain kNN neighborhoods and cross-domain correspondence edges.
 #'
+#' @section Lifecycle:
+#' GlobalGeo is retained as a legacy/reference method. It completed 8 of 21
+#' intended frozen tournament cases; disconnected landmark graphs stopped all
+#' six small closed-world cases and seven of nine small partial-overlap cases.
+#' Partial-overlap support is therefore withdrawn until a connected-component
+#' policy passes the frozen suite. Failures are explicit rather than silently
+#' scored.
+#'
 #' @param data A hyperdesign object or list of matrices.
 #' @param ... Additional arguments passed to methods.
 #'

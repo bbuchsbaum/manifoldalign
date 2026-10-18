@@ -238,10 +238,6 @@ test_that("[FAST] GRASP assignment accuracy (smoke test)", {
   if ("assignment" %in% names(result)) {
     accuracy_result <- evaluate_assignment_accuracy_strict(result$assignment)
     expect_true(accuracy_result$is_valid_permutation)
-
-    # For very small datasets (n=20), GRASP may not beat random significantly
-    # Just verify it produces a valid assignment
-    expect_gte(accuracy_result$n_correct, 0)
   }
 })
 

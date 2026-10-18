@@ -29,16 +29,14 @@ fpgw(data, ...)
   \item \code{omega1}: Weight of the feature term (0 ≤ omega1 ≤ 1).
     The structural term weight omega2 = 1 - omega1 is computed
     automatically (default: 0.001)
-  \item \code{lambda}: Non-negative total variation penalty for the
-    penalized FPGW variant. Set \code{lambda = 0} to disable and use
-    \code{rho} instead (default: 0).
-    NOTE: The TV penalty is experimental and may not produce expected 
-    sparsity-inducing behavior due to its quadratic formulation
+  \item \code{lambda}: Retained for API compatibility and required to be
+    zero. The former \code{lambda > 0} route is withdrawn because it used
+    a balanced transport oracle and therefore could not produce a partial
+    coupling. Use \code{rho} instead (default: 0).
   \item \code{rho}: Mass budget in (0, min(|μ|,|ν|)] for the
     mass-constrained variant. If \code{rho} is supplied, the solver
-    runs the mass-constrained variant; otherwise it uses the
-    penalized variant (\eqn{\lambda > 0}) or classical FGW when both
-    \eqn{\lambda = 0} and \code{rho} is \code{NULL}
+    transports exactly that mass; otherwise it uses classical balanced
+    FGW.
   \item \code{epsilon}: Initial entropic regularization for warm-start
     (default: 0.01). Set to 0 to disable warm-start
   \item \code{metric}: Distance metric for within-domain distances (default: "euclidean")
@@ -53,7 +51,8 @@ fpgw(data, ...)
 
 \item{omega1}{Weight of the feature term (0 ≤ omega1 ≤ 1). Default: 0.001}
 
-\item{lambda}{Non-negative total variation penalty. Default: 0}
+\item{lambda}{Compatibility parameter that must be zero. Use \code{rho} for
+partial transport. Default: 0}
 
 \item{rho}{Mass budget in (0, min(|μ|,|ν|)] for mass-constrained variant}
 
@@ -77,7 +76,7 @@ An fpgw object (inheriting from multiblock_biprojector) containing:
   \item \code{converged}: Convergence status for each optimization
   \item \code{n_samples}: Number of samples per domain
   \item \code{omega1}: Feature weight used
-  \item \code{lambda}: TV penalty (if penalized variant)
+  \item \code{lambda}: Compatibility field; always zero for new fits
   \item \code{rho}: Mass budget (if mass-constrained variant)
   \item \code{domain_names}: Names of the domains
   \item \code{training_data}: Original domain matrices for prediction
@@ -87,23 +86,31 @@ An fpgw object (inheriting from multiblock_biprojector) containing:
 \description{
 Computes the Fused-Partial Gromov-Wasserstein (FPGW) distance between domains
 in a hyperdesign object. This method extends Gromov-Wasserstein by combining
-feature and structural information, and supporting partial transport.
+feature and structural information. Partial transport is supported through
+an explicit transported-mass budget, \code{rho}.
 }
 \details{
-The FPGW distance combines feature and structural information through:
+The verified fixed-mass FPGW objective combines feature and structural
+information through:
 \deqn{L(\gamma) = \omega_1 \langle C, \gamma \rangle + 
-      \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2 \gamma_{ij} \gamma_{i'j'} + 
-      \lambda(|\mu|^2 + |\nu|^2 - 2|\gamma|^2)}
+      \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2
+      \gamma_{ij} \gamma_{i'j'}}
 
-where C is the feature cost matrix and C_X, C_Y are within-domain distance matrices.
+where C is the feature cost matrix and C_X, C_Y are within-domain distance
+matrices. With \code{rho}, the coupling has row and column marginals bounded
+by the input masses and satisfies \eqn{|\gamma| = \rho}. Without \code{rho},
+the coupling has the full balanced marginals.
 
-The algorithm supports two variants:
+The implementation supports two verified modes:
 \itemize{
-  \item Mass-constrained: Transports exactly rho mass between domains
-  \item Penalized: Uses TV regularization with parameter lambda
+  \item Mass-constrained FPGW: transports exactly \code{rho} mass
+  \item Classical FGW: transports the full balanced mass
 }
 
-The Frank-Wolfe algorithm is used with closed-form step sizes for efficiency.
+The former penalized mode selected balanced Frank-Wolfe vertices, fixing the
+transported mass at one and making \code{lambda} ineffective as a partial
+transport control. It is rejected rather than silently returning a balanced
+result. The Frank-Wolfe algorithm uses closed-form step sizes.
 }
 \examples{
 \donttest{
@@ -168,6 +175,6 @@ print(result_multi$distances)
 
 }
 \references{
-Bai et al. (2025). Fused-Partial Gromov-Wasserstein for Heterogeneous Domain 
-Adaptation. arXiv preprint.
+Bai et al. (2025). Fused Partial Gromov-Wasserstein for Structured Objects.
+arXiv:2502.09934.
 }

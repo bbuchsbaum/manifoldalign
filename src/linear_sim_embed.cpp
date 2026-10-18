@@ -11,9 +11,8 @@ public:
                  const double sigma_P, const int ncomp, const double alpha_p)
     : X_(X), T_(T), M_(M), sigma_P_(sigma_P), ncomp_(ncomp), alpha_p_(alpha_p) {
     
-    // Validate sigma_P range to prevent objective underflow
-    if (sigma_P_ <= 0 || sigma_P_ > 1e4) {
-      Rcpp::stop("sigma_P must be positive and <= 1e4 to prevent numerical issues");
+    if (!std::isfinite(sigma_P_) || sigma_P_ <= 0) {
+      Rcpp::stop("sigma_P must be finite and positive");
     }
     
     // Pre-calculate sum of Mask for normalization
@@ -25,9 +24,6 @@ public:
     // Cache dimensions
     n_ = X_.n_rows;
     d_ = X_.n_cols;
-    
-    // Allow R to pass a seed rather than hardcoding
-    arma::arma_rng::set_seed_random();
     
     // Initialize cache variables
     cached_w_.set_size(d_ * ncomp_);
@@ -101,23 +97,23 @@ public:
       P = calculate_P(Y);
     }
     
-    // FIXED: Use correct negative sign and normalization for gradient of Js
-    const double c = -2.0 / sigma_P_;  // Keep negative sign
-    arma::mat G = (P - T_) % M_ * c % P;
+    // For Js = sum(M * (P - T)^2) / (2 * sum(M)), differentiating
+    // the symmetric pairwise-distance matrix contributes both (i, j) and
+    // (j, i). Keep this expression tied directly to that objective.
+    arma::mat A = (P - T_) % M_ % P;
     
     // Efficiently compute gradient components using matrix operations
-    arma::mat XtGy = X_.t() * (G * Y);                    // d × m
-    arma::vec G_rowsums = arma::sum(G, 1);                 // n × 1
-    arma::mat XtDX_W = (X_.t() * (X_.each_col() % G_rowsums)) * W; // d × m
+    arma::mat XtAy = X_.t() * (A * Y);                    // d × m
+    arma::vec A_rowsums = arma::sum(A, 1);                // n × 1
+    arma::mat XtDX_W = (X_.t() * (X_.each_col() % A_rowsums)) * W; // d × m
     
-    // FIXED: Use global mask sum for consistent normalization
-    arma::mat grad_Js = (XtGy - XtDX_W) / sum_M_;
+    arma::mat grad_Js = (4.0 / (sigma_P_ * sum_M_)) * (XtAy - XtDX_W);
     
-    // FIXED: Correct scale for Jp gradient (1/m² not 2/m²)
+    // d ||W'W - I||_F^2 / dW = 4 W(W'W - I).
     arma::mat WtW = W.t() * W;
     arma::mat WWmI = WtW;
     WWmI.diag() -= 1.0;
-    arma::mat grad_Jp = (1.0 / (ncomp_ * ncomp_)) * W * WWmI;  // Corrected factor
+    arma::mat grad_Jp = (2.0 / (ncomp_ * ncomp_)) * W * WWmI;
     
     // CORRECTED: Use exact same convex combination as objective
     grad = arma::vectorise((1.0 - alpha_p_) * grad_Js + alpha_p_ * grad_Jp);
@@ -158,8 +154,34 @@ Rcpp::List linear_sim_embed_cpp(const arma::mat& X, const arma::mat& T, const ar
     Rcpp::stop("ncomp must be positive and <= ncol(X)");
   }
   
-  if (alpha_p < 0) {
-    Rcpp::stop("alpha_p must be non-negative");
+  if (alpha_p < 0 || alpha_p > 1) {
+    Rcpp::stop("alpha_p must be in [0, 1]");
+  }
+
+  if (maxit < 1) {
+    Rcpp::stop("maxit must be >= 1");
+  }
+
+  if (!std::isfinite(tol) || tol <= 0) {
+    Rcpp::stop("tol must be finite and positive");
+  }
+
+  if (!X.is_finite() || !T.is_finite() || !M.is_finite()) {
+    Rcpp::stop("X, T, and M must contain only finite values");
+  }
+
+  if (arma::min(arma::vectorise(M)) < 0) {
+    Rcpp::stop("M must contain non-negative weights");
+  }
+
+  const double symmetry_tol = 1e-10;
+  const double T_scale = std::max(1.0, arma::norm(T, "inf"));
+  const double M_scale = std::max(1.0, arma::norm(M, "inf"));
+  if (arma::norm(T - T.t(), "inf") > symmetry_tol * T_scale) {
+    Rcpp::stop("T must be symmetric for Linear Similarity Embedding");
+  }
+  if (arma::norm(M - M.t(), "inf") > symmetry_tol * M_scale) {
+    Rcpp::stop("M must be symmetric for Linear Similarity Embedding");
   }
   
   // FIXED: Proper SVD initialization for n < d case
@@ -172,9 +194,10 @@ Rcpp::List linear_sim_embed_cpp(const arma::mat& X, const arma::mat& T, const ar
     if (svd_ok && V.n_cols >= static_cast<arma::uword>(ncomp)) {
       initial_W = V.cols(0, ncomp - 1);  // Now shapes match: d × ncomp
     } else {
-      // Random initialization as last resort
-      initial_W = arma::randn(X.n_cols, ncomp);
-      initial_W = arma::orth(initial_W);  // Orthogonalize
+      // Deterministic orthonormal fallback; do not mutate either R or
+      // Armadillo RNG state merely to initialize an optimizer.
+      initial_W = arma::zeros<arma::mat>(X.n_cols, ncomp);
+      initial_W.submat(0, 0, ncomp - 1, ncomp - 1).eye();
     }
   } else {
     Rcpp::stop("ncomp is too large for proper initialization");
@@ -189,7 +212,9 @@ Rcpp::List linear_sim_embed_cpp(const arma::mat& X, const arma::mat& T, const ar
   // Set optimization parameters
   opt.control.maxit = maxit;
   opt.control.trace = 0;  // We handle progress reporting in the objective function
-  opt.control.reltol = tol;
+  // L-BFGS-B ignores reltol. pgtol is its projected-gradient stopping
+  // tolerance and is the quantity documented by the R interface.
+  opt.control.pgtol = tol;
   opt.control.fnscale = 1.0;  // Ensure proper sign convention
   
   // FIXED: Disable Hessian for L-BFGS
@@ -197,20 +222,32 @@ Rcpp::List linear_sim_embed_cpp(const arma::mat& X, const arma::mat& T, const ar
   
   // Perform optimization
   arma::vec initial_w = arma::vectorise(initial_W);
+  const double initial_value = task(initial_w);
+  arma::vec initial_gradient_vec;
+  task.Gradient(initial_w, initial_gradient_vec);
   
   try {
     opt.minimize(task, initial_w);
   } catch (const std::exception& e) {
-    Rcpp::warning("Optimization failed with error: " + std::string(e.what()));
+    Rcpp::stop("L-BFGS-B optimization failed: " + std::string(e.what()));
   }
   
   // Extract results
   arma::mat optimized_W = arma::reshape(opt.par(), X.n_cols, ncomp);
+  arma::vec final_gradient_vec;
+  task.Gradient(opt.par(), final_gradient_vec);
   
   return Rcpp::List::create(
     Rcpp::Named("W") = optimized_W,
     Rcpp::Named("convergence") = opt.convergence(),
     Rcpp::Named("message") = opt.message(),
-    Rcpp::Named("value") = opt.value()
+    Rcpp::Named("value") = opt.value(),
+    Rcpp::Named("iterations") = opt.grcount(),
+    Rcpp::Named("function_evaluations") = opt.fncount(),
+    Rcpp::Named("gradient_evaluations") = opt.grcount(),
+    Rcpp::Named("gradient_norm") = arma::norm(final_gradient_vec, 2),
+    Rcpp::Named("initial_W") = initial_W,
+    Rcpp::Named("initial_value") = initial_value,
+    Rcpp::Named("initial_gradient") = arma::reshape(initial_gradient_vec, X.n_cols, ncomp)
   );
 }
