@@ -33,6 +33,84 @@
 * Implemented Fused-Partial Gromov-Wasserstein (FPGW) distance for heterogeneous domain adaptation
 * Added support for mass-constrained partial optimal transport with `rho` parameter
 
+### Correctness fixes that change results
+
+These fix defects found in a package review; several change fitted output.
+
+* **KEMA**: out-of-sample prediction now applies the fitted kernel encoder
+  (`oos_predict()` and `project_block()` compute k(x, reference rows) alpha);
+  previously it used a linear surrogate that was wrong for nonlinear kernels
+  and for the reduced solver. Fits have class `kema_fit`; generic `project()`
+  now errors and `v` is `NA` for nonlinear kernels. New `seed` argument (stored
+  REKEMA landmarks) and `backend_control$max_dense_bytes` (errors before an
+  oversized dense allocation). `validate_out_of_sample_reconstruction()` and
+  `validate_kema_eigenvalues()` are now defunct.
+* **SSMA**: the dense eigen fallback no longer discards the smallest
+  eigenvalues; returning fewer than `ncomp` components warns and is recorded,
+  and trivial null-space vectors are never substituted. Label
+  correspondences no longer pair a random row when a label has one member.
+* **Spectral MNN**: loadings are an explicit ridge regression bridge to the
+  aligned scores (`bridge_ridge`); heat-kernel signatures use one time grid
+  shared by all domains; the Procrustes step applies its translation.
+* **PARROT**: the proximal loop now iterates on the full objective (it
+  previously reduced to a single entropic transport, so anchors and
+  consistency terms had no effect); R and C++ backends solve the same
+  problem; the default `center()` preprocessing is applied; `solver =
+  "exact"` errors; new `max_outer`; non-convergence warns instead of being
+  rebalanced away.
+* **Sinkhorn**: `stabilized = TRUE` is honoured for every `epsilon`
+  (it returned zero plans for large costs); convergence uses the marginal
+  residual. Compiled kernels no longer fall back silently to R code on
+  errors.
+* **FPGW**: the mass-constrained variant starts and stays feasible and returns
+  mass `rho`; the TV-penalised variant uses its own oracle and correct sign
+  (larger `lambda` transports more mass); arguments are validated and LP
+  failures are errors. FPGW and Gromov-Wasserstein objects are no longer
+  classed `multiblock_biprojector`.
+* **Gromov-Wasserstein**: entropy scaling is consistent with `epsilon`, the
+  inner Sinkhorn is stabilised, and `predict()` always uses the fitted
+  coupling (the raw-coordinate nearest-neighbour fallback is removed).
+* **Network simplex**: exact at 2^-50 mass resolution with separate cost and
+  mass scaling (small masses were rounded to zero), validated against the
+  original marginals.
+* **Multi-set UOT**: learned template features use consistent mass scaling;
+  duplicate sparse edges are merged; iteration counts are reported correctly;
+  `max_dist` is optional.
+* **`align_many()`**: synchronisation, refinement and diagnostics share one
+  documented transform contract (the inverse convention had let diagnostics
+  certify wrong answers); permutation synchronisation works in all three
+  modes; the permutation hub defaults to the largest domain; `links` is a
+  formal argument; unsupported groups and consensus modes error.
+  `relative_transform()` for GRASP pair fits returns the transpose of its
+  previous operator.
+* **`linear_sim_embed()`**: convergence no longer depends on `verbose` (the
+  default run used to stop after one update); gradients are exact in R and
+  C++; non-convergence is reported; `tol` reaches L-BFGS-B as `pgtol`.
+* **Generalized Procrustes**: new `translation = "shared_tasks"` (default)
+  centres partial-task designs on shared tasks; a stationarity
+  `certificate` is returned; `final_diff` reports the last step.
+* **`preproc = NULL`** now works in `gpca_align()`, `generalized_procrustes()`,
+  `lowrank_align()` and `global_geo_align()`; `lowrank_align()` no longer builds
+  a dense cross-domain mask.
+* **RAPID-MA**: nested control lists are revalidated and unknown fields
+  rejected; pattern relation matrices and sparse inputs are accepted without
+  densifying; orthogonal maps stay orthogonal; the diffusion directedness rule
+  changed, which alters default embeddings; outputs keep row names. Benchmark
+  and validation runners no longer leak held-out labels and use shared metric
+  definitions; the evidence documents carry notes on which numbers need
+  regeneration.
+* **`cv_alignment_rows()`**: targets are scored with the same projection as
+  queries; folds are matched by name or position.
+* **Pseudolabelling**: greedy selection is farthest-first; the large-n path
+  no longer overflows or mislabels vertices.
+* **`assess_ssma()`**: missing predictions count in the denominator and
+  coverage and solver availability are reported.
+* **Random numbers**: package functions no longer reset the caller's RNG
+  stream; seeded steps restore it afterwards.
+* **Dependencies**: PRIMME is optional (RSpectra fallback); `pryr` is no
+  longer used; `src/Makevars` links LAPACK and BLAS; the vendored LEMON code
+  no longer requires OpenMP and is credited in `inst/COPYRIGHTS`.
+
 ### Bug Fixes
 
 * Fixed network simplex solver segfaults by improving error handling
