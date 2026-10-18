@@ -248,21 +248,13 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
       values <- basis$values
     } else {
       A <- methods::as(Matrix::Matrix(adj_matrix, sparse = TRUE), "dgCMatrix")
-      decomp <- tryCatch({
-        if (requireNamespace("RSpectra", quietly = TRUE) && k_use <= ceiling(0.8 * total_dim)) {
-          RSpectra::eigs_sym(A, k = k_use, which = "LA")
-        } else if (.primme_available() && k_use < total_dim) {
-          PRIMME::eigs_sym(A, NEig = k_use, which = "LA")
-        } else {
-          eig_full <- eigen(as.matrix(A), symmetric = TRUE)
-          list(values = eig_full$values[seq_len(k_use)],
-               vectors = eig_full$vectors[, seq_len(k_use), drop = FALSE])
-        }
-      }, error = function(e) {
-        eig_full <- eigen(as.matrix(A), symmetric = TRUE)
-        list(values = eig_full$values[seq_len(k_use)],
-             vectors = eig_full$vectors[, seq_len(k_use), drop = FALSE])
-      })
+      # Largest-algebraic adjacency eigenpairs: RSpectra for moderate k,
+      # a dense eigen() when most of the spectrum is requested (PRIMME was used
+      # here before and can miss repeated eigenvalues such as the -1 cluster).
+      decomp <- .sym_eigs(A, k_use, which = "LA",
+                          backend = if (k_use <= ceiling(0.8 * total_dim)) "rspectra" else "dense",
+                          tol = 1e-10, maxitr = 1000L,
+                          context = "Adjacency eigen-decomposition in GRASP")
 
       ord <- order(decomp$values, decreasing = TRUE)
       values <- as.numeric(decomp$values)[ord]

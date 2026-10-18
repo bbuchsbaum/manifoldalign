@@ -92,3 +92,18 @@ test_that("compute_laplacian_basis accepts SM/LM synonyms and rejects others", {
   expect_true(all(diff(sa$values) >= -1e-12))
   expect_error(compute_laplacian_basis(A, k = 4, which = "BE"), "must be one of")
 })
+
+test_that("GRASP adjacency bases use the largest eigenvalues with or without PRIMME", {
+  set.seed(23)
+  X <- matrix(rnorm(25 * 3), 25, 3)
+  strata <- list(list(x = X), list(x = X[25:1, ]))
+  # k close to n selects the dense branch (PRIMME missed a repeated eigenvalue here)
+  b_default <- manifoldalign:::compute_grasp_basis(strata, ncomp = 22, use_laplacian = FALSE)
+  testthat::local_mocked_bindings(.primme_available = function() FALSE,
+                                  .package = "manifoldalign")
+  b_fallback <- manifoldalign:::compute_grasp_basis(strata, ncomp = 22, use_laplacian = FALSE)
+  for (i in 1:2) {
+    expect_true(all(diff(b_default[[i]]$values) <= 1e-10))
+    expect_equal(b_fallback[[i]]$values, b_default[[i]]$values, tolerance = 1e-6)
+  }
+})

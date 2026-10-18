@@ -128,8 +128,8 @@ hks_time_grid <- function(values,
 #
 # Returns the `k` smallest-algebraic (`which = "SA"`) or largest-algebraic
 # (`which = "LA"`) eigenpairs of the symmetric matrix `L`, sorted ascending for
-# "SA" and descending for "LA". `backend` selects the preferred iterative
-# solver; PRIMME is optional and is used only when `.primme_available()`. When
+# "SA" and descending for "LA". `backend` selects the preferred solver
+# ("dense" forces eigen()); PRIMME is optional and is used only when `.primme_available()`. When
 # PRIMME is requested but missing, small problems (n <= `dense_max_n_small`) use
 # a dense `eigen()` and larger ones use RSpectra. Requests with k >= n - 1 are
 # always solved densely. If the iterative solver converges fewer than `k`
@@ -137,7 +137,7 @@ hks_time_grid <- function(values,
 # otherwise an error names the shortfall rather than silently returning fewer
 # eigenpairs. The backend actually used is returned in `$backend`.
 .sym_eigs <- function(L, k, which = c("SA", "LA"),
-                      backend = c("rspectra", "primme"),
+                      backend = c("rspectra", "primme", "dense"),
                       tol = 1e-6, maxitr = 1000L, initvec = NULL,
                       dense_max_n_small = 200L,
                       dense_fallback_max_n = 3000L,
@@ -163,7 +163,7 @@ hks_time_grid <- function(values,
     finish(d$values, d$vectors, used)
   }
 
-  if (k >= n - 1L) return(dense())
+  if (k >= n - 1L || identical(backend, "dense")) return(dense())
   # RSpectra has no method for Matrix's symmetric storage classes (e.g. the
   # dsCMatrix produced by forceSymmetric()); hand it general storage.
   if (inherits(L, "Matrix")) {
