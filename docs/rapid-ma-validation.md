@@ -1,5 +1,27 @@
 # RAPID-MA accuracy validation
 
+> **Status note (2026-10-18): the reported numbers predate evaluation fixes
+> and need regeneration.** Later package fixes change these results:
+> (1) the `target_centroid` comparator and the domain-local part of the
+> RAPID-MA teacher seed now use the leading principal components of all
+> standardized features instead of the first `ncomp` standardized columns,
+> so every target-only row and the "+1.33 OA over target-only" comparisons
+> change; (2) the relation-safety gate now scores leave-one-label-out folds
+> in which the whole domain probability matrix is recomputed without the
+> held-out label (previously relation neighbours still carried it), so the
+> "safety switched on 13/20 seeds" ablation count and the misleading-structure
+> rows change; (3) macro-F1 and mIoU now average over classes present in the
+> held-out truth or predictions (open-set and absent-class predictions are
+> charged as false positives), prediction heads use only classes with an
+> observed label, and ECE confidence uses the full probability row, so every
+> macro-F1, mIoU and ECE column changes; (4) the diffusion encoder no longer
+> adds reverse channels to undirected random-walk relations, so all RAPID-MA
+> embeddings change; (5) isolated-runner timeouts are now recorded with status
+> `timeout` rather than `failed`.
+> These numbers were produced by the code at the time of the frozen run and
+> are kept unchanged here; they must be regenerated with the documented runner
+> before they are cited again.
+
 Status: synthetic transductive and structural-robustness evidence complete;
 real-scene and blocked-inductive evidence not yet established.
 

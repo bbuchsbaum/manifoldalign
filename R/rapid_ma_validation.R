@@ -59,7 +59,10 @@
   classes <- sort(unique(observed), method = "radix")
   selected <- lapply(classes, function(class) {
     candidate <- rows[observed == class]
-    sample(candidate, min(length(candidate), budget), replace = FALSE)
+    # Index the candidate vector: `sample(x, n)` on a length-one integer x
+    # samples from seq_len(x) and could return an arbitrary (possibly
+    # held-out) row.
+    candidate[sample.int(length(candidate), min(length(candidate), budget))]
   })
   as.integer(unlist(selected, use.names = FALSE))
 }
@@ -119,30 +122,39 @@
     block_id != test_block & block_id != calibration_block
   )
 
-  set.seed(seed)
-  labeled_rows <- .rapid_validation_sample_by_class(
-    fit_candidates, labels, labels_per_class
-  )
-  calibration_rows <- .rapid_validation_sample_by_class(
-    calibration_candidates, labels, calibration_per_class
-  )
-  if (is.infinite(max_fit_rows)) {
-    fit_rows <- fit_candidates
-  } else {
-    max_fit_rows <- as.integer(max_fit_rows)
-    if (length(labeled_rows) > max_fit_rows) {
-      stop("`max_fit_rows` is smaller than the required labeled-row budget.",
-           call. = FALSE)
-    }
-    remainder <- setdiff(fit_candidates, labeled_rows)
-    available <- max_fit_rows - length(labeled_rows)
-    sampled <- if (length(remainder) > available) {
-      sample(remainder, available, replace = FALSE)
+  sampled <- .with_local_seed(seed, {
+    labeled_rows <- .rapid_validation_sample_by_class(
+      fit_candidates, labels, labels_per_class
+    )
+    calibration_rows <- .rapid_validation_sample_by_class(
+      calibration_candidates, labels, calibration_per_class
+    )
+    if (is.infinite(max_fit_rows)) {
+      fit_rows <- fit_candidates
     } else {
-      remainder
+      max_fit_rows <- as.integer(max_fit_rows)
+      if (length(labeled_rows) > max_fit_rows) {
+        stop("`max_fit_rows` is smaller than the required labeled-row budget.",
+             call. = FALSE)
+      }
+      remainder <- setdiff(fit_candidates, labeled_rows)
+      available <- max_fit_rows - length(labeled_rows)
+      extra <- if (length(remainder) > available) {
+        remainder[sample.int(length(remainder), available)]
+      } else {
+        remainder
+      }
+      fit_rows <- sort(c(labeled_rows, extra), method = "radix")
     }
-    fit_rows <- sort(c(labeled_rows, sampled), method = "radix")
-  }
+    list(
+      labeled_rows = labeled_rows,
+      calibration_rows = calibration_rows,
+      fit_rows = fit_rows
+    )
+  })
+  labeled_rows <- sampled$labeled_rows
+  calibration_rows <- sampled$calibration_rows
+  fit_rows <- sampled$fit_rows
 
   list(
     fit_rows = as.integer(fit_rows),
@@ -158,7 +170,6 @@
       labels_per_class = labels_per_class,
       calibration_per_class = calibration_per_class,
       max_fit_rows = max_fit_rows,
-      test_labels_read_during_split = FALSE,
       fit_excludes_calibration = !any(fit_rows %in% calibration_rows),
       fit_excludes_test = !any(fit_rows %in% test_rows)
     )
@@ -246,8 +257,7 @@
       nll_before = baseline,
       nll_after = after,
       n = nrow(probability),
-      class_levels = colnames(probability),
-      provenance = list(training_only = TRUE, test_labels_read = FALSE)
+      class_levels = colnames(probability)
     ),
     class = "rapid_ma_temperature"
   )

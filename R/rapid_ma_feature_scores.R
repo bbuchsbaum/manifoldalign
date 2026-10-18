@@ -28,7 +28,7 @@
 
 .rapid_feature_barycentres <- function(X, Z, weight, name) {
   .rapid_validate_numeric_matrix(X, name, n_rows = nrow(Z))
-  vals <- if (inherits(X, "Matrix")) X@x else X
+  vals <- .rapid_matrix_values(X)
   if (any(!is.finite(vals))) {
     stop("`", name, "` must contain only finite values.", call. = FALSE)
   }

@@ -93,19 +93,10 @@
 }
 
 .rapid_resolve_uot_control <- function(control = NULL) {
-  defaults <- unclass(.rapid_uot_control())
-  if (is.null(control)) return(do.call(.rapid_uot_control, defaults))
-  if (inherits(control, "rapid_ma_uot_control")) return(control)
-  if (!is.list(control) || is.null(names(control)) || any(!nzchar(names(control)))) {
-    stop("`control` must be NULL, a named list, or rapid_ma_uot_control.",
-         call. = FALSE)
-  }
-  unknown <- setdiff(names(control), names(defaults))
-  if (length(unknown)) {
-    stop("Unknown UOT control field(s): ", paste(unknown, collapse = ", "),
-         ".", call. = FALSE)
-  }
-  do.call(.rapid_uot_control, utils::modifyList(defaults, control))
+  .rapid_resolve_settings(
+    control, .rapid_uot_control, "rapid_ma_uot_control", "UOT",
+    "`control` must be NULL, a named list, or rapid_ma_uot_control."
+  )
 }
 
 .rapid_uot_numeric_view <- function(node_view, prototype_view, n, K, name,
@@ -247,12 +238,11 @@
   if (any(confident) && (control$label_weight > 0 || control$hard_labels)) {
     local_rows <- which(confident)
     class_columns <- constraints$label_index[rows[local_rows]]
-    probability <- matrix(0, length(local_rows), length(prototype_index))
-    for (i in seq_along(local_rows)) {
-      probability[i, ] <- prototypes$class_prob[
-        prototype_index, class_columns[[i]]
-      ]
-    }
+    # Row i holds the probability of node i's class under every prototype.
+    probability <- t(prototypes$class_prob[
+      prototype_index, class_columns, drop = FALSE
+    ])
+    dimnames(probability) <- NULL
     if (control$label_weight > 0) {
       confidence <- constraints$label_confidence[rows[local_rows]]
       cost[local_rows, ] <- cost[local_rows, , drop = FALSE] +
@@ -670,6 +660,9 @@
     cost_state, solution, alpha, beta, control$epsilon,
     K = nrow(prototypes$embedding)
   )
+  if (!is.null(rownames(embedding))) {
+    rownames(materialized$coupling) <- rownames(embedding)
+  }
   row_mass <- as.numeric(Matrix::rowSums(materialized$coupling))
   prototype_mass <- as.numeric(Matrix::colSums(materialized$coupling))
   total_mass <- sum(row_mass)

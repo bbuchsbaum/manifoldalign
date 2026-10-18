@@ -23,8 +23,15 @@
     tryCatch(
       {
         .rapid_validate_numeric_matrix(X, "features")
-        X <- as.matrix(X)
-        if (any(!is.finite(X))) {
+        # Sparse Matrix inputs stay sparse: every downstream consumer (the
+        # hashed feature sketch and the diffusion base) is sparse-aware, so
+        # only the stored values need a finiteness check.
+        if (inherits(X, "Matrix")) {
+          if (methods::is(X, "nMatrix")) X <- methods::as(X, "dMatrix")
+        } else {
+          X <- as.matrix(X)
+        }
+        if (any(!is.finite(.rapid_matrix_values(X)))) {
           stop("features contain non-finite values", call. = FALSE)
         }
         X
@@ -219,13 +226,31 @@
   )
 }
 
-.rapid_blend_map <- function(old, new, step) {
+# Nearest orthogonal matrix in Frobenius norm (orthogonal polar factor).
+.rapid_polar_factor <- function(A) {
+  decomposition <- svd(A)
+  decomposition$u %*% t(decomposition$v)
+}
+
+# Damped map update. A convex blend of two orthogonal matrices is not
+# orthogonal (identity blended with a 90 degree rotation at step 0.75 has
+# A'A = 0.625 I), so orthogonal maps are retracted by their polar factor. The
+# map keeps the requested family as its type and records how it was updated.
+.rapid_blend_map <- function(old, new, step, map_type = new$type) {
+  coef <- (1 - step) * old$coef + step * new$coef
+  update <- if (step >= 1) "full" else "convex_blend"
+  if (identical(map_type, "orthogonal") && step < 1) {
+    coef <- .rapid_polar_factor(coef)
+    update <- "polar_retracted_blend"
+  }
   list(
-    coef = (1 - step) * old$coef + step * new$coef,
+    coef = coef,
     intercept = (1 - step) * old$intercept + step * new$intercept,
-    type = new$type,
+    type = map_type,
     status = new$status,
-    effective_rows = new$effective_rows
+    effective_rows = new$effective_rows,
+    step = step,
+    update = update
   )
 }
 
@@ -304,8 +329,13 @@
     probability <- probability / pmax(rowSums(probability), 1e-15)
     colnames(probability) <- prototypes$class_levels
     choice <- max.col(probability, ties.method = "first")
-    predictions[[m]] <- prototypes$class_levels[choice]
-    confidence[[m]] <- probability[cbind(seq_len(nrow(probability)), choice)]
+    predictions[[m]] <- stats::setNames(
+      prototypes$class_levels[choice], rownames(probability)
+    )
+    confidence[[m]] <- stats::setNames(
+      probability[cbind(seq_len(nrow(probability)), choice)],
+      rownames(probability)
+    )
     probabilities[[m]] <- probability
 
     observed <- which(!is.na(labels[[m]]))
@@ -418,7 +448,17 @@
   X <- .rapid_validate_domain_data(data, domain_names)
   sizes <- vapply(X, nrow, integer(1))
   names(sizes) <- domain_names
+  row_names <- lapply(X, rownames)
   labels <- .rapid_validate_domain_labels(labels, sizes, domain_names)
+  default_position_weight <- .rapid_uot_control()$position_weight
+  if (!identical(control$uot$position_weight, default_position_weight)) {
+    warning(
+      "`uot$position_weight` has no effect in rapid_ma(): position ",
+      "coordinates enter the structure cost view, weighted by ",
+      "`uot$structure_weight`.",
+      call. = FALSE
+    )
+  }
   relations <- .rapid_named_domain_argument(relations, domain_names, "relations")
   positions <- .rapid_named_domain_argument(positions, domain_names, "positions")
   attributes <- .rapid_named_domain_argument(attributes, domain_names, "attributes")
@@ -453,7 +493,17 @@
     signature <- x$structure
     position <- x$position
     if (!is.null(position) && ncol(position)) {
-      colnames(position) <- paste0("coordinate_", seq_len(ncol(position)))
+      # Coordinates are aligned across domains by axis; the missing-position
+      # indicator keeps its own name so it never aliases a coordinate axis of
+      # a domain with more position dimensions.
+      metadata <- x$relations$views$position$metadata
+      input_dim <- metadata$input_dim
+      if (is.null(input_dim)) input_dim <- ncol(position)
+      extra <- ncol(position) - input_dim
+      colnames(position) <- c(
+        paste0("coordinate_", seq_len(input_dim)),
+        if (extra > 0L) "position_missing"
+      )
       signature <- cbind(signature, position)
     }
     signature
@@ -518,7 +568,7 @@
       prototype_step <- control$prototype_step * damping
       candidate_maps <- Map(
         .rapid_blend_map, maps, fitted_maps,
-        MoreArgs = list(step = map_step)
+        MoreArgs = list(step = map_step, map_type = control$map_type)
       )
       candidate_scores <- Map(.rapid_apply_latent_map, base_scores, candidate_maps)
       candidate_prototypes <- .rapid_update_prototypes(
@@ -582,6 +632,14 @@
         iteration, evaluation, FALSE, 0, control$max_backtracks,
         if (is.null(candidate_error)) "rolled_back" else "candidate_error"
       )
+      if (!is.null(candidate_error)) {
+        warning(
+          "rapid_ma stalled at iteration ", iteration, ": the last candidate ",
+          "update failed (", candidate_error, "). Returning the last accepted ",
+          "state.",
+          call. = FALSE
+        )
+      }
       break
     }
     if (identical(status, "converged")) break
@@ -594,6 +652,12 @@
   probabilities <- evaluation$prediction$probabilities
   predictions <- evaluation$prediction$predictions
   confidence <- evaluation$prediction$confidence
+  for (m in seq_along(domain_names)) {
+    rownames(couplings[[m]]) <- row_names[[m]]
+    rownames(probabilities[[m]]) <- row_names[[m]]
+    names(predictions[[m]]) <- row_names[[m]]
+    names(confidence[[m]]) <- row_names[[m]]
+  }
   names(probabilities) <- names(predictions) <- names(confidence) <- domain_names
   dropped_mass <- vapply(
     evaluation$uot, function(x) x$diagnostics$dropped_fraction, numeric(1)
@@ -653,23 +717,62 @@
   )
 }
 
-#' Scalable structure-aware manifold alignment
+#' Scalable Structure-Aware Manifold Alignment
 #'
-#' @param data A list of numeric domain matrices or a `hyperdesign`.
+#' Fits a scalable multi-domain alignment using bounded sparse relation
+#' diffusion, class-aware shared prototypes, sparse unbalanced transport, and
+#' prototype-level relation matching.
+#'
+#' @details
+#' RAPID-MA is an embedding method rather than a linear feature projector. Its
+#' result therefore does not contain artificial feature loadings
+#' (`preprocessing$loadings_available` is `FALSE`). Out-of-sample application
+#' uses the fitted RAPID-MA adapter and retained preprocessing state; see
+#' [oos_predict.rapid_ma()].
+#'
+#' Domain matrices may be dense base matrices, data frames, or sparse `Matrix`
+#' objects. Sparse inputs stay sparse through the feature sketch; only the
+#' bounded-width hashed feature view is dense.
+#'
+#' The alternating solver accepts a candidate update only when the composite
+#' objective does not increase (within `control$objective_tolerance`), damping
+#' the map and prototype steps by `control$backtrack_factor` on each retry. With
+#' `control$map_type = "orthogonal"` every accepted map, including damped
+#' blends, is retracted back to an orthogonal matrix by a polar factor. When no
+#' retry of an iteration is accepted the fit stops with status `"stalled"` and
+#' keeps the last accepted state; if a retry failed with an error, the message
+#' is recorded in `convergence$last_candidate_error` and a warning is emitted.
+#'
+#' @param data A list of numeric domain matrices (rows are samples) or a
+#'   `hyperdesign`.
 #' @param ... Method-specific arguments.
-#' @return A `rapid_ma` embedding result with sparse couplings and diagnostics.
+#' @return A `rapid_ma` object containing per-domain scores (`scores`, and their
+#'   row-bound concatenation `s`), shared prototypes, sparse node-to-prototype
+#'   couplings, relation barycenters, predictions, prediction probabilities and
+#'   confidence, dropped transport mass, and objective/convergence diagnostics.
+#'   Couplings, scores, probabilities, predictions, and confidences keep the row
+#'   names of the corresponding input domain.
+#' @seealso [rapid_ma_control()], [rapid_ma_semisup()], [rapid_ma_match()],
+#'   [oos_predict.rapid_ma()], [rapid_ma_aligner()]
 #' @export
 rapid_ma <- function(data, ...) {
   UseMethod("rapid_ma")
 }
 
 #' @rdname rapid_ma
-#' @param labels Optional list of partially observed label vectors.
-#' @param relations Optional list of custom named sparse relations per domain.
-#' @param positions Optional list of spatial coordinate matrices per domain.
-#' @param attributes Optional list of mixed attribute data.frames per domain.
-#' @param ncomp Shared embedding dimension.
-#' @param control Settings from [rapid_ma_control()].
+#' @param labels Optional list of partially observed label vectors, one per
+#'   domain. Missing labels may be represented by `NA`.
+#' @param relations Optional list containing custom named sparse relations for
+#'   each domain. A relation may be a sparse `Matrix` (pattern matrices such as
+#'   `ngCMatrix` are treated as unit weights), a small dense matrix, or an edge
+#'   `data.frame` with `from`, `to`, and optional `weight` columns.
+#' @param positions Optional list of spatial coordinate matrices, one per
+#'   domain.
+#' @param attributes Optional list of mixed attribute data frames, one per
+#'   domain.
+#' @param ncomp Positive shared embedding dimension.
+#' @param control Settings returned by [rapid_ma_control()], or a named list of
+#'   its arguments (nested component lists are validated field by field).
 #' @export
 rapid_ma.list <- function(
   data,
@@ -696,7 +799,8 @@ rapid_ma.list <- function(
 }
 
 #' @rdname rapid_ma
-#' @param y Optional unquoted or string label column in each domain design.
+#' @param y For a `hyperdesign`, an unquoted or string label column present in
+#'   every domain design.
 #' @method rapid_ma hyperdesign
 #' @export
 rapid_ma.hyperdesign <- function(

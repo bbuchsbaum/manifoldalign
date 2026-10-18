@@ -346,43 +346,11 @@ lema_predict_low <- function(fit, new_low) {
   probability
 }
 
+# One metric definition shared with benchmark_rapid_ma(): macro-F1 and mIoU
+# average over classes present in the held-out truth or predictions, and
+# predictions outside the truth classes count as false positives.
 classification_metrics <- function(truth, prediction, probability) {
-  truth <- as.character(truth)
-  prediction <- as.character(prediction)
-  classes <- sort(unique(truth), method = "radix")
-  precision <- recall <- f1 <- iou <- stats::setNames(
-    numeric(length(classes)), classes
-  )
-  support <- table(factor(truth, levels = classes))
-  for (class in classes) {
-    tp <- sum(truth == class & prediction == class)
-    fp <- sum(truth != class & prediction == class)
-    fn <- sum(truth == class & prediction != class)
-    precision[[class]] <- if (tp + fp) tp / (tp + fp) else 0
-    recall[[class]] <- if (tp + fn) tp / (tp + fn) else 0
-    f1[[class]] <- if (precision[[class]] + recall[[class]] > 0) {
-      2 * precision[[class]] * recall[[class]] /
-        (precision[[class]] + recall[[class]])
-    } else 0
-    iou[[class]] <- if (tp + fp + fn) tp / (tp + fp + fn) else 0
-  }
-  confidence <- apply(probability, 1L, max)
-  correct <- prediction == truth
-  bins <- pmin(10L, floor(confidence * 10L) + 1L)
-  ece <- sum(vapply(seq_len(10L), function(bin) {
-    rows <- which(bins == bin)
-    if (!length(rows)) return(0)
-    length(rows) / length(truth) *
-      abs(mean(correct[rows]) - mean(confidence[rows]))
-  }, numeric(1)))
-  rare_class <- names(which.min(support))[[1L]]
-  c(
-    oa = mean(correct),
-    macro_f1 = mean(f1),
-    miou = mean(iou),
-    rare_recall = recall[[rare_class]],
-    ece = ece
-  )
+  manifoldalign:::.rapid_classification_metrics(truth, prediction, probability)
 }
 
 make_fixture <- function(scene, split) {
@@ -419,7 +387,6 @@ make_fixture <- function(scene, split) {
     correspondence = paired_target,
     metadata = list(
       split = split$provenance,
-      test_labels_read_during_fit = FALSE,
       target_rows = target_rows,
       source_rows = source_rows
     )
@@ -599,8 +566,7 @@ run_method <- function(method, fixture, split, scene, seed) {
       temperature = 1,
       nll_before = NA_real_,
       nll_after = NA_real_,
-      n = sum(represented_calibration),
-      provenance = list(training_only = TRUE, test_labels_read = FALSE)
+      n = sum(represented_calibration)
     )
   }
   calibrated_test <- manifoldalign:::.rapid_temperature_apply(
@@ -651,7 +617,6 @@ run_method <- function(method, fixture, split, scene, seed) {
       calibration_n = calibration$n,
       calibration_nll_before = calibration$nll_before,
       calibration_nll_after = calibration$nll_after,
-      test_labels_read_during_fit = FALSE,
       uses_source_alignment = method %in% c(
         "rapid_ma_semisup", "rapid_ma_structured", "lema", "ssma", "kema"
       ),
@@ -665,9 +630,9 @@ run_method <- function(method, fixture, split, scene, seed) {
   )
 }
 
-failure_row <- function(method, message) {
+failure_row <- function(method, message, status = "failed") {
   data.frame(
-    method = method, status = "failed", oos = NA_character_,
+    method = method, status = status, oos = NA_character_,
     n_fit = NA_integer_, n_source = NA_integer_,
     n_calibration = NA_integer_, n_test = NA_integer_,
     n_classes_train = NA_integer_, n_classes_test = NA_integer_,
@@ -677,7 +642,6 @@ failure_row <- function(method, message) {
     seen_macro_f1 = NA_real_, seen_miou = NA_real_,
     temperature = NA_real_, calibration_n = NA_integer_,
     calibration_nll_before = NA_real_, calibration_nll_after = NA_real_,
-    test_labels_read_during_fit = FALSE,
     uses_source_alignment = method %in% c(
       "rapid_ma_semisup", "rapid_ma_structured", "lema", "ssma", "kema"
     ),
@@ -714,7 +678,8 @@ run_isolated_method <- function(method, fixture, split, scene, seed, timeout_sec
       parallel::mccollect(job, wait = TRUE, timeout = 1)
       row <- failure_row(
         method,
-        paste0("method exceeded isolated ", timeout_sec, " second timeout")
+        paste0("method exceeded isolated ", timeout_sec, " second timeout"),
+        status = "timeout"
       )
       row$runtime_sec <- elapsed
       row$retained_mb <- NA_real_
@@ -818,7 +783,8 @@ for (fold in seq_along(test_blocks)) {
   message(
     "completed fold=", fold,
     " test_block=", test_block,
-    " failures=", sum(block$status != "ok")
+    " failures=", sum(block$status == "failed"),
+    " timeouts=", sum(block$status == "timeout")
   )
 }
 
@@ -837,7 +803,8 @@ summary_rows <- lapply(groups, function(row_index) {
     method = block$method[[1L]],
     n_folds = nrow(block),
     n_ok = sum(block$status == "ok"),
-    n_failed = sum(block$status != "ok"),
+    n_failed = sum(block$status == "failed"),
+    n_timeout = sum(block$status == "timeout"),
     stringsAsFactors = FALSE
   )
   for (metric in metric_names) {
@@ -888,7 +855,11 @@ metadata <- c(
   "structured_oos_weights_frozen_before_heldout_block_evaluation=true",
   "target_modality=frozen ten-band Gaussian approximation to Sentinel-2 VNIR",
   "real_scene=true; independent_target_sensor=false",
-  "test_labels_read_during_fit=false",
+  "status_values=ok,failed,timeout",
+  paste(
+    "metrics=macro-F1/mIoU over classes in held-out truth or predictions;",
+    "out-of-truth predictions are false positives (shared package helper)"
+  ),
   "license=CC BY 3.0",
   paste0("dataset_archive_sha256=", scene$metadata$archive_sha256),
   paste0("R.version=", R.version.string),

@@ -7,14 +7,12 @@
   rep(levels, counts)
 }
 
-#' Generate a reproducible structure-aware alignment benchmark fixture
-#'
+#' @rdname benchmark_rapid_ma
+#' @name benchmark_rapid_ma
 #' @param n_common Number of corresponding nodes shared by the two domains.
-#' @param extra_target Additional target-only nodes.
+#' @param extra_target Number of additional target-only nodes.
 #' @param source_features,target_features Modality-specific feature widths.
 #' @param labels_per_class Paired observed labels retained per class.
-#' @param seed Deterministic seed.
-#' @return A named fixture list accepted by [benchmark_rapid_ma()].
 #' @export
 rapid_ma_benchmark_fixture <- function(
   n_common = 120L,
@@ -45,7 +43,15 @@ rapid_ma_benchmark_fixture <- function(
   target_features <- as.integer(target_features)
   labels_per_class <- as.integer(labels_per_class)
   seed <- as.integer(seed)
-  set.seed(seed)
+  .with_local_seed(seed, .rapid_benchmark_fixture_draw(
+    n_common, extra_target, source_features, target_features,
+    labels_per_class, seed
+  ))
+}
+
+.rapid_benchmark_fixture_draw <- function(n_common, extra_target,
+                                          source_features, target_features,
+                                          labels_per_class, seed) {
   levels <- c("forest", "urban", "water")
   probabilities <- c(0.55, 0.30, 0.15)
   centers <- rbind(
@@ -107,6 +113,11 @@ rapid_ma_benchmark_fixture <- function(
     stringsAsFactors = FALSE
   )
   target_attributes <- target_attributes_unpermuted[permutation, , drop = FALSE]
+  rownames(target_attributes) <- NULL
+  # Indexing the class-center matrix by truth labels names every row by its
+  # class; drop those row names so held-out truth cannot travel with the data.
+  rownames(source) <- rownames(target) <- NULL
+  rownames(position_source) <- rownames(position_target) <- NULL
   missing_rows <- seq.int(7L, nrow(target_attributes), by = 19L)
   target_attributes$elevation[missing_rows] <- NA_real_
 
@@ -139,41 +150,49 @@ rapid_ma_benchmark_fixture <- function(
   )
 }
 
-.rapid_benchmark_probabilities <- function(probability, classes) {
-  probability <- as.matrix(probability)
-  output <- matrix(0, nrow(probability), length(classes),
-                   dimnames = list(NULL, classes))
-  shared <- intersect(colnames(probability), classes)
-  if (length(shared)) output[, shared] <- probability[, shared, drop = FALSE]
-  zero <- rowSums(output) <= 0
-  if (any(zero)) output[zero, ] <- 1 / length(classes)
-  output / pmax(rowSums(output), 1e-15)
-}
-
-.rapid_benchmark_metrics <- function(truth, prediction, probability,
-                                     classes, rare_class, bins = 10L) {
+# Held-out classification metrics shared by benchmark_rapid_ma() and the
+# blocked-inductive evidence runner.
+#
+# Class universe for macro-F1 and mIoU: every class present in the held-out
+# truth or among the held-out predictions. A prediction outside the truth
+# classes (an open-set ".unknown", or a labelled class absent from the held-out
+# rows) is a false positive of a class with zero F1 and IoU, and a miss for the
+# true class. Missing predictions (NA) are misses only. OA and ECE (`bins`
+# equal-width confidence bins on [0, 1]) use every held-out row; confidence is
+# the largest row-normalized probability. `rare_class` defaults to the truth
+# class with the smallest held-out support (ties broken alphabetically).
+.rapid_classification_metrics <- function(truth, prediction, probability,
+                                          rare_class = NULL, bins = 10L) {
   truth <- as.character(truth)
   prediction <- as.character(prediction)
-  probability <- .rapid_benchmark_probabilities(probability, classes)
-  confusion <- matrix(0, length(classes), length(classes),
-                      dimnames = list(classes, classes))
-  valid_prediction <- !is.na(prediction) & prediction %in% classes
-  if (any(valid_prediction)) {
-    observed <- table(
-      factor(truth[valid_prediction], levels = classes),
-      factor(prediction[valid_prediction], levels = classes)
-    )
-    confusion[,] <- observed
+  probability <- as.matrix(probability)
+  if (!length(truth) || anyNA(truth) || length(prediction) != length(truth) ||
+      nrow(probability) != length(truth)) {
+    stop("Metrics need complete truth and one prediction and probability ",
+         "row per held-out row.", call. = FALSE)
   }
-  true_positive <- diag(confusion)
-  support <- as.numeric(table(factor(truth, levels = classes)))
-  predicted_count <- colSums(confusion)
-  recall <- true_positive / pmax(support, 1)
-  precision <- true_positive / pmax(predicted_count, 1)
-  f1 <- 2 * precision * recall / pmax(precision + recall, 1e-15)
-  iou <- true_positive / pmax(support + predicted_count - true_positive, 1)
-  confidence <- apply(probability, 1L, max)
-  correct <- as.numeric(!is.na(prediction) & prediction == truth)
+  predicted <- !is.na(prediction)
+  universe <- sort(unique(c(truth, prediction[predicted])), method = "radix")
+  scores <- vapply(universe, function(class) {
+    hit <- predicted & prediction == class
+    tp <- sum(truth == class & hit)
+    fp <- sum(truth != class & hit)
+    fn <- sum(truth == class & !hit)
+    precision <- if (tp + fp > 0) tp / (tp + fp) else 0
+    recall <- if (tp + fn > 0) tp / (tp + fn) else 0
+    f1 <- if (precision + recall > 0) {
+      2 * precision * recall / (precision + recall)
+    } else {
+      0
+    }
+    iou <- if (tp + fp + fn > 0) tp / (tp + fp + fn) else 0
+    c(recall = recall, f1 = f1, iou = iou)
+  }, numeric(3))
+  if (is.null(rare_class)) rare_class <- .rapid_benchmark_rare_class(truth)
+  total <- rowSums(probability)
+  confidence <- apply(probability, 1L, max) / ifelse(total > 0, total, 1)
+  confidence[!is.finite(confidence) | total <= 0] <- 0
+  correct <- as.numeric(predicted & prediction == truth)
   breaks <- seq(0, 1, length.out = bins + 1L)
   bucket <- pmin(findInterval(confidence, breaks, all.inside = TRUE), bins)
   ece <- sum(vapply(seq_len(bins), function(b) {
@@ -183,12 +202,23 @@ rapid_ma_benchmark_fixture <- function(
       abs(mean(correct[index]) - mean(confidence[index]))
   }, numeric(1)))
   c(
-    oa = mean(!is.na(prediction) & prediction == truth),
-    macro_f1 = mean(f1),
-    miou = mean(iou),
-    rare_recall = recall[[rare_class]],
+    oa = mean(correct),
+    macro_f1 = mean(scores["f1", ]),
+    miou = mean(scores["iou", ]),
+    rare_recall = if (rare_class %in% universe) {
+      scores["recall", rare_class]
+    } else {
+      NA_real_
+    },
     ece = ece
   )
+}
+
+# The evaluated class with the smallest held-out support, ties broken
+# alphabetically. Computed from held-out truth at scoring time only.
+.rapid_benchmark_rare_class <- function(truth) {
+  support <- table(factor(truth, levels = sort(unique(truth), method = "radix")))
+  names(support)[[which.min(support)]]
 }
 
 .rapid_benchmark_centroid <- function(embeddings, labels, classes) {
@@ -196,10 +226,16 @@ rapid_ma_benchmark_fixture <- function(
     embeddings[[m]][!is.na(labels[[m]]), , drop = FALSE]
   }))
   train_y <- unlist(lapply(labels, function(x) x[!is.na(x)]), use.names = FALSE)
-  centroids <- do.call(rbind, lapply(classes, function(class) {
+  # A class without training rows has no centroid and receives zero
+  # probability rather than a NaN centroid.
+  present <- classes[classes %in% train_y]
+  if (!length(present)) {
+    stop("No class has a labelled training row.", call. = FALSE)
+  }
+  centroids <- do.call(rbind, lapply(present, function(class) {
     colMeans(train_x[train_y == class, , drop = FALSE])
   }))
-  rownames(centroids) <- classes
+  rownames(centroids) <- present
   predict_one <- function(X) {
     distance <- vapply(seq_len(nrow(centroids)), function(j) {
       rowSums((X - matrix(centroids[j, ], nrow(X), ncol(X), byrow = TRUE))^2)
@@ -209,19 +245,32 @@ rapid_ma_benchmark_fixture <- function(
     if (!is.finite(scale) || scale <= 1e-12) scale <- 1
     probability <- exp(pmax(-distance / scale, -700))
     probability <- probability / pmax(rowSums(probability), 1e-15)
-    colnames(probability) <- classes
+    colnames(probability) <- present
+    output <- matrix(0, nrow(probability), length(classes),
+                     dimnames = list(NULL, classes))
+    output[, present] <- probability
     list(
-      probability = probability,
-      prediction = classes[max.col(probability, ties.method = "first")]
+      probability = output,
+      prediction = present[max.col(probability, ties.method = "first")]
     )
   }
   lapply(embeddings, predict_one)
 }
 
-.rapid_benchmark_scaled_features <- function(data, ncomp) {
+# Unsupervised domain-local embedding for the target-only comparator and the
+# local part of the RAPID-MA teacher seed: the leading principal components
+# (at most `ncomp`) of the standardized features. Every feature column
+# contributes; no label is read. Constant columns standardize to zero.
+.rapid_benchmark_local_embedding <- function(data, ncomp) {
   lapply(data, function(X) {
-    width <- min(ncomp, ncol(X))
-    scale(X, center = TRUE, scale = TRUE)[, seq_len(width), drop = FALSE]
+    Z <- scale(as.matrix(X), center = TRUE, scale = TRUE)
+    attr(Z, "scaled:center") <- attr(Z, "scaled:scale") <- NULL
+    Z[!is.finite(Z)] <- 0
+    width <- max(1L, min(ncomp, ncol(Z), nrow(Z) - 1L))
+    decomposition <- svd(Z, nu = 0L, nv = width)
+    scores <- Z %*% decomposition$v[, seq_len(width), drop = FALSE]
+    colnames(scores) <- paste0("pc_", seq_len(width))
+    scores
   })
 }
 
@@ -233,50 +282,41 @@ rapid_ma_benchmark_fixture <- function(
   ncomp,
   local_weight
 ) {
-  local_embedding <- .rapid_benchmark_scaled_features(data, ncomp)
-  shared <- .rapid_benchmark_centroid(fit$scores, labels, classes)
-  local <- lapply(seq_along(local_embedding), function(m) {
-    .rapid_benchmark_centroid(
-      list(local_embedding[[m]]), list(labels[[m]]), classes
-    )[[1L]]
-  })
-  initial <- Map(
-    function(local_fit, shared_fit) {
-      local_weight * local_fit$probability +
-        (1 - local_weight) * shared_fit$probability
-    },
-    local,
-    shared
-  )
-  validation <- lapply(initial, function(x) x)
-  for (m in seq_along(labels)) {
-    observed <- which(!is.na(labels[[m]]))
-    for (row in observed) {
+  local_embedding <- .rapid_benchmark_local_embedding(data, ncomp)
+  blend <- function(m, domain_labels) {
+    shared <- .rapid_benchmark_centroid(
+      fit$scores, domain_labels, classes
+    )[[m]]$probability
+    local_available <- all(classes %in% domain_labels[[m]])
+    if (!local_available) return(shared)
+    local <- .rapid_benchmark_centroid(
+      list(local_embedding[[m]]), list(domain_labels[[m]]), classes
+    )[[1L]]$probability
+    local_weight * local + (1 - local_weight) * shared
+  }
+  initial <- lapply(seq_along(labels), blend, domain_labels = labels)
+  # Leave-one-label-out folds: each fold recomputes the whole probability
+  # matrix of its domain without the held-out label, so the relation-safety
+  # gate propagates probabilities in which no neighbour used that label.
+  # A row whose removal leaves a class without any label is not scored.
+  validation <- lapply(seq_along(labels), function(m) {
+    folds <- list()
+    for (row in which(!is.na(labels[[m]]))) {
       held_out_labels <- labels
       held_out_labels[[m]][row] <- NA_character_
-      if (any(vapply(classes, function(class) {
-        !any(unlist(held_out_labels, use.names = FALSE) == class, na.rm = TRUE)
-      }, logical(1)))) {
-        next
-      }
-      shared_probability <- .rapid_benchmark_centroid(
-        fit$scores, held_out_labels, classes
-      )[[m]]$probability[row, ]
-      local_available <- all(vapply(classes, function(class) {
-        any(held_out_labels[[m]] == class, na.rm = TRUE)
-      }, logical(1)))
-      if (local_available) {
-        local_probability <- .rapid_benchmark_centroid(
-          list(local_embedding[[m]]), list(held_out_labels[[m]]), classes
-        )[[1L]]$probability[row, ]
-        validation[[m]][row, ] <-
-          local_weight * local_probability +
-          (1 - local_weight) * shared_probability
-      } else {
-        validation[[m]][row, ] <- shared_probability
-      }
+      remaining <- unlist(held_out_labels, use.names = FALSE)
+      if (!all(classes %in% remaining)) next
+      folds[[length(folds) + 1L]] <- list(
+        rows = row,
+        probabilities = blend(m, held_out_labels)
+      )
     }
-  }
+    if (!length(folds)) {
+      stop("The relation-safety gate has no out-of-fold label row in ",
+           "domain ", m, ".", call. = FALSE)
+    }
+    folds
+  })
   list(initial = initial, validation = validation)
 }
 
@@ -430,22 +470,67 @@ rapid_ma_benchmark_fixture <- function(
   )
 }
 
-#' Compare RAPID-MA with related package methods on identical splits
+#' Reproducible RAPID-MA Accuracy and Package Comparison
 #'
-#' @param fixture A list from [rapid_ma_benchmark_fixture()], or a compatible
-#'   list containing `data`, `truth`, `labels`, optional `positions` and
-#'   `attributes`, and optional source-to-target `correspondence`.
-#' @param methods Methods to run. Supported values are `target_centroid`,
-#'   `rapid_ma`, `rapid_ma_native`, `rapid_ma_semisup`, `lema`, `ssma`,
-#'   `kema`, `multiscale`, `spectral_mnn`, and `token_ot`. Embedding methods
-#'   use one shared nearest-centroid head; explicitly named RAPID native and
-#'   semi-supervised rows retain their own prediction heads.
+#' Builds a deterministic imbalanced cross-modality land-cover fixture and
+#' compares RAPID-MA with LeMA and related package methods on identical
+#' splits. Embedding methods use the same nearest-centroid prediction head.
+#' Native UOT and sparse relation teacher rows are named explicitly so their
+#' accuracy is not conflated with embedding quality.
+#'
+#' @details
+#' Held-out truth is used only after fitting, for scoring. The class set given
+#' to every prediction head is the set of classes with at least one observed
+#' (training) label; held-out truth never defines it. The rare class reported
+#' by `rare_recall` is the evaluated class with the smallest held-out support
+#' (ties broken alphabetically) and is computed only at scoring time.
+#'
+#' Macro-F1 and mIoU follow one class-universe rule, shared with the
+#' blocked-inductive evidence runner: they average over every class present in
+#' the held-out truth or in the held-out predictions. Predictions outside the
+#' truth classes, including open-set `".unknown"` predictions and labelled
+#' classes absent from the held-out rows, therefore count as false positives
+#' of a class whose F1 and IoU are zero, as well as misses for the true class.
+#' Overall accuracy and expected calibration error (ten equal-width bins) use
+#' all held-out rows.
+#'
+#' The `target_centroid` comparator and the domain-local part of the RAPID-MA
+#' teacher seed both use a principal-component projection of the standardized
+#' domain features (at most `ncomp` components, computed without labels); all
+#' feature columns contribute.
+#'
+#' The `rapid_ma_semisup` row's relation-safety gate scores relation subsets on
+#' genuinely out-of-fold teacher probabilities: for each observed label row,
+#' the whole probability matrix of its domain is recomputed without that label
+#' before propagation, so neighbours never carry the held-out label. Rows whose
+#' removal would leave a class without any label are not scored.
+#'
+#' The bundled LeMA implementation is an independent dense equation-level
+#' benchmark oracle and is not available as a production backend. Reported
+#' endpoint RSS is a lower bound rather than a sampled peak; evidence scripts
+#' should measure process peak RSS separately. Hits@1 uses exact
+#' nearest-neighbour retrieval. MRR is a bounded MRR@100 lower bound; true
+#' matches outside the first 100 candidates contribute zero.
+#'
+#' @param fixture A fixture from `rapid_ma_benchmark_fixture()`, or a
+#'   compatible two-domain list containing `data`, `truth`, `labels`, optional
+#'   `positions` and `attributes`, and optional source-to-target
+#'   `correspondence`.
+#' @param methods Character vector of supported comparison methods:
+#'   `target_centroid`, `rapid_ma`, `rapid_ma_native`, `rapid_ma_semisup`,
+#'   `lema`, `ssma`, `kema`, `multiscale`, `spectral_mnn`, and `token_ot`.
+#'   Embedding methods use one shared nearest-centroid head; explicitly named
+#'   RAPID native and semi-supervised rows retain their own prediction heads.
 #' @param ncomp Shared requested embedding width.
-#' @param seed Deterministic method seed.
+#' @param seed Deterministic fixture or method seed. Package functions restore
+#'   the caller's random-number stream on exit.
 #' @param controls Optional named per-method control lists.
-#' @param keep_fits Retain fitted objects in the result.
-#' @return A `rapid_ma_benchmark` list containing a same-split results table,
-#'   failures, split/provenance metadata, and optionally fits.
+#' @param keep_fits Whether to retain fitted objects.
+#' @return `rapid_ma_benchmark_fixture()` returns generated data, held-out
+#'   truth, observed labels, positions, attributes, correspondences, and
+#'   provenance. `benchmark_rapid_ma()` returns a `rapid_ma_benchmark` list with
+#'   same-split accuracy, calibration, matching, runtime, memory lower bounds,
+#'   failures, split provenance, and optionally fits.
 #' @export
 benchmark_rapid_ma <- function(
   fixture = rapid_ma_benchmark_fixture(),
@@ -489,11 +574,13 @@ benchmark_rapid_ma <- function(
     domain_names <- c("source", "target")
     names(data) <- names(truth) <- names(labels) <- domain_names
   }
-  classes <- sort(unique(unlist(truth, use.names = FALSE)), method = "radix")
+  # Prediction heads only know classes with an observed (training) label;
+  # held-out truth never defines the class set.
+  classes <- sort(unique(stats::na.omit(unlist(labels, use.names = FALSE))),
+                  method = "radix")
+  if (!length(classes)) stop("No observed labels are available.", call. = FALSE)
   target_test <- is.na(labels[[2L]])
   if (!any(target_test)) stop("The target domain has no held-out labels.", call. = FALSE)
-  target_support <- table(factor(truth[[2L]][target_test], levels = classes))
-  rare_class <- classes[[which.min(target_support)]]
   correspondence <- .rapid_benchmark_correspondence(
     fixture$correspondence, sizes[[1L]], sizes[[2L]]
   )
@@ -513,7 +600,7 @@ benchmark_rapid_ma <- function(
       measured <- switch(
         method,
         target_centroid = .rapid_benchmark_measure({
-          embedding <- .rapid_benchmark_scaled_features(data, ncomp)
+          embedding <- .rapid_benchmark_local_embedding(data, ncomp)
           prediction <- .rapid_benchmark_centroid(
             list(embedding[[2L]]), list(labels[[2L]]), classes
           )[[1L]]
@@ -730,10 +817,9 @@ benchmark_rapid_ma <- function(
         })
       )
       value <- measured$value
-      classification <- .rapid_benchmark_metrics(
+      classification <- .rapid_classification_metrics(
         truth[[2L]][target_test], value$prediction[target_test],
-        value$probability[target_test, , drop = FALSE],
-        classes, rare_class
+        value$probability[target_test, , drop = FALSE]
       )
       matching <- if (isFALSE(value$matching_eligible)) {
         c(hits1 = NA_real_, mrr = NA_real_, coverage = NA_real_)
@@ -783,6 +869,7 @@ benchmark_rapid_ma <- function(
   }
   results <- do.call(rbind, rows)
   rownames(results) <- NULL
+  rare_class <- .rapid_benchmark_rare_class(truth[[2L]][target_test])
   structure(
     list(
       results = results,
@@ -790,7 +877,9 @@ benchmark_rapid_ma <- function(
       split = list(
         target_test_rows = which(target_test),
         target_train_rows = which(!target_test),
-        test_labels_read_during_fit = FALSE,
+        fit_label_counts = vapply(
+          labels, function(x) sum(!is.na(x)), integer(1)
+        ),
         correspondence = correspondence,
         rare_class = rare_class,
         seed = as.integer(seed)
@@ -809,10 +898,20 @@ benchmark_rapid_ma <- function(
           "MRR@100 lower bound with ranks beyond 100 contributing zero"
         ),
         lema_reference = "Hong et al. 2019 equation-level dense oracle",
-        no_test_label_tuning = TRUE,
+        class_levels_source = "observed (training) labels",
+        metrics = paste(
+          "macro-F1 and mIoU average over classes present in held-out truth",
+          "or held-out predictions; out-of-truth predictions are false",
+          "positives; rare class = smallest held-out support"
+        ),
+        local_embedding = paste(
+          "leading principal components (at most ncomp) of the standardized",
+          "domain features; no labels"
+        ),
         rapid_teacher_seed = paste(
           "fixed 0.75 domain-local and 0.25 shared-embedding centroid blend;",
-          "two sparse relation-propagation hops with out-of-fold safety gate"
+          "two sparse relation-propagation hops with a leave-one-label-out",
+          "safety gate (each fold recomputes the domain's probabilities)"
         )
       )
     ),

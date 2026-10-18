@@ -62,7 +62,52 @@ test_that("blocked split is strictly disjoint and cannot read test labels", {
   expect_true(all(first$labeled_rows %in% first$fit_rows))
   expect_true(all(table(labels[first$labeled_rows]) <= 3L))
   expect_true(all(table(labels[first$calibration_rows]) <= 2L))
-  expect_false(first$provenance$test_labels_read_during_split)
+  expect_true(first$provenance$fit_excludes_test)
+  expect_true(first$provenance$fit_excludes_calibration)
+})
+
+test_that("a singleton class samples its own row, never a held-out row", {
+  position <- as.matrix(expand.grid(x = seq_len(12), y = seq_len(8)))
+  block <- manifoldalign:::.rapid_spatial_blocks(position, grid = c(4L, 2L))
+  labels <- rep(c("forest", "urban"), length.out = nrow(position))
+  test_block <- max(block)
+  calibration_block <- min(block)
+  fit_candidates <- which(block != test_block & block != calibration_block)
+  # One fit-block row carries a class whose row index is far larger than one.
+  singleton <- max(fit_candidates)
+  labels[singleton] <- "rare"
+  for (seed in 1:20) {
+    split <- manifoldalign:::.rapid_blocked_inductive_split(
+      labels, position,
+      test_block = test_block,
+      calibration_block = calibration_block,
+      grid = c(4L, 2L),
+      labels_per_class = 2L,
+      calibration_per_class = 1L,
+      seed = seed
+    )
+    expect_true(singleton %in% split$labeled_rows)
+    expect_true(all(split$labeled_rows %in% fit_candidates))
+    expect_identical(sum(labels[split$labeled_rows] == "rare"), 1L)
+  }
+  direct <- manifoldalign:::.rapid_validation_sample_by_class(
+    singleton, labels, 4L
+  )
+  expect_identical(direct, as.integer(singleton))
+})
+
+test_that("blocked splits do not disturb the caller's random stream", {
+  position <- as.matrix(expand.grid(x = seq_len(12), y = seq_len(8)))
+  labels <- rep(c("forest", "urban", "water"), length.out = nrow(position))
+  set.seed(2024)
+  expected <- stats::runif(3L)
+  set.seed(2024)
+  manifoldalign:::.rapid_blocked_inductive_split(
+    labels, position, test_block = 8L, calibration_block = 1L,
+    grid = c(4L, 2L), labels_per_class = 2L, calibration_per_class = 1L,
+    max_fit_rows = 30L, seed = 5L
+  )
+  expect_identical(stats::runif(3L), expected)
 })
 
 test_that("blocked split caps unlabeled fit state without dropping labels", {

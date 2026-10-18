@@ -95,19 +95,10 @@
 }
 
 .rapid_resolve_diffusion_control <- function(control = NULL) {
-  defaults <- unclass(.rapid_diffusion_control())
-  if (is.null(control)) return(do.call(.rapid_diffusion_control, defaults))
-  if (inherits(control, "rapid_ma_diffusion_control")) return(control)
-  if (!is.list(control) || is.null(names(control)) || any(!nzchar(names(control)))) {
-    stop("`control` must be NULL, a named list, or rapid_ma_diffusion_control.",
-         call. = FALSE)
-  }
-  unknown <- setdiff(names(control), names(defaults))
-  if (length(unknown)) {
-    stop("Unknown diffusion control field(s): ", paste(unknown, collapse = ", "),
-         ".", call. = FALSE)
-  }
-  do.call(.rapid_diffusion_control, utils::modifyList(defaults, control))
+  .rapid_resolve_settings(
+    control, .rapid_diffusion_control, "rapid_ma_diffusion_control", "diffusion",
+    "`control` must be NULL, a named list, or rapid_ma_diffusion_control."
+  )
 }
 
 .rapid_validate_embedding <- function(Z, n, name) {
@@ -331,7 +322,16 @@
   for (name in names(relations)) {
     A <- .rapid_force_dgC(relations[[name]])
     if (Matrix::nnzero(A) == 0L || weights[[name]] <= 0) next
-    is_symmetric <- isTRUE(isSymmetric(A, tol = 1e-12))
+    # Directedness is a property of the relation, decided before
+    # normalization (as recorded in the relation metadata). A random-walk
+    # normalized undirected graph is an asymmetric operator but needs no
+    # reverse channel.
+    directed <- .rapid_metadata_value(metadata[[name]], "directed", NULL)
+    is_symmetric <- if (is.null(directed)) {
+      isTRUE(isSymmetric(A, tol = 1e-12))
+    } else {
+      !isTRUE(directed)
+    }
     add_reverse <- identical(control$direction_mode, "bidirectional") && !is_symmetric
     if (add_reverse) {
       cap <- control$reverse_degree_cap
