@@ -19,7 +19,7 @@ using namespace arma;
 //' @param nn_dists Numeric matrix (n x k) of Euclidean distances aligned with
 //'   `nn_idx`.
 //' @param n_cols Number of template nodes (m).
-//' @param lambda_anat Weight for anatomical distance-squared term.
+//' @param lambda_coord Weight for the squared coordinate distance term.
 //' @param F Optional source features (n x D).
 //' @param G Optional template features (m x D).
 //' @param lambda_feat Weight for feature distance-squared term.
@@ -44,7 +44,7 @@ using namespace arma;
 Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx,
                                         const Rcpp::NumericMatrix& nn_dists,
                                         int n_cols,
-                                        double lambda_anat = 1.0,
+                                        double lambda_coord = 1.0,
                                         Rcpp::Nullable<arma::mat> F = R_NilValue,
                                         Rcpp::Nullable<arma::mat> G = R_NilValue,
                                         double lambda_feat = 0.0,
@@ -63,7 +63,7 @@ Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx,
     stop("nn_dists must have the same dimensions as nn_idx");
   }
   if (n_cols <= 0) stop("n_cols must be positive");
-  if (!std::isfinite(lambda_anat) || lambda_anat < 0.0) stop("lambda_anat must be >= 0");
+  if (!std::isfinite(lambda_coord) || lambda_coord < 0.0) stop("lambda_coord must be >= 0");
   if (!std::isfinite(lambda_feat) || lambda_feat < 0.0) stop("lambda_feat must be >= 0");
   if (!std::isfinite(lambda_prior) || lambda_prior < 0.0) stop("lambda_prior must be >= 0");
   if (!(std::isfinite(max_dist) || std::isinf(max_dist)) || max_dist <= 0.0) {
@@ -191,8 +191,8 @@ Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx,
 
   auto compute_cost = [&](int i0, int j0, double d) -> double {
     double c = 0.0;
-    if (lambda_anat > 0.0) {
-      c += lambda_anat * d * d;
+    if (lambda_coord > 0.0) {
+      c += lambda_coord * d * d;
     }
     if (have_feat) {
       double s = 0.0;

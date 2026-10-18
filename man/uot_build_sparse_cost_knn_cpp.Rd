@@ -8,7 +8,7 @@ uot_build_sparse_cost_knn_cpp(
   nn_idx,
   nn_dists,
   n_cols,
-  lambda_anat = 1,
+  lambda_coord = 1,
   F = NULL,
   G = NULL,
   lambda_feat = 0,
@@ -31,7 +31,7 @@ template support.}
 
 \item{n_cols}{Number of template nodes (m).}
 
-\item{lambda_anat}{Weight for anatomical distance-squared term.}
+\item{lambda_coord}{Weight for the squared coordinate distance term.}
 
 \item{F}{Optional source features (n x D).}
 

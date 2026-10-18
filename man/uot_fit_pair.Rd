@@ -11,7 +11,7 @@ uot_fit_pair(
   beta,
   F = NULL,
   G = NULL,
-  lambda_anat = 1,
+  lambda_coord = 1,
   lambda_feat = 0,
   prior_map = NULL,
   lambda_prior = 0,
@@ -29,13 +29,14 @@ uot_fit_pair(
   rho1,
   rho2,
   max_iter = 2000,
-  tol = 1e-06
+  tol = 1e-06,
+  lambda_anat = NULL
 )
 }
 \arguments{
-\item{X}{Source coordinates (n x 3) or any numeric matrix.}
+\item{X}{Source coordinates (n x q), with any number of columns q.}
 
-\item{Y}{Template coordinates (m x 3) or any numeric matrix.}
+\item{Y}{Template coordinates (m x q), with the same columns as `X`.}
 
 \item{alpha}{Source masses (length n, nonnegative, not all zero).}
 
@@ -45,7 +46,8 @@ uot_fit_pair(
 
 \item{G}{Optional template features (m x D).}
 
-\item{lambda_anat}{Weight for anatomical squared distance.}
+\item{lambda_coord}{Weight for the squared distance between coordinates
+(`X` versus `Y`).}
 
 \item{lambda_feat}{Weight for feature squared distance.}
 
@@ -91,6 +93,8 @@ template column has at least one incoming edge (kNN/hybrid modes only).}
 \item{max_iter}{Maximum number of TI-Sinkhorn iterations.}
 
 \item{tol}{TI-Sinkhorn tolerance.}
+
+\item{lambda_anat}{Deprecated alias of `lambda_coord`; supplying it warns.}
 }
 \value{
 An object of class `uot_pair_fit` with fields `cost`, `sol`, `alpha`,

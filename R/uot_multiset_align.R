@@ -162,22 +162,35 @@ uot_ti_sinkhorn_kl <- function(cost,
   )
 }
 
+# `lambda_anat` was the original, domain-specific name of `lambda_coord`.
+.uot_resolve_lambda_coord <- function(lambda_coord, lambda_anat, coord_missing) {
+  if (is.null(lambda_anat)) return(lambda_coord)
+  if (!coord_missing) {
+    stop("Supply `lambda_coord` only; `lambda_anat` is a deprecated alias.",
+         call. = FALSE)
+  }
+  warning("`lambda_anat` is deprecated; use `lambda_coord`.", call. = FALSE)
+  lambda_anat
+}
+
 #' Build dense or sparse costs for multi-set UOT alignment
 #'
 #' @description
 #' Cost builder for the multi-set alignment loop. Supports dense costs for
-#' small parcellations and sparse neighborhood costs (kNN, radius, or hybrid)
-#' for large voxel/vertex problems.
+#' small problems and sparse neighborhood costs (kNN, radius, or hybrid) for
+#' large point sets.
 #'
-#' @param X Source coordinates (n x 3) or any numeric matrix.
-#' @param Y Template coordinates (m x 3) or any numeric matrix.
+#' @param X Source coordinates (n x q), with any number of columns q.
+#' @param Y Template coordinates (m x q), with the same columns as `X`.
 #' @param F Optional source features (n x D).
 #' @param G Optional template features (m x D).
-#' @param lambda_anat Weight for anatomical squared distance.
+#' @param lambda_coord Weight for the squared distance between coordinates
+#'   (`X` versus `Y`).
+#' @param lambda_anat Deprecated alias of `lambda_coord`; supplying it warns.
 #' @param lambda_feat Weight for feature squared distance.
 #' @param prior_map Optional integer vector (length n) giving a preferred target
 #'   index (1..m) for each source node. When provided with `lambda_prior > 0`,
-#'   adds a soft identity/anatomical bias term based on squared distances in
+#'   adds a soft identity bias term based on squared distances in
 #'   template space between `Y[j,]` and `Y[prior_map[i],]`.
 #' @param lambda_prior Nonnegative weight for the soft prior term.
 #' @param prior_sigma Optional positive scale (in the units of `Y`). When set,
@@ -218,7 +231,7 @@ uot_ti_sinkhorn_kl <- function(cost,
 uot_build_cost <- function(X, Y,
                            F = NULL,
                            G = NULL,
-                           lambda_anat = 1,
+                           lambda_coord = 1,
                            lambda_feat = 0,
                            prior_map = NULL,
                            lambda_prior = 0,
@@ -231,8 +244,11 @@ uot_build_cost <- function(X, Y,
                            group_X = NULL,
                            group_Y = NULL,
                            dense_max_bytes = 256e6,
-                           ensure_cols = NULL) {
+                           ensure_cols = NULL,
+                           lambda_anat = NULL) {
 
+  lambda_coord <- .uot_resolve_lambda_coord(lambda_coord, lambda_anat,
+                                            missing(lambda_coord))
   X <- as.matrix(X)
   Y <- as.matrix(Y)
   chk::chk_true(nrow(X) > 0)
@@ -240,8 +256,8 @@ uot_build_cost <- function(X, Y,
   if (!all(is.finite(X)) || !all(is.finite(Y))) {
     stop("X and Y must contain only finite values", call. = FALSE)
   }
-  chk::chk_number(lambda_anat)
-  chk::chk_true(lambda_anat >= 0)
+  chk::chk_number(lambda_coord)
+  chk::chk_true(lambda_coord >= 0)
   chk::chk_number(lambda_feat)
   chk::chk_true(lambda_feat >= 0)
   chk::chk_number(lambda_prior)
@@ -295,8 +311,8 @@ uot_build_cost <- function(X, Y,
       warning("ensure_cols ignored for dense costs", call. = FALSE)
     }
     C <- matrix(0, nrow(X), nrow(Y))
-    if (lambda_anat > 0) {
-      C <- C + lambda_anat * compute_squared_distances_cpp_fallback(X, Y)
+    if (lambda_coord > 0) {
+      C <- C + lambda_coord * compute_squared_distances_cpp_fallback(X, Y)
     }
     if (lambda_feat > 0 && !is.null(F) && !is.null(G)) {
       F <- as.matrix(F)
@@ -446,7 +462,7 @@ uot_build_cost <- function(X, Y,
         nn_idx = idx,
         nn_dists = d,
         n_cols = nrow(Yd),
-        lambda_anat = lambda_anat,
+        lambda_coord = lambda_coord,
         F = if (!is.null(F)) as.matrix(F) else NULL,
         G = if (!is.null(G)) as.matrix(G) else NULL,
         lambda_feat = lambda_feat,
@@ -514,7 +530,7 @@ uot_build_cost <- function(X, Y,
       nn_idx = idx_all,
       nn_dists = d_all,
       n_cols = nrow(Yd),
-      lambda_anat = lambda_anat,
+      lambda_coord = lambda_coord,
       F = if (!is.null(F)) as.matrix(F) else NULL,
       G = if (!is.null(G)) as.matrix(G) else NULL,
       lambda_feat = lambda_feat,
@@ -758,13 +774,15 @@ uot_extract_coupling <- function(cost,
 #' This is the recommended entry point for **pairwise** workflows; it bundles the
 #' pieces you need for mapping and coupling extraction into a single object.
 #'
-#' @param X Source coordinates (n x 3) or any numeric matrix.
-#' @param Y Template coordinates (m x 3) or any numeric matrix.
+#' @param X Source coordinates (n x q), with any number of columns q.
+#' @param Y Template coordinates (m x q), with the same columns as `X`.
 #' @param alpha Source masses (length n, nonnegative, not all zero).
 #' @param beta Target masses (length m, nonnegative, not all zero).
 #' @param F Optional source features (n x D).
 #' @param G Optional template features (m x D).
-#' @param lambda_anat Weight for anatomical squared distance.
+#' @param lambda_coord Weight for the squared distance between coordinates
+#'   (`X` versus `Y`).
+#' @param lambda_anat Deprecated alias of `lambda_coord`; supplying it warns.
 #' @param lambda_feat Weight for feature squared distance.
 #' @param prior_map Optional integer vector (length n) giving a preferred target
 #'   index (1..m) for each source node. Passed to [uot_build_cost()].
@@ -802,7 +820,7 @@ uot_fit_pair <- function(X, Y,
                          beta,
                          F = NULL,
                          G = NULL,
-                         lambda_anat = 1,
+                         lambda_coord = 1,
                          lambda_feat = 0,
                          prior_map = NULL,
                          lambda_prior = 0,
@@ -820,8 +838,11 @@ uot_fit_pair <- function(X, Y,
                          rho1,
                          rho2,
                          max_iter = 2000,
-                         tol = 1e-6) {
+                         tol = 1e-6,
+                         lambda_anat = NULL) {
 
+  lambda_coord <- .uot_resolve_lambda_coord(lambda_coord, lambda_anat,
+                                            missing(lambda_coord))
   neighbor_mode <- match.arg(neighbor_mode)
   alpha <- as.numeric(alpha)
   beta <- as.numeric(beta)
@@ -829,7 +850,7 @@ uot_fit_pair <- function(X, Y,
   cost <- uot_build_cost(
     X = X, Y = Y,
     F = F, G = G,
-    lambda_anat = lambda_anat,
+    lambda_coord = lambda_coord,
     lambda_feat = lambda_feat,
     prior_map = prior_map,
     lambda_prior = lambda_prior,
@@ -996,10 +1017,10 @@ uot_operator <- function(fit,
   out$coupling
 }
 
-#' Map multiple subjects into template space from a multi-set fit
+#' Map multiple datasets into template space from a multi-set fit
 #'
 #' @description
-#' Convenience helper for [multiset_uot_align()]. It applies each subject's
+#' Convenience helper for [multiset_uot_align()]. It applies each dataset's
 #' fitted UOT map to the corresponding signal, using the **final** template
 #' weights and the pairwise potentials stored in `fit$fits`.
 #'
@@ -1050,24 +1071,27 @@ multiset_uot_map <- function(fit,
   })
 }
 
-#' Multi-subject UOT alignment to a shared template
+#' Multi-dataset UOT alignment to a shared template
 #'
 #' @description
-#' Iteratively aligns multiple subject measures to a fixed-support template by
-#' solving subject-to-template UOT problems and updating template weights (and
+#' Iteratively aligns multiple dataset measures to a fixed-support template by
+#' solving dataset-to-template UOT problems and updating template weights (and
 #' optionally template features) from transported marginals.
 #'
 #' @param datasets A list of datasets. Each element must be a list with fields
-#'   `X` (n x 3 coordinates), `alpha` (length n masses), and optional `F`
+#'   `X` (n x q coordinates, with q shared by all datasets and the template),
+#'   `alpha` (length n masses), and optional `F`
 #'   (n x D features).
-#' @param template A list with fields `Y` (m x 3 coordinates), `beta` (length m
+#' @param template A list with fields `Y` (m x q coordinates), `beta` (length m
 #'   masses), and optional `G` (m x D features).
 #' @param omega Optional nonnegative weights over datasets (length K). If NULL,
 #'   uses uniform weights.
 #' @param epsilon Entropic regularization parameter (> 0).
 #' @param rho1 KL penalty on the first marginal (> 0).
 #' @param rho2 KL penalty on the second marginal (> 0).
-#' @param lambda_anat Weight for anatomical squared distance.
+#' @param lambda_coord Weight for the squared distance between coordinates
+#'   (`X` versus `Y`).
+#' @param lambda_anat Deprecated alias of `lambda_coord`; supplying it warns.
 #' @param lambda_feat Weight for feature squared distance.
 #' @param neighbor_mode Neighborhood mode passed to [uot_build_cost()].
 #' @param k_neighbors Integer k for kNN neighborhoods (used by `"knn"` and
@@ -1080,7 +1104,7 @@ multiset_uot_map <- function(fit,
 #' @param constraint_fields Optional character vector of field names present on
 #'   each dataset and the template that define **hard transport constraints**.
 #'   Edges are only allowed when all fields match (implemented via grouped
-#'   neighbor search). Typical examples: `c("hemi")` or `c("hemi","network")`.
+#'   neighbor search). For example `c("group")` or `c("group", "subgroup")`.
 #' @param prior_fields Optional character vector of field names present on each
 #'   dataset and the template that define a **soft identity prior**. When
 #'   provided together with `lambda_prior > 0`, each dataset builds a
@@ -1094,20 +1118,20 @@ multiset_uot_map <- function(fit,
 #' @param ensure_cols Logical; if TRUE, adds reverse 1NN edges to ensure every
 #'   template column has at least one incoming edge (kNN/hybrid modes only).
 #' @param max_outer Maximum number of template update iterations.
-#' @param max_inner Maximum number of TI-Sinkhorn iterations per subject.
+#' @param max_inner Maximum number of TI-Sinkhorn iterations per dataset.
 #' @param tol_inner TI-Sinkhorn tolerance.
 #' @param tol_outer Template weight tolerance.
-#' @param rescale_pi2 How to scale each subject's transported mass before
+#' @param rescale_pi2 How to scale each dataset's transported mass before
 #'   aggregating (`"alpha"` or `"unit"`).
 #' @param target_mass Target total mass for template weights. If `"mean_alpha"`,
-#'   uses mean subject mass; if `"none"`, no rescaling; if numeric, uses that.
+#'   uses mean dataset mass; if `"none"`, no rescaling; if numeric, uses that.
 #' @param learn_template_features Logical; update template features `G`.
 #' @param delta Small stabilizer for feature update denominators.
 #' @param parallel Logical; if TRUE, uses `parallel::mclapply` on Unix.
-#' @param ncores Number of cores for parallel subject solves.
+#' @param ncores Number of cores for parallel dataset solves.
 #' @param verbose Logical; print outer-loop progress.
 #'
-#' @return A list with updated `template` and per-subject `fits`.
+#' @return A list with updated `template` and per-dataset `fits`.
 #'
 #' @examples
 #' \donttest{
@@ -1123,7 +1147,7 @@ multiset_uot_map <- function(fit,
 #'                  G = matrix(0, 12, 4))
 #' fit <- multiset_uot_align(datasets, template,
 #'   epsilon = 0.5, rho1 = 1, rho2 = 1,
-#'   lambda_anat = 1, lambda_feat = 0.1,
+#'   lambda_coord = 1, lambda_feat = 0.1,
 #'   k_neighbors = 6, max_outer = 3, max_inner = 200
 #' )
 #' str(fit$template$beta)
@@ -1136,7 +1160,7 @@ multiset_uot_align <- function(datasets,
                                epsilon,
                                rho1,
                                rho2,
-                               lambda_anat = 1,
+                               lambda_coord = 1,
                                lambda_feat = 0,
                                neighbor_mode = c("auto", "dense", "knn", "radius", "hybrid"),
                                k_neighbors = NULL,
@@ -1159,7 +1183,10 @@ multiset_uot_align <- function(datasets,
                                delta = 1e-8,
                                parallel = FALSE,
                                ncores = 1,
-                               verbose = FALSE) {
+                               verbose = FALSE,
+                               lambda_anat = NULL) {
+  lambda_coord <- .uot_resolve_lambda_coord(lambda_coord, lambda_anat,
+                                            missing(lambda_coord))
 
   rescale_pi2 <- match.arg(rescale_pi2)
   neighbor_mode <- match.arg(neighbor_mode)
@@ -1303,7 +1330,7 @@ multiset_uot_align <- function(datasets,
     prior_key_Y <- do.call(interaction, c(prior_terms, list(drop = TRUE, lex.order = TRUE)))
   }
 
-  subject_solve_one <- function(d, beta, G) {
+  dataset_solve_one <- function(d, beta, G) {
     X <- as.matrix(d$X)
     alpha <- as.numeric(d$alpha)
     if (sum(alpha) <= 0) stop("dataset alpha must have positive mass", call. = FALSE)
@@ -1350,7 +1377,7 @@ multiset_uot_align <- function(datasets,
     cost <- uot_build_cost(
       X = X, Y = template$Y,
       F = F, G = G,
-      lambda_anat = lambda_anat,
+      lambda_coord = lambda_coord,
       lambda_feat = lambda_feat,
       prior_map = prior_map_k,
       lambda_prior = lambda_prior,
@@ -1416,13 +1443,13 @@ multiset_uot_align <- function(datasets,
     results <- if (do_parallel) {
       parallel::mclapply(
         datasets,
-        subject_solve_one,
+        dataset_solve_one,
         beta = beta,
         G = G,
         mc.cores = as.integer(ncores)
       )
     } else {
-      lapply(datasets, subject_solve_one, beta = beta, G = G)
+      lapply(datasets, dataset_solve_one, beta = beta, G = G)
     }
 
     pi2_list <- lapply(results, `[[`, "pi2")
@@ -1463,7 +1490,7 @@ multiset_uot_align <- function(datasets,
       epsilon = epsilon,
       rho1 = rho1,
       rho2 = rho2,
-      lambda_anat = lambda_anat,
+      lambda_coord = lambda_coord,
       lambda_feat = lambda_feat,
       neighbor_mode = neighbor_mode,
       k_neighbors = k_neighbors,

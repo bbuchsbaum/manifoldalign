@@ -2,7 +2,7 @@
 % Please edit documentation in R/uot_multiset_align.R
 \name{multiset_uot_align}
 \alias{multiset_uot_align}
-\title{Multi-subject UOT alignment to a shared template}
+\title{Multi-dataset UOT alignment to a shared template}
 \usage{
 multiset_uot_align(
   datasets,
@@ -11,7 +11,7 @@ multiset_uot_align(
   epsilon,
   rho1,
   rho2,
-  lambda_anat = 1,
+  lambda_coord = 1,
   lambda_feat = 0,
   neighbor_mode = c("auto", "dense", "knn", "radius", "hybrid"),
   k_neighbors = NULL,
@@ -34,15 +34,17 @@ multiset_uot_align(
   delta = 1e-08,
   parallel = FALSE,
   ncores = 1,
-  verbose = FALSE
+  verbose = FALSE,
+  lambda_anat = NULL
 )
 }
 \arguments{
 \item{datasets}{A list of datasets. Each element must be a list with fields
-`X` (n x 3 coordinates), `alpha` (length n masses), and optional `F`
+`X` (n x q coordinates, with q shared by all datasets and the template),
+`alpha` (length n masses), and optional `F`
 (n x D features).}
 
-\item{template}{A list with fields `Y` (m x 3 coordinates), `beta` (length m
+\item{template}{A list with fields `Y` (m x q coordinates), `beta` (length m
 masses), and optional `G` (m x D features).}
 
 \item{omega}{Optional nonnegative weights over datasets (length K). If NULL,
@@ -54,7 +56,8 @@ uses uniform weights.}
 
 \item{rho2}{KL penalty on the second marginal (> 0).}
 
-\item{lambda_anat}{Weight for anatomical squared distance.}
+\item{lambda_coord}{Weight for the squared distance between coordinates
+(`X` versus `Y`).}
 
 \item{lambda_feat}{Weight for feature squared distance.}
 
@@ -74,7 +77,7 @@ row in `"hybrid"` mode before falling back to kNN.}
 \item{constraint_fields}{Optional character vector of field names present on
 each dataset and the template that define **hard transport constraints**.
 Edges are only allowed when all fields match (implemented via grouped
-neighbor search). Typical examples: `c("hemi")` or `c("hemi","network")`.}
+neighbor search). For example `c("group")` or `c("group", "subgroup")`.}
 
 \item{prior_fields}{Optional character vector of field names present on each
 dataset and the template that define a **soft identity prior**. When
@@ -95,17 +98,17 @@ template column has at least one incoming edge (kNN/hybrid modes only).}
 
 \item{max_outer}{Maximum number of template update iterations.}
 
-\item{max_inner}{Maximum number of TI-Sinkhorn iterations per subject.}
+\item{max_inner}{Maximum number of TI-Sinkhorn iterations per dataset.}
 
 \item{tol_inner}{TI-Sinkhorn tolerance.}
 
 \item{tol_outer}{Template weight tolerance.}
 
-\item{rescale_pi2}{How to scale each subject's transported mass before
+\item{rescale_pi2}{How to scale each dataset's transported mass before
 aggregating (`"alpha"` or `"unit"`).}
 
 \item{target_mass}{Target total mass for template weights. If `"mean_alpha"`,
-uses mean subject mass; if `"none"`, no rescaling; if numeric, uses that.}
+uses mean dataset mass; if `"none"`, no rescaling; if numeric, uses that.}
 
 \item{learn_template_features}{Logical; update template features `G`.}
 
@@ -113,16 +116,18 @@ uses mean subject mass; if `"none"`, no rescaling; if numeric, uses that.}
 
 \item{parallel}{Logical; if TRUE, uses `parallel::mclapply` on Unix.}
 
-\item{ncores}{Number of cores for parallel subject solves.}
+\item{ncores}{Number of cores for parallel dataset solves.}
 
 \item{verbose}{Logical; print outer-loop progress.}
+
+\item{lambda_anat}{Deprecated alias of `lambda_coord`; supplying it warns.}
 }
 \value{
-A list with updated `template` and per-subject `fits`.
+A list with updated `template` and per-dataset `fits`.
 }
 \description{
-Iteratively aligns multiple subject measures to a fixed-support template by
-solving subject-to-template UOT problems and updating template weights (and
+Iteratively aligns multiple dataset measures to a fixed-support template by
+solving dataset-to-template UOT problems and updating template weights (and
 optionally template features) from transported marginals.
 }
 \examples{
@@ -139,7 +144,7 @@ template <- list(Y = matrix(rnorm(36), 12, 3),
                  G = matrix(0, 12, 4))
 fit <- multiset_uot_align(datasets, template,
   epsilon = 0.5, rho1 = 1, rho2 = 1,
-  lambda_anat = 1, lambda_feat = 0.1,
+  lambda_coord = 1, lambda_feat = 0.1,
   k_neighbors = 6, max_outer = 3, max_inner = 200
 )
 str(fit$template$beta)

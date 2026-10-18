@@ -194,11 +194,34 @@ global_geo_align <- function(data, ...) {
 #' @method global_geo_align hyperdesign
 #' @param y Optional unquoted column name in design tables for label-based correspondences
 #' @param correspondences Optional data.frame with columns domain_i/index_i/domain_j/index_j
-#' @param feature_correspondence Optional list specifying spatial anchor basis
-#'   settings. Its `smoothness` entry builds an undirected-union kNN graph of
-#'   the anchors. Anchors with no neighbor within `3 * sigma` receive zero
-#'   smoothness penalty; the fitted object reports this policy and the number
-#'   of such isolates.
+#' @param feature_correspondence Optional list that links the columns of
+#'   different domains through coordinates in a shared space. Each domain's
+#'   columns are re-expressed on a common set of anchor points placed in that
+#'   space, so domains with different column sets can share loadings. Fields:
+#'   \describe{
+#'     \item{`coords`}{Required. A list with one numeric matrix per domain
+#'       (named by domain or in domain order). Row `j` gives the coordinates
+#'       of column `j`; every domain must use the same number of coordinate
+#'       dimensions (any number, at least one).}
+#'     \item{`transform`}{`"identity"` (default) or `"pca_normalized"`, which
+#'       centres, rotates to principal axes and rescales each domain's
+#'       coordinates before anchoring.}
+#'     \item{`reference_dataset`}{Optional domain name or index whose
+#'       coordinates place the anchors; by default all domains are pooled.}
+#'     \item{`num_anchors`, `anchor_method`, `seed`}{Number of anchors,
+#'       `"kmeans"` (default) or `"grid"` (a regular grid over the coordinate
+#'       bounding box, in any dimension), and the anchor seed.}
+#'     \item{`nn_anchors`, `sigma`}{Number of nearest anchors per column and
+#'       the Gaussian bandwidth of the column-to-anchor weights.}
+#'     \item{`store_B`, `enabled`}{Keep the column-to-anchor matrices; switch
+#'       the basis off.}
+#'     \item{`smoothness`}{Optional list building an undirected-union kNN
+#'       graph of the anchors. Anchors with no neighbor within `3 * sigma`
+#'       receive zero smoothness penalty; the fitted object reports this policy
+#'       and the number of such isolates.}
+#'   }
+#'   `voxel_coords` is accepted as a deprecated alias of `coords` with a
+#'   warning.
 #' @param preproc Preprocessing function or list. Default: multivarious::center()
 #' @param ncomp Number of components to extract. Default: 20
 #' @param control Control settings from global_geo_align_control()
@@ -429,14 +452,14 @@ global_geo_align.hyperdesign <- function(
     A_anchor_list <- lapply(anchor_blocks, function(idx) {
       map_fit$loadings[idx, , drop = FALSE]
     })
-    A_voxel_list <- lapply(seq_along(A_anchor_list), function(i) {
+    A_column_list <- lapply(seq_along(A_anchor_list), function(i) {
       as.matrix(sab_info$B_list[[i]] %*% A_anchor_list[[i]])
     })
-    score_list <- lapply(seq_along(A_voxel_list), function(i) {
-      as.matrix(pdata[[i]]$x) %*% A_voxel_list[[i]]
+    score_list <- lapply(seq_along(A_column_list), function(i) {
+      as.matrix(pdata[[i]]$x) %*% A_column_list[[i]]
     })
     map_fit$anchor_loadings <- do.call(rbind, A_anchor_list)
-    map_fit$loadings <- do.call(rbind, A_voxel_list)
+    map_fit$loadings <- do.call(rbind, A_column_list)
     map_fit$scores <- do.call(rbind, score_list)
   }
 
@@ -1126,19 +1149,26 @@ global_geo_align.default <- function(data, ...) {
     return(NULL)
   }
 
-  voxel_coords <- spec$voxel_coords
-  if (is.null(voxel_coords)) {
-    voxel_coords <- spec$coords
+  coords <- spec$coords
+  if (!is.null(spec$voxel_coords)) {
+    if (!is.null(coords)) {
+      stop("Supply `feature_correspondence$coords` only; `voxel_coords` is a ",
+           "deprecated alias.", call. = FALSE)
+    }
+    warning("`feature_correspondence$voxel_coords` is deprecated; use `coords`.",
+            call. = FALSE)
+    coords <- spec$voxel_coords
   }
-  if (is.null(voxel_coords)) {
+  if (is.null(coords)) {
     stop(
-      "`feature_correspondence` requires `voxel_coords` (or `coords`) as a list of p_s x 3 matrices.",
+      "`feature_correspondence` requires `coords`: a list with one ",
+      "column-by-dimension coordinate matrix per domain.",
       call. = FALSE
     )
   }
 
-  coords_list <- .resolve_voxel_coords(
-    voxel_coords = voxel_coords,
+  coords_list <- .resolve_feature_coords(
+    coords = coords,
     pdata = pdata,
     domain_names = domain_names
   )
@@ -1191,7 +1221,7 @@ global_geo_align.default <- function(data, ...) {
 
   B_list <- lapply(coords_tx, function(ci) {
     .build_sab_matrix(
-      voxel_coords = ci,
+      coords = ci,
       anchors = anchors,
       sigma = sigma,
       nn_anchors = nn_anchors
@@ -1223,41 +1253,44 @@ global_geo_align.default <- function(data, ...) {
   )
 }
 
-.resolve_voxel_coords <- function(voxel_coords, pdata, domain_names) {
-  if (!is.list(voxel_coords) || !length(voxel_coords)) {
-    stop("`feature_correspondence$voxel_coords` must be a non-empty list.", call. = FALSE)
+.resolve_feature_coords <- function(coords, pdata, domain_names) {
+  if (!is.list(coords) || !length(coords)) {
+    stop("`feature_correspondence$coords` must be a non-empty list.", call. = FALSE)
   }
 
-  if (!is.null(names(voxel_coords)) && all(names(voxel_coords) != "")) {
-    missing_names <- setdiff(domain_names, names(voxel_coords))
+  if (!is.null(names(coords)) && all(names(coords) != "")) {
+    missing_names <- setdiff(domain_names, names(coords))
     if (length(missing_names)) {
       stop(
-        "Missing voxel coordinate entries for domain(s): ",
+        "Missing coordinate entries for domain(s): ",
         paste(missing_names, collapse = ", "),
         call. = FALSE
       )
     }
-    coords_list <- voxel_coords[domain_names]
+    coords_list <- coords[domain_names]
   } else {
-    if (length(voxel_coords) != length(pdata)) {
+    if (length(coords) != length(pdata)) {
       stop(
-        "`feature_correspondence$voxel_coords` must have one entry per domain.",
+        "`feature_correspondence$coords` must have one entry per domain.",
         call. = FALSE
       )
     }
-    coords_list <- voxel_coords
+    coords_list <- coords
     names(coords_list) <- domain_names
   }
 
   out <- lapply(seq_along(coords_list), function(i) {
-    Ci <- as.matrix(coords_list[[i]])
-    if (!is.numeric(Ci) || ncol(Ci) != 3L) {
-      stop("Voxel coordinates must be numeric matrices with 3 columns.", call. = FALSE)
+    Ci <- coords_list[[i]]
+    if (is.null(dim(Ci))) Ci <- matrix(Ci, ncol = 1L)
+    Ci <- as.matrix(Ci)
+    if (!is.numeric(Ci) || ncol(Ci) < 1L || any(!is.finite(Ci))) {
+      stop("Coordinates must be finite numeric matrices with at least one ",
+           "column.", call. = FALSE)
     }
     p_i <- ncol(pdata[[i]]$x)
     if (nrow(Ci) != p_i) {
       stop(
-        "Voxel coordinate rows must match number of features for domain `",
+        "Coordinate rows must match the number of columns for domain `",
         domain_names[[i]],
         "` (expected ",
         p_i,
@@ -1269,6 +1302,11 @@ global_geo_align.default <- function(data, ...) {
     }
     Ci
   })
+  dims <- vapply(out, ncol, integer(1))
+  if (length(unique(dims)) != 1L) {
+    stop("Coordinates must have the same number of dimensions in every ",
+         "domain (got ", paste(dims, collapse = ", "), ").", call. = FALSE)
+  }
   names(out) <- domain_names
   out
 }
@@ -1334,11 +1372,16 @@ global_geo_align.default <- function(data, ...) {
   if (method == "grid") {
     mins <- apply(coords, 2L, min)
     maxs <- apply(coords, 2L, max)
-    side <- max(2L, ceiling(n_anchors^(1 / 3)))
-    gx <- seq(mins[1], maxs[1], length.out = side)
-    gy <- seq(mins[2], maxs[2], length.out = side)
-    gz <- seq(mins[3], maxs[3], length.out = side)
-    grid <- as.matrix(expand.grid(gx, gy, gz))
+    q <- ncol(coords)
+    side <- max(2L, ceiling(n_anchors^(1 / q)))
+    if (side^q > 1e6) {
+      stop("`anchor_method = \"grid\"` would need ", format(side^q, big.mark = ","),
+           " grid points in ", q, " dimensions; use `anchor_method = \"kmeans\"`.",
+           call. = FALSE)
+    }
+    axes <- lapply(seq_len(q), function(j) seq(mins[j], maxs[j], length.out = side))
+    grid <- as.matrix(expand.grid(axes))
+    dimnames(grid) <- NULL
     if (nrow(grid) > n_anchors) {
       grid <- grid[sample.int(nrow(grid), n_anchors), , drop = FALSE]
     }
@@ -1453,8 +1496,8 @@ global_geo_align.default <- function(data, ...) {
   as(Matrix::drop0(adjacency), "dgCMatrix")
 }
 
-.build_sab_matrix <- function(voxel_coords, anchors, sigma, nn_anchors) {
-  nn <- RANN::nn2(data = anchors, query = voxel_coords, k = nn_anchors)
+.build_sab_matrix <- function(coords, anchors, sigma, nn_anchors) {
+  nn <- RANN::nn2(data = anchors, query = coords, k = nn_anchors)
   idx <- nn$nn.idx
   d <- nn$nn.dists
   w <- exp(-(d^2) / (2 * sigma^2))
@@ -1462,7 +1505,7 @@ global_geo_align.default <- function(data, ...) {
   rs[rs <= .Machine$double.eps] <- 1
   w <- w / rs
 
-  p <- nrow(voxel_coords)
+  p <- nrow(coords)
   K <- nrow(anchors)
   ii <- rep.int(seq_len(p), times = nn_anchors)
   jj <- as.vector(idx)

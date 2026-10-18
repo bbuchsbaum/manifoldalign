@@ -34,7 +34,7 @@ test_that("uot_build_sparse_cost_knn_cpp returns consistent CSR and CSC", {
     nn_idx = nn_idx,
     nn_dists = nn_dists,
     n_cols = m,
-    lambda_anat = 2.0,
+    lambda_coord = 2.0,
     F = F,
     G = G,
     lambda_feat = 0.25,
@@ -122,7 +122,7 @@ test_that("uot_build_sparse_cost_knn_cpp adds a soft prior_map penalty when prov
     nn_idx = nn_idx,
     nn_dists = nn_dists,
     n_cols = m,
-    lambda_anat = 0,
+    lambda_coord = 0,
     lambda_feat = 0,
     max_dist = Inf,
     Y_template = Y,
@@ -160,7 +160,7 @@ test_that("uot_build_cost dense applies prior_map penalty and biases TI-Sinkhorn
   prior_map <- seq_len(n)
   C <- uot_build_cost(
     X = X, Y = Y,
-    lambda_anat = 0,
+    lambda_coord = 0,
     lambda_feat = 0,
     neighbor_mode = "dense",
     prior_map = prior_map,
@@ -203,7 +203,7 @@ test_that("uot_build_cost respects group constraints via grouped neighbor search
 
   cost <- uot_build_cost(
     X = X, Y = Y,
-    lambda_anat = 1,
+    lambda_coord = 1,
     neighbor_mode = "knn",
     k_neighbors = 1L,
     group_X = group_X,
@@ -227,7 +227,7 @@ test_that("uot_build_cost radius mode enforces radius and errors on isolates", {
 
   cost_ok <- uot_build_cost(
     X = X_ok, Y = Y,
-    lambda_anat = 1,
+    lambda_coord = 1,
     neighbor_mode = "radius",
     radius = r,
     maxk = 8L
@@ -246,7 +246,7 @@ test_that("uot_build_cost radius mode enforces radius and errors on isolates", {
   expect_error(
     uot_build_cost(
       X = X_bad, Y = Y,
-      lambda_anat = 1,
+      lambda_coord = 1,
       neighbor_mode = "radius",
       radius = r,
       maxk = 8L
@@ -264,7 +264,7 @@ test_that("uot_build_cost hybrid falls back to kNN when radius too small", {
 
   cost <- uot_build_cost(
     X = X, Y = Y,
-    lambda_anat = 1,
+    lambda_coord = 1,
     neighbor_mode = "hybrid",
     k_neighbors = 2L,
     radius = r,
@@ -483,7 +483,7 @@ test_that("multiset_uot_align wires constraint_fields into sparse neighborhoods"
     epsilon = 0.5,
     rho1 = 1,
     rho2 = 1,
-    lambda_anat = 1,
+    lambda_coord = 1,
     neighbor_mode = "knn",
     k_neighbors = 1L,
     constraint_fields = "hemi",
@@ -577,7 +577,7 @@ test_that("uot_fit_pair + uot_map provide a simple pairwise workflow", {
   fit <- uot_fit_pair(
     X = X, Y = Y,
     alpha = alpha, beta = beta,
-    lambda_anat = 1,
+    lambda_coord = 1,
     neighbor_mode = "dense",
     epsilon = eps, rho1 = rho1, rho2 = rho2,
     max_iter = 500, tol = 1e-10
@@ -613,7 +613,7 @@ test_that("multiset_uot_map maps signals using stored params", {
     datasets = datasets,
     template = template,
     epsilon = eps, rho1 = 1, rho2 = 1,
-    lambda_anat = 1, lambda_feat = 0,
+    lambda_coord = 1, lambda_feat = 0,
     neighbor_mode = "knn",
     k_neighbors = 4L,
     max_outer = 1,
@@ -641,4 +641,24 @@ test_that("multiset_uot_map maps signals using stored params", {
   })
 
   expect_equal(mapped, manual, tolerance = 1e-10)
+})
+
+test_that("lambda_anat is a deprecated alias of lambda_coord", {
+  set.seed(41)
+  X <- matrix(rnorm(20), 10, 2)
+  Y <- matrix(rnorm(16), 8, 2)
+  current <- uot_build_cost(X, Y, lambda_coord = 2, neighbor_mode = "dense")
+  expect_warning(old <- uot_build_cost(X, Y, lambda_anat = 2,
+                                       neighbor_mode = "dense"),
+                 "lambda_anat` is deprecated")
+  expect_equal(old, current)
+  expect_equal(current, 2 * as.matrix(dist(rbind(X, Y)))[1:10, 11:18]^2,
+               tolerance = 1e-10, ignore_attr = TRUE)
+  expect_error(uot_build_cost(X, Y, lambda_coord = 1, lambda_anat = 2),
+               "deprecated alias")
+  expect_warning(
+    uot_fit_pair(X, Y, alpha = rep(1, 10), beta = rep(1, 8), lambda_anat = 1,
+                 neighbor_mode = "dense", epsilon = 0.5, rho1 = 1, rho2 = 1),
+    "lambda_anat` is deprecated"
+  )
 })

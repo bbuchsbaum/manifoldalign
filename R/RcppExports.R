@@ -355,7 +355,7 @@ uot_kl_logpi2_meanF_sparse_cpp <- function(row_ptr, col_idx, cost, n_rows, n_col
 #' @param nn_dists Numeric matrix (n x k) of Euclidean distances aligned with
 #'   `nn_idx`.
 #' @param n_cols Number of template nodes (m).
-#' @param lambda_anat Weight for anatomical distance-squared term.
+#' @param lambda_coord Weight for the squared coordinate distance term.
 #' @param F Optional source features (n x D).
 #' @param G Optional template features (m x D).
 #' @param lambda_feat Weight for feature distance-squared term.
@@ -376,8 +376,8 @@ uot_kl_logpi2_meanF_sparse_cpp <- function(row_ptr, col_idx, cost, n_rows, n_col
 #' @return A list with CSR fields `row_ptr`, `col_idx`, `cost` and CSC fields
 #'   `col_ptr`, `row_idx`, `cost_csc`, plus dimensions.
 #' @export
-uot_build_sparse_cost_knn_cpp <- function(nn_idx, nn_dists, n_cols, lambda_anat = 1.0, F = NULL, G = NULL, lambda_feat = 0.0, max_dist, extra_i = NULL, extra_j = NULL, extra_dists = NULL, Y_template = NULL, prior_map = NULL, lambda_prior = 0.0, prior_sigma = NA_real_) {
-    .Call(`_manifoldalign_uot_build_sparse_cost_knn_cpp`, nn_idx, nn_dists, n_cols, lambda_anat, F, G, lambda_feat, max_dist, extra_i, extra_j, extra_dists, Y_template, prior_map, lambda_prior, prior_sigma)
+uot_build_sparse_cost_knn_cpp <- function(nn_idx, nn_dists, n_cols, lambda_coord = 1.0, F = NULL, G = NULL, lambda_feat = 0.0, max_dist, extra_i = NULL, extra_j = NULL, extra_dists = NULL, Y_template = NULL, prior_map = NULL, lambda_prior = 0.0, prior_sigma = NA_real_) {
+    .Call(`_manifoldalign_uot_build_sparse_cost_knn_cpp`, nn_idx, nn_dists, n_cols, lambda_coord, F, G, lambda_feat, max_dist, extra_i, extra_j, extra_dists, Y_template, prior_map, lambda_prior, prior_sigma)
 }
 
 #' KL translation-invariant Sinkhorn (dense cost)

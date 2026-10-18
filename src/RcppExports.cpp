@@ -437,15 +437,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // uot_build_sparse_cost_knn_cpp
-Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx, const Rcpp::NumericMatrix& nn_dists, int n_cols, double lambda_anat, Rcpp::Nullable<arma::mat> F, Rcpp::Nullable<arma::mat> G, double lambda_feat, double max_dist, Rcpp::Nullable<Rcpp::IntegerVector> extra_i, Rcpp::Nullable<Rcpp::IntegerVector> extra_j, Rcpp::Nullable<Rcpp::NumericVector> extra_dists, Rcpp::Nullable<arma::mat> Y_template, Rcpp::Nullable<Rcpp::IntegerVector> prior_map, double lambda_prior, double prior_sigma);
-RcppExport SEXP _manifoldalign_uot_build_sparse_cost_knn_cpp(SEXP nn_idxSEXP, SEXP nn_distsSEXP, SEXP n_colsSEXP, SEXP lambda_anatSEXP, SEXP FSEXP, SEXP GSEXP, SEXP lambda_featSEXP, SEXP max_distSEXP, SEXP extra_iSEXP, SEXP extra_jSEXP, SEXP extra_distsSEXP, SEXP Y_templateSEXP, SEXP prior_mapSEXP, SEXP lambda_priorSEXP, SEXP prior_sigmaSEXP) {
+Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx, const Rcpp::NumericMatrix& nn_dists, int n_cols, double lambda_coord, Rcpp::Nullable<arma::mat> F, Rcpp::Nullable<arma::mat> G, double lambda_feat, double max_dist, Rcpp::Nullable<Rcpp::IntegerVector> extra_i, Rcpp::Nullable<Rcpp::IntegerVector> extra_j, Rcpp::Nullable<Rcpp::NumericVector> extra_dists, Rcpp::Nullable<arma::mat> Y_template, Rcpp::Nullable<Rcpp::IntegerVector> prior_map, double lambda_prior, double prior_sigma);
+RcppExport SEXP _manifoldalign_uot_build_sparse_cost_knn_cpp(SEXP nn_idxSEXP, SEXP nn_distsSEXP, SEXP n_colsSEXP, SEXP lambda_coordSEXP, SEXP FSEXP, SEXP GSEXP, SEXP lambda_featSEXP, SEXP max_distSEXP, SEXP extra_iSEXP, SEXP extra_jSEXP, SEXP extra_distsSEXP, SEXP Y_templateSEXP, SEXP prior_mapSEXP, SEXP lambda_priorSEXP, SEXP prior_sigmaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Rcpp::IntegerMatrix& >::type nn_idx(nn_idxSEXP);
     Rcpp::traits::input_parameter< const Rcpp::NumericMatrix& >::type nn_dists(nn_distsSEXP);
     Rcpp::traits::input_parameter< int >::type n_cols(n_colsSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda_anat(lambda_anatSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda_coord(lambda_coordSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<arma::mat> >::type F(FSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<arma::mat> >::type G(GSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_feat(lambda_featSEXP);
@@ -457,7 +457,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::IntegerVector> >::type prior_map(prior_mapSEXP);
     Rcpp::traits::input_parameter< double >::type lambda_prior(lambda_priorSEXP);
     Rcpp::traits::input_parameter< double >::type prior_sigma(prior_sigmaSEXP);
-    rcpp_result_gen = Rcpp::wrap(uot_build_sparse_cost_knn_cpp(nn_idx, nn_dists, n_cols, lambda_anat, F, G, lambda_feat, max_dist, extra_i, extra_j, extra_dists, Y_template, prior_map, lambda_prior, prior_sigma));
+    rcpp_result_gen = Rcpp::wrap(uot_build_sparse_cost_knn_cpp(nn_idx, nn_dists, n_cols, lambda_coord, F, G, lambda_feat, max_dist, extra_i, extra_j, extra_dists, Y_template, prior_map, lambda_prior, prior_sigma));
     return rcpp_result_gen;
 END_RCPP
 }

@@ -42,11 +42,34 @@ global_geo_align(data, ...)
 
 \item{correspondences}{Optional data.frame with columns domain_i/index_i/domain_j/index_j}
 
-\item{feature_correspondence}{Optional list specifying spatial anchor basis
-settings. Its `smoothness` entry builds an undirected-union kNN graph of
-the anchors. Anchors with no neighbor within `3 * sigma` receive zero
-smoothness penalty; the fitted object reports this policy and the number
-of such isolates.}
+\item{feature_correspondence}{Optional list that links the columns of
+different domains through coordinates in a shared space. Each domain's
+columns are re-expressed on a common set of anchor points placed in that
+space, so domains with different column sets can share loadings. Fields:
+\describe{
+  \item{`coords`}{Required. A list with one numeric matrix per domain
+    (named by domain or in domain order). Row `j` gives the coordinates
+    of column `j`; every domain must use the same number of coordinate
+    dimensions (any number, at least one).}
+  \item{`transform`}{`"identity"` (default) or `"pca_normalized"`, which
+    centres, rotates to principal axes and rescales each domain's
+    coordinates before anchoring.}
+  \item{`reference_dataset`}{Optional domain name or index whose
+    coordinates place the anchors; by default all domains are pooled.}
+  \item{`num_anchors`, `anchor_method`, `seed`}{Number of anchors,
+    `"kmeans"` (default) or `"grid"` (a regular grid over the coordinate
+    bounding box, in any dimension), and the anchor seed.}
+  \item{`nn_anchors`, `sigma`}{Number of nearest anchors per column and
+    the Gaussian bandwidth of the column-to-anchor weights.}
+  \item{`store_B`, `enabled`}{Keep the column-to-anchor matrices; switch
+    the basis off.}
+  \item{`smoothness`}{Optional list building an undirected-union kNN
+    graph of the anchors. Anchors with no neighbor within `3 * sigma`
+    receive zero smoothness penalty; the fitted object reports this policy
+    and the number of such isolates.}
+}
+`voxel_coords` is accepted as a deprecated alias of `coords` with a
+warning.}
 
 \item{preproc}{Preprocessing function or list. Default: multivarious::center()}
 

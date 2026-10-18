@@ -2,7 +2,7 @@
 % Please edit documentation in R/uot_multiset_align.R
 \name{multiset_uot_map}
 \alias{multiset_uot_map}
-\title{Map multiple subjects into template space from a multi-set fit}
+\title{Map multiple datasets into template space from a multi-set fit}
 \usage{
 multiset_uot_map(fit, datasets, signals, epsilon = NULL, delta = 1e-08)
 }
@@ -24,7 +24,7 @@ or matrix (T x N_k).}
 A list of mapped signals (length K), each in template space.
 }
 \description{
-Convenience helper for [multiset_uot_align()]. It applies each subject's
+Convenience helper for [multiset_uot_align()]. It applies each dataset's
 fitted UOT map to the corresponding signal, using the **final** template
 weights and the pairwise potentials stored in `fit$fits`.
 }

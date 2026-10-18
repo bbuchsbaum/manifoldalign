@@ -119,7 +119,7 @@ test_that("global_geo_align supports spatial anchor feature correspondence", {
     list(d1 = X1, d2 = X2),
     correspondences = corr,
     feature_correspondence = list(
-      voxel_coords = list(d1 = coords1, d2 = coords2),
+      coords = list(d1 = coords1, d2 = coords2),
       num_anchors = 6,
       nn_anchors = 3,
       sigma = 1.5,
@@ -160,7 +160,7 @@ test_that("global_geo_align supports anchor smoothness regularization", {
     list(d1 = X1, d2 = X2),
     correspondences = corr,
     feature_correspondence = list(
-      voxel_coords = list(d1 = coords, d2 = coords),
+      coords = list(d1 = coords, d2 = coords),
       num_anchors = 6,
       nn_anchors = 3,
       sigma = 1.2,
@@ -319,7 +319,7 @@ test_that("anchor adjacency supports both isolate APIs and rejects incompatible 
   )
 })
 
-test_that("global_geo_align validates SAB voxel coordinate dimensions", {
+test_that("global_geo_align validates anchor coordinate rows", {
   set.seed(9)
   X1 <- matrix(rnorm(20 * 5), 20, 5)
   X2 <- matrix(rnorm(20 * 4), 20, 4)
@@ -330,7 +330,7 @@ test_that("global_geo_align validates SAB voxel coordinate dimensions", {
       list(d1 = X1, d2 = X2),
       correspondences = corr,
       feature_correspondence = list(
-        voxel_coords = list(
+        coords = list(
           d1 = matrix(rnorm(4 * 3), 4, 3), # wrong: should be 5 rows
           d2 = matrix(rnorm(4 * 3), 4, 3)
         ),
@@ -345,7 +345,7 @@ test_that("global_geo_align validates SAB voxel coordinate dimensions", {
         verbose = FALSE
       )
     ),
-    "Voxel coordinate rows must match number of features"
+    "Coordinate rows must match the number of columns"
   )
 })
 
@@ -390,7 +390,7 @@ test_that("SAB transfer matrices are row-stochastic and sparse", {
     list(d1 = X1, d2 = X2),
     correspondences = corr,
     feature_correspondence = list(
-      voxel_coords = list(d1 = coords1, d2 = coords2),
+      coords = list(d1 = coords1, d2 = coords2),
       num_anchors = 10,
       nn_anchors = nn_anchors,
       sigma = 0.25,
@@ -439,7 +439,7 @@ test_that("SAB gives identical transfer matrices for identical coordinates", {
     list(d1 = X1, d2 = X2),
     correspondences = corr,
     feature_correspondence = list(
-      voxel_coords = list(d1 = coords, d2 = coords),
+      coords = list(d1 = coords, d2 = coords),
       num_anchors = 7,
       nn_anchors = 3,
       sigma = 1.0,
@@ -471,7 +471,7 @@ test_that("SAB smoothness lowers anchor roughness on synthetic smooth signal", {
   ncomp <- 1
   corr <- data.frame(domain_i = 1L, index_i = 1:n, domain_j = 2L, index_j = 1:n)
 
-  # Smooth latent signal across voxel coordinates in 1D (embedded in 3D).
+  # Smooth latent signal along one coordinate axis (embedded in 3D).
   coords <- cbind(seq(0, 1, length.out = p), rep(0, p), rep(0, p))
   w_true <- exp(-((coords[, 1] - 0.5)^2) / (2 * 0.12^2))
   w_true <- w_true / sqrt(sum(w_true^2))
@@ -480,7 +480,7 @@ test_that("SAB smoothness lowers anchor roughness on synthetic smooth signal", {
   X2 <- z %*% t(w_true) + matrix(rnorm(n * p, sd = 0.20), n, p)
 
   fc_base <- list(
-    voxel_coords = list(d1 = coords, d2 = coords),
+    coords = list(d1 = coords, d2 = coords),
     num_anchors = 10,
     nn_anchors = 3,
     sigma = 0.10,
@@ -552,4 +552,52 @@ test_that("SAB smoothness lowers anchor roughness on synthetic smooth signal", {
   r_no <- roughness(split_anchor(fit_no$feature_correspondence$anchor_loadings))
   r_sm <- roughness(split_anchor(fit_sm$feature_correspondence$anchor_loadings))
   expect_lt(r_sm, r_no)
+})
+
+gga_coord_fit <- function(coords, ..., X = NULL, seed = 5L) {
+  set.seed(seed)
+  n <- 24
+  z <- matrix(rnorm(n * 2), n, 2)
+  X1 <- z %*% matrix(rnorm(2 * 8), 2, 8) + matrix(rnorm(n * 8, sd = 0.05), n, 8)
+  X2 <- z %*% matrix(rnorm(2 * 6), 2, 6) + matrix(rnorm(n * 6, sd = 0.05), n, 6)
+  corr <- data.frame(domain_i = 1L, index_i = 1:n, domain_j = 2L, index_j = 1:n)
+  global_geo_align(
+    list(d1 = X1, d2 = X2),
+    correspondences = corr,
+    feature_correspondence = c(coords, list(num_anchors = 4, nn_anchors = 2,
+                                            sigma = 1, seed = 3), list(...)),
+    preproc = NULL,
+    ncomp = 2,
+    control = global_geo_align_control(knn = 5, n_landmarks_total = 16,
+                                       k_embed = 6, verbose = FALSE, seed = 3)
+  )
+}
+
+test_that("anchor coordinates may have any number of dimensions", {
+  one_d <- list(coords = list(d1 = seq_len(8), d2 = seq_len(6) + 0.5))
+  fit1 <- gga_coord_fit(one_d)
+  expect_identical(ncol(fit1$feature_correspondence$anchors), 1L)
+
+  two_d <- list(coords = list(d1 = cbind(1:8, (1:8) %% 3),
+                              d2 = cbind(1:6, (1:6) %% 2)))
+  fit2 <- gga_coord_fit(two_d, anchor_method = "grid")
+  anchors <- fit2$feature_correspondence$anchors
+  expect_identical(ncol(anchors), 2L)
+  expect_identical(nrow(anchors), 4L)
+
+  mixed <- list(coords = list(d1 = cbind(1:8, 0), d2 = cbind(1:6, 0, 0)))
+  expect_error(gga_coord_fit(mixed), "same number of dimensions")
+
+  wide <- list(coords = list(d1 = matrix(rnorm(8 * 25), 8), d2 = matrix(rnorm(6 * 25), 6)))
+  expect_error(gga_coord_fit(wide, anchor_method = "grid"), "use `anchor_method")
+})
+
+test_that("voxel_coords is a deprecated alias of coords", {
+  coords <- list(d1 = cbind(1:8, 0, 0), d2 = cbind(1:6, 0, 0))
+  current <- gga_coord_fit(list(coords = coords))
+  expect_warning(old <- gga_coord_fit(list(voxel_coords = coords)),
+                 "voxel_coords` is deprecated")
+  expect_equal(old$s, current$s)
+  expect_error(gga_coord_fit(list(coords = coords, voxel_coords = coords)),
+               "deprecated alias")
 })

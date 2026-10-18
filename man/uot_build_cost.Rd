@@ -9,7 +9,7 @@ uot_build_cost(
   Y,
   F = NULL,
   G = NULL,
-  lambda_anat = 1,
+  lambda_coord = 1,
   lambda_feat = 0,
   prior_map = NULL,
   lambda_prior = 0,
@@ -22,25 +22,27 @@ uot_build_cost(
   group_X = NULL,
   group_Y = NULL,
   dense_max_bytes = 2.56e+08,
-  ensure_cols = NULL
+  ensure_cols = NULL,
+  lambda_anat = NULL
 )
 }
 \arguments{
-\item{X}{Source coordinates (n x 3) or any numeric matrix.}
+\item{X}{Source coordinates (n x q), with any number of columns q.}
 
-\item{Y}{Template coordinates (m x 3) or any numeric matrix.}
+\item{Y}{Template coordinates (m x q), with the same columns as `X`.}
 
 \item{F}{Optional source features (n x D).}
 
 \item{G}{Optional template features (m x D).}
 
-\item{lambda_anat}{Weight for anatomical squared distance.}
+\item{lambda_coord}{Weight for the squared distance between coordinates
+(`X` versus `Y`).}
 
 \item{lambda_feat}{Weight for feature squared distance.}
 
 \item{prior_map}{Optional integer vector (length n) giving a preferred target
 index (1..m) for each source node. When provided with `lambda_prior > 0`,
-adds a soft identity/anatomical bias term based on squared distances in
+adds a soft identity bias term based on squared distances in
 template space between `Y[j,]` and `Y[prior_map[i],]`.}
 
 \item{lambda_prior}{Nonnegative weight for the soft prior term.}
@@ -76,6 +78,8 @@ neighborhood.}
 \item{ensure_cols}{Logical; if TRUE (default for sparse kNN/hybrid modes),
 adds a minimal set of reverse 1NN edges to ensure every template column has
 at least one incoming edge in the sparse graph.}
+
+\item{lambda_anat}{Deprecated alias of `lambda_coord`; supplying it warns.}
 }
 \value{
 A dense numeric matrix (n x m) when `neighbor_mode="dense"` (or when
@@ -84,8 +88,8 @@ A dense numeric matrix (n x m) when `neighbor_mode="dense"` (or when
 }
 \description{
 Cost builder for the multi-set alignment loop. Supports dense costs for
-small parcellations and sparse neighborhood costs (kNN, radius, or hybrid)
-for large voxel/vertex problems.
+small problems and sparse neighborhood costs (kNN, radius, or hybrid) for
+large point sets.
 }
 \examples{
 set.seed(1)

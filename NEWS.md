@@ -17,6 +17,16 @@
 * `aligner_capabilities()` now also reports encoder type, prediction and
   calibration support, auxiliary-input needs, and invertibility for aligners
   that declare them; the two-field result is unchanged for other aligners.
+* `global_geo_align()` and the multi-set UOT functions no longer assume
+  neuroimaging data. `feature_correspondence$coords` replaces `voxel_coords`,
+  coordinates may have any number of dimensions (the same in every domain),
+  and `anchor_method = "grid"` builds a grid in that dimension.
+  `uot_build_cost()`, `uot_fit_pair()` and `multiset_uot_align()` take
+  `lambda_coord` in place of `lambda_anat`; documentation now speaks of
+  datasets and coordinates. The old names still work with a deprecation
+  warning, and supplying both an old and a new name is an error. The
+  low-level `uot_build_sparse_cost_knn_cpp()` argument is renamed to
+  `lambda_coord` without an alias.
 * Added `rapid_ma_feature_scores()`, feature-side (dual) coordinates for
   RAPID-MA fits.
 

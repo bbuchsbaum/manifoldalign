@@ -78,7 +78,7 @@ test_that("multiset_uot_align runs and returns finite template updates", {
   fit <- multiset_uot_align(
     datasets, template,
     epsilon = 0.5, rho1 = 1, rho2 = 1,
-    lambda_anat = 1, lambda_feat = 0.1,
+    lambda_coord = 1, lambda_feat = 0.1,
     k_neighbors = 6,
     max_outer = 2,
     max_inner = 200,
