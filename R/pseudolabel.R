@@ -115,7 +115,7 @@ NULL
 #' @param max_cluster_size Maximum number of samples allowed in a cluster 
 #'   (default: Inf)
 #' @param diversity_weight Weight for promoting diversity among cluster 
-#'   representatives [0,1]. Controls the trade-off between diversity and 
+#'   representatives `[0, 1]`. Controls the trade-off between diversity and
 #'   cluster confidence: 0 = select largest/most confident clusters, 
 #'   1 = maximize diversity (minimize pairwise similarities), 
 #'   0.5 = balanced approach (default: 0.3)
@@ -157,7 +157,7 @@ NULL
 #' # Create example sparse similarity matrix
 #' library(Matrix)
 #' n <- 1000
-#' # Generate random sparse matrix with values in [0,1]
+#' # Generate random sparse matrix with values in [0, 1]
 #' sim_matrix <- Matrix::rsparsematrix(n, n, density = 0.05, rand.x = runif)
 #' sim_matrix <- (sim_matrix + Matrix::t(sim_matrix)) / 2  # Make symmetric
 #' Matrix::diag(sim_matrix) <- 1  # Self-similarity = 1
@@ -713,7 +713,7 @@ as.data.frame.pseudolabels <- function(x, ...) {
 #' @param sim_matrix Similarity matrix
 #' @param candidates Vector of candidate representative indices
 #' @param target_size Target number of representatives
-#' @param diversity_weight Weight for diversity vs confidence [0,1]. 
+#' @param diversity_weight Weight for diversity vs confidence `[0, 1]`.
 #'   0 = pure confidence (largest clusters), 1 = pure diversity, 0.5 = balanced
 #' @param cluster_assignments Vector of cluster assignments (for confidence scores)
 #' @param valid_clusters Vector of valid cluster IDs (for confidence scores)
@@ -815,7 +815,7 @@ as.data.frame.pseudolabels <- function(x, ...) {
 #' @param sim_matrix Similarity matrix
 #' @param candidates Vector of candidate representative indices
 #' @param target_size Target number of representatives
-#' @param diversity_weight Weight for diversity vs confidence [0,1]
+#' @param diversity_weight Weight for diversity vs confidence `[0, 1]`
 #' @param cluster_assignments Vector of cluster assignments (for confidence scores)
 #' @param valid_clusters Vector of valid cluster IDs (for confidence scores)
 #' @param use_advanced Whether to use advanced FFS algorithm (default: TRUE)

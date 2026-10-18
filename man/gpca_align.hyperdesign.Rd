@@ -22,7 +22,10 @@
 
 \item{y}{Name of the label variable to use for alignment}
 
-\item{preproc}{Preprocessing function to apply to the data (default `center()`)}
+\item{preproc}{Preprocessing to apply to each domain (default \code{center()}): a
+single preprocessor broadcast to all domains, a list with one entry per
+domain, or \code{NULL} for none. \code{NULL} entries leave that domain unchanged and
+are recorded as an identity transform.}
 
 \item{ncomp}{Number of components to extract (default 2)}
 
@@ -34,7 +37,7 @@
 
 \item{row_metric_scale}{Scaling applied to the assembled row metric before GPCA}
 
-\item{control}{A list created by [gpca_align_control()] that tunes sparsification,
+\item{control}{A list created by \code{\link[=gpca_align_control]{gpca_align_control()}} that tunes sparsification,
 balancing, normalisation, and memory safeguards}
 
 \item{...}{Additional arguments passed to the method (unused).}

@@ -7,11 +7,12 @@
 align_many(
   domains,
   algo,
-  graph = c("auto", "mst", "complete", "star"),
+  graph = c("auto", "mst", "complete", "star", "knn"),
   consensus = c("auto", "sync", "star", "tree"),
   k = NULL,
   parallel = TRUE,
   sync = NULL,
+  links = NULL,
   ...
 )
 }
@@ -20,31 +21,68 @@ align_many(
 
 \item{algo}{an aligner object created by new_aligner() with adapter methods}
 
-\item{graph}{"auto" | "mst" | "complete" | "star"}
+\item{graph}{"auto" | "mst" | "complete" | "star" | "knn". \code{"auto"} picks
+\code{"complete"} for up to 5 domains, \code{"knn"} for up to 8 and \code{"mst"} beyond.}
 
-\item{consensus}{"auto" | "sync" | "star" | "tree" (currently: "sync"/"star")}
+\item{consensus}{"auto" or "sync" (pairwise synchronisation). \code{"star"} and
+\code{"tree"} are not implemented and are rejected; for permutation aligners a
+hub consensus is selected with \code{sync = list(perm = list(mode = "star"))}.}
 
-\item{k}{target latent dimension (optional)}
+\item{k}{target latent dimension (optional). Native multi-domain aligners
+receive it as their number of components (\code{ncomp}).}
 
 \item{parallel}{logical; reserved for future parallel pair fits}
 
-\item{sync}{list of synchronization options (graph, refine, gl, perm settings)}
+\item{sync}{list of synchronization options (graph, refine, gl, perm settings).
+\code{sync$gl} accepts \code{ridge}, \code{gauge}, \code{project} (\code{"none"} solves the
+least-squares synchronisation exactly; \code{"orthogonal"} adds \code{iters}
+projected sweeps). \code{sync$refine = list(gpa = TRUE)} adds one local O(k)
+refinement sweep.
+\code{sync$perm} accepts \code{mode} (\code{"star"}, \code{"global"}, \code{"spectral"}; default
+\code{"spectral"} for more than four domains, else \code{"star"}), \code{hub} (the domain
+whose rows form the consensus; default the largest domain, the first on
+ties), \code{k} (number of spectral eigenvectors), \code{rounding} (\code{"sinkhorn"} or
+\code{"hungarian"}), \code{maxit_sinkhorn}, \code{tol} and \code{max_iter}. Permutation
+consensus transforms are \verb{n_hub x n_i}; for hard (partial) permutations
+every row of domain \code{i} maps to one consensus row and consensus rows
+absent from domain \code{i} stay zero.}
+
+\item{links}{Optional correspondences for the pairwise fits. Either a list
+named by edge keys \code{"i:j"} (each element is passed as \code{links} to
+\code{\link[=fit_pair]{fit_pair()}} for the edge from domain \code{i} to domain \code{j}), or, for exactly
+two domains, a single links object. Keys that do not name an edge of the
+dataset graph are rejected. For native multi-domain aligners \code{links} is
+forwarded to \code{\link[=fit_many]{fit_many()}}.}
 
 \item{...}{forwarded to adapter methods}
 }
 \value{
-list with transforms, embeddings (if apply_transform succeeds),
-  dataset graph, pairwise fits, and diagnostics
+list with transforms, embeddings (\code{NULL} for a domain whose
+transform cannot be applied to its data, with a warning naming the cause),
+dataset graph, pairwise fits, and diagnostics
 }
 \description{
 This meta-aligner lifts any pairwise method to N domains by:
-1) choosing a sparse dataset graph, 2) fitting pairwise models on edges,
-3) extracting relative transforms, and 4) running group-appropriate
+\enumerate{
+\item choosing a sparse dataset graph, 2) fitting pairwise models on edges,
+\item extracting relative transforms, and 4) running group-appropriate
 synchronization to get per-domain transforms into a shared space.
+}
 }
 \details{
 If the adapter reports native multi-view support, dispatches to fit_many().
 }
+\section{Orientation}{
+
+All transforms follow the contract documented in \code{\link[=new_align_transform]{new_align_transform()}}:
+the edge transform \code{g_ij = relative_transform(fit_ij, "i", "j")} maps
+domain \code{i} onto domain \code{j}, and the returned \code{transforms[[i]]} maps domain
+\code{i} onto the consensus space, so that \code{embeddings[[i]] = apply_transform(transforms[[i]], domains[[i]])} agree across domains.
+Synchronisation, the optional \code{sync$refine$gpa} refinement and the
+diagnostics all solve or measure the same relation
+\code{compose_transform(g_ij, T_j) = T_i}.
+}
+
 \examples{
 \donttest{
 set.seed(1)

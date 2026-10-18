@@ -7,7 +7,7 @@
 \method{oos_predict}{sumcor_align}(fit_or_transform, newX, side, ...)
 }
 \arguments{
-\item{fit_or_transform}{A `sumcor_align` fit.}
+\item{fit_or_transform}{A \code{sumcor_align} fit.}
 
 \item{newX}{New observations (rows) with the same columns as the domain's
 training data. Column names, when both are present, must match.}
@@ -17,12 +17,12 @@ training data. Column names, when both are present, must match.}
 \item{...}{Unused; unknown arguments are rejected.}
 }
 \value{
-A numeric matrix with one row per row of `newX` and `ncomp` columns.
+A numeric matrix with one row per row of \code{newX} and \code{ncomp} columns.
 }
 \description{
-Applies the fitted encoder `f_s(x) = phi_s(x) A_s` of one domain to new
+Applies the fitted encoder \verb{f_s(x) = phi_s(x) A_s} of one domain to new
 rows. Training scores were produced by the same function, so re-encoding a
-domain's training observations reproduces `fit$scores` exactly. Rows are
+domain's training observations reproduces \code{fit$scores} exactly. Rows are
 encoded independently: the result for a row does not depend on the other
-rows in `newX`.
+rows in \code{newX}.
 }

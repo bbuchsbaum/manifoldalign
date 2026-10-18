@@ -7,25 +7,29 @@
 See individual functions.
 }
 \description{
-These helpers compute **intrinsic** node descriptors from a within-domain
+These helpers compute \strong{intrinsic} node descriptors from a within-domain
 spectral basis (eigenvalues/eigenvectors). They are designed to be reusable
 across multiple alignment methods (e.g., GRASP, spectral MNN, and as features
 for UOT costs).
 
 The main entry points are:
-- [hks_time_grid()] to construct a diffusion-time grid.
-- [compute_hks_descriptors()] to compute Heat Kernel Signatures (HKS).
-- [compute_diffusion_coordinates()] to compute diffusion coordinates at one
-  or more times.
+\itemize{
+\item \code{\link[=hks_time_grid]{hks_time_grid()}} to construct a diffusion-time grid.
+\item \code{\link[=compute_hks_descriptors]{compute_hks_descriptors()}} to compute Heat Kernel Signatures (HKS).
+\item \code{\link[=compute_diffusion_coordinates]{compute_diffusion_coordinates()}} to compute diffusion coordinates at one
+or more times.
+}
 }
 \details{
-**Basis format**
+\strong{Basis format}
 
 These functions accept either:
-- a list with fields `values` (length K) and `vectors` (N x K), or
-- explicit `values`/`vectors` arguments.
+\itemize{
+\item a list with fields \code{values} (length K) and \code{vectors} (N x K), or
+\item explicit \code{values}/\code{vectors} arguments.
+}
 
 For Laplacian-based bases, the first eigenvalue is typically 0 and
 corresponds to a constant mode. By default, eigenpairs with
-`value <= eigen_tol` are dropped.
+\code{value <= eigen_tol} are dropped.
 }

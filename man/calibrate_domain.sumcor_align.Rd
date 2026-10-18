@@ -15,7 +15,7 @@
 )
 }
 \arguments{
-\item{fit}{A `sumcor_align` fit.}
+\item{fit}{A \code{sumcor_align} fit.}
 
 \item{data}{The new domain's observation-by-column matrix.}
 
@@ -24,24 +24,24 @@
 \item{domain_name}{Name for the new domain; must not already exist.}
 
 \item{reference_domains}{Fitted domains that form the frozen reference.
-Defaults to every domain with role `"reference"`.}
+Defaults to every domain with role \code{"reference"}.}
 
 \item{feature_groups}{Column groups for the new domain when the fit used
-`basis = "grouped_pca"`.}
+\code{basis = "grouped_pca"}.}
 
 \item{...}{Unused; unknown arguments are rejected.}
 }
 \value{
-The `sumcor_align` fit with the new domain appended and its role
-  recorded as `"calibrated"`. Calibration provenance is stored in
-  `fit$calibration[[domain_name]]`.
+The \code{sumcor_align} fit with the new domain appended and its role
+recorded as \code{"calibrated"}. Calibration provenance is stored in
+\code{fit$calibration[[domain_name]]}.
 }
 \description{
 Fits the new domain's basis and repeat-level covariance from its own
 calibration observations, then solves its encoder in one polar step against
 the frozen event scores of the reference domains: with the reference fixed
 this block subproblem is solved exactly. Existing encoders, scores and
-`reference_scores` are left unchanged. Events the fit never saw are
+\code{reference_scores} are left unchanged. Events the fit never saw are
 excluded and counted. The identifier columns of the original fit are used.
 }
 \details{

@@ -20,24 +20,24 @@ create_synthetic_similarity_matrix(
 
 \item{within_cluster_sim}{Average similarity within clusters (default: 0.8)}
 
-\item{between_cluster_sim}{Average similarity between clusters 
+\item{between_cluster_sim}{Average similarity between clusters
 (default: 0.1)}
 
-\item{sparsity}{Overall sparsity level (proportion of non-zero entries) 
+\item{sparsity}{Overall sparsity level (proportion of non-zero entries)
 (default: 0.1)}
 
 \item{noise_level}{Amount of noise to add to similarities (default: 0.1)}
 }
 \value{
 A list containing:
-  \item{sim_matrix}{Sparse similarity matrix (dgCMatrix) with synthetic 
-    cluster structure}
-  \item{true_labels}{Factor vector of true cluster assignments for 
-    validation}
-  \item{cluster_centers}{Integer vector of cluster center indices}
+\item{sim_matrix}{Sparse similarity matrix (dgCMatrix) with synthetic
+cluster structure}
+\item{true_labels}{Factor vector of true cluster assignments for
+validation}
+\item{cluster_centers}{Integer vector of cluster center indices}
 }
 \description{
-Generates a synthetic sparse similarity matrix with known cluster structure. 
+Generates a synthetic sparse similarity matrix with known cluster structure.
 Used for testing and demonstrating the pseudolabeling functions.
 }
 \examples{

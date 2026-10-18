@@ -12,29 +12,29 @@ rapid_ma_feature_scores(
 )
 }
 \arguments{
-\item{fit}{A fitted `rapid_ma` object or a `rapid_ma_pair_fit`.}
+\item{fit}{A fitted \code{rapid_ma} object or a \code{rapid_ma_pair_fit}.}
 
-\item{data}{A list of sample-by-feature matrices (base or `Matrix`), one per
-fitted domain in fitting order or named by domain, or a `hyperdesign`.
-Entries may be `NULL` to skip a domain. For a `rapid_ma_pair_fit`, supply
-`list(X_i, X_j)` or `list(i = X_i, j = X_j)`.}
+\item{data}{A list of sample-by-feature matrices (base or \code{Matrix}), one per
+fitted domain in fitting order or named by domain, or a \code{hyperdesign}.
+Entries may be \code{NULL} to skip a domain. For a \code{rapid_ma_pair_fit}, supply
+\code{list(X_i, X_j)} or \code{list(i = X_i, j = X_j)}.}
 
 \item{weight}{Nonnegative weighting rule applied column by column:
-`"positive"`, `"absolute"`, or `"shifted"`.}
+\code{"positive"}, \code{"absolute"}, or \code{"shifted"}.}
 
 \item{pool}{Logical; also return the equal-weight mean of each feature's
 per-domain coordinates across the supplied domains, plus a dispersion
 diagnostic.}
 }
 \value{
-An object of class `rapid_ma_feature_scores` with elements
-  `scores` (per-domain feature-by-component matrices), `mass` (per-domain
-  total weight per feature), `zero_mass` (per-domain indices of features
-  without a barycentre), `pooled` (feature-by-component matrix, or `NULL`
-  when `pool = FALSE`), `dispersion` (per-feature root-mean-square distance
-  of the per-domain coordinates from the pooled coordinate; `NA` when fewer
-  than two domains contribute), `n_domains` (per-feature count of
-  contributing domains), `weight`, `domain_names`, and `ncomp`.
+An object of class \code{rapid_ma_feature_scores} with elements
+\code{scores} (per-domain feature-by-component matrices), \code{mass} (per-domain
+total weight per feature), \code{zero_mass} (per-domain indices of features
+without a barycentre), \code{pooled} (feature-by-component matrix, or \code{NULL}
+when \code{pool = FALSE}), \code{dispersion} (per-feature root-mean-square distance
+of the per-domain coordinates from the pooled coordinate; \code{NA} when fewer
+than two domains contribute), \code{n_domains} (per-feature count of
+contributing domains), \code{weight}, \code{domain_names}, and \code{ncomp}.
 }
 \description{
 RAPID-MA embeds samples into a shared latent space but is not a linear
@@ -49,16 +49,16 @@ embedded samples land close together.
 For feature \eqn{j} in domain \eqn{d} with sample coordinates
 \eqn{Z_d} and nonnegative weights \eqn{w_{ij}} derived from the data,
 the coordinate is \eqn{m_{dj} = \sum_i w_{ij} z_{di} / \sum_i w_{ij}}.
-Weights are derived from the data column by column according to `weight`:
-`"positive"` keeps nonnegative values and zeroes negative ones,
-`"absolute"` uses magnitudes, and `"shifted"` subtracts each column's
-minimum so every entry is nonnegative. Sparse `Matrix` inputs stay sparse
-for `"positive"` and `"absolute"`; `"shifted"` densifies.
+Weights are derived from the data column by column according to \code{weight}:
+\code{"positive"} keeps nonnegative values and zeroes negative ones,
+\code{"absolute"} uses magnitudes, and \code{"shifted"} subtracts each column's
+minimum so every entry is nonnegative. Sparse \code{Matrix} inputs stay sparse
+for \code{"positive"} and \code{"absolute"}; \code{"shifted"} densifies.
 
-Columns with zero total weight have no barycentre and are returned as `NA`
-rows; their indices are reported in `zero_mass` and a warning is raised.
+Columns with zero total weight have no barycentre and are returned as \code{NA}
+rows; their indices are reported in \code{zero_mass} and a warning is raised.
 
-The matrices in `data` need not be the training matrices: any matrix with
+The matrices in \code{data} need not be the training matrices: any matrix with
 one row per fitted sample of that domain can be embedded, so new maps over
 the same samples can be placed after fitting. Pooling requires every
 supplied domain to have the same number of columns (and identical column

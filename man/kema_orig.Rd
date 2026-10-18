@@ -23,6 +23,7 @@ kema_orig(data, y, ...)
   lambda = 1e-04,
   backend = "auto",
   backend_control = NULL,
+  seed = NULL,
   ...
 )
 
@@ -39,13 +40,14 @@ kema_orig(data, y, ...)
   lambda = 1e-04,
   backend = "auto",
   backend_control = NULL,
+  seed = NULL,
   ...
 )
 
 \method{kema_orig}{default}(data, ...)
 }
 \arguments{
-\item{data}{Input object. A `hyperdesign` or `multidesign` object.}
+\item{data}{Input object. A \code{hyperdesign} or \code{multidesign} object.}
 
 \item{y}{Label column used for class graphs.}
 
@@ -53,7 +55,7 @@ kema_orig(data, y, ...)
 
 \item{subject}{Subject/domain column for splitting a multidesign object.}
 
-\item{preproc}{Preprocessing recipe (default `center()`).}
+\item{preproc}{Preprocessing recipe (default \code{center()}).}
 
 \item{ncomp}{Number of components.}
 
@@ -65,28 +67,39 @@ kema_orig(data, y, ...)
 
 \item{kernel}{Kernel function.}
 
-\item{sample_frac}{Fraction of samples retained as landmarks (<1 => REKEMA).}
+\item{sample_frac}{Fraction of samples retained as landmarks (<1 => REKEMA).
+The selected landmark rows are stored in \code{fit$encoder$landmarks}.}
 
 \item{lambda}{Positive Tikhonov regularization added to the RHS generalized
 matrix. A positive value is required because the partial generalized
 eigensolver uses that matrix as an inner-product metric.}
 
-\item{backend}{Backend for the generalized eigensolver. One of `"auto"`,
-`"full_exact"`, `"reduced_exact"`, or `"operator_exact"`.}
+\item{backend}{Backend for the generalized eigensolver. One of \code{"auto"},
+\code{"full_exact"}, \code{"reduced_exact"}, or \code{"operator_exact"}.}
 
 \item{backend_control}{Optional list for backend auto-selection and fidelity
-diagnostics. Supported keys: `full_exact_max_n`, `reduced_exact_max_r`,
-`dense_exact_max_dim`,
-`fidelity_residual_tol`, `fidelity_orth_tol`, `fidelity_action`,
-`eigencore_tol`, `eigencore_maxit`, and `kernel_rank_tol`.}
+diagnostics. Supported keys: \code{full_exact_max_n}, \code{reduced_exact_max_r},
+\code{dense_exact_max_dim},
+\code{fidelity_residual_tol}, \code{fidelity_orth_tol}, \code{fidelity_action},
+\code{eigencore_tol}, \code{eigencore_maxit}, \code{eigencore_seed}, \code{kernel_rank_tol},
+and \code{max_dense_bytes}. \code{eigencore_seed} (default 1) seeds the iterative
+partial eigensolver locally, so fits do not depend on, or change, the
+caller's RNG state. Every backend materialises dense kernel blocks, dense
+quotient matrices and dense label-comparison matrices, so memory grows as
+O(n r + r^2 + n_labelled^2); \code{max_dense_bytes} (default 8 GiB) bounds a
+coarse estimate of that footprint and the fit errors before allocating
+when it is exceeded. Use \code{Inf} to disable the guard.}
+
+\item{seed}{Optional seed for REKEMA landmark selection; \code{NULL} draws from
+the session RNG. A supplied seed leaves the caller's RNG stream untouched.}
 }
 \value{
-A `multiblock_biprojector` object with KEMA embeddings.
+A \code{multiblock_biprojector} object with KEMA embeddings.
 }
 \description{
-`kema_orig()` is a deprecated duplicate of [kema()]. New code should call
-`kema()`, which runs this same fidelity-gated original formulation.
-`kema_orig()` is scheduled for removal in manifoldalign 1.0.0.
+\code{kema_orig()} is a deprecated duplicate of \code{\link[=kema]{kema()}}. New code should call
+\code{kema()}, which runs this same fidelity-gated original formulation.
+\code{kema_orig()} is scheduled for removal in manifoldalign 1.0.0.
 }
 \details{
 Paper-faithful implementation of Tuia & Camps-Valls (2016) using the

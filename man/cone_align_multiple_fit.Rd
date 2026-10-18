@@ -16,7 +16,8 @@ cone_align_multiple_fit(
   max_iter,
   tol,
   knn,
-  feature_blocks
+  feature_blocks,
+  verbose = FALSE
 )
 }
 \arguments{
@@ -43,6 +44,8 @@ cone_align_multiple_fit(
 \item{knn}{Number of nearest neighbors}
 
 \item{feature_blocks}{Feature block index structure}
+
+\item{verbose}{Logical; report pairwise convergence via message()}
 }
 \value{
 multiblock_biprojector object with multi-graph alignment results

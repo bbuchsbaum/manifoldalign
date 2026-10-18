@@ -37,20 +37,24 @@ coupled_diagonalization(data, ...)
 \item{correspondence}{Optional list of correspondence matrices
 between modalities. If NULL (default), assumes full correspondence
 based on sample order.
-Each matrix should be n_i x n_j sparse matrix indicating correspondences 
+Each matrix should be n_i x n_j sparse matrix indicating correspondences
 between modality i and j.}
 
-\item{preproc}{Preprocessing function to apply to the data (default: center())}
+\item{preproc}{A multivarious pre-processor (default: \code{center()}), a
+list with one per domain, a plain function, or \code{NULL}. Pre-processors
+are fitted on each domain and stored in \code{result$preproc}
+(concatenated by feature block) for out-of-sample projection; a plain
+function is applied to the training data only and is not stored.}
 
 \item{ncomp}{Number of coupled eigenvectors to extract (default: 10)}
 
-\item{ncomp_per_domain}{Number of eigenvectors per domain to compute before 
+\item{ncomp_per_domain}{Number of eigenvectors per domain to compute before
 coupling (default: 20). Must be >= ncomp.}
 
-\item{mu_coupling}{Coupling weight controlling alignment vs diagonalization 
+\item{mu_coupling}{Coupling weight controlling alignment vs diagonalization
 trade-off (default: 1). Higher values emphasize cross-modal alignment.}
 
-\item{alpha_match}{Optional weight for matching the diagonal of 
+\item{alpha_match}{Optional weight for matching the diagonal of
 \code{A_i^T Lambda_i A_i} to target eigenvalues (default: 0).}
 
 \item{lambda_target}{Optional list of length \code{m} providing target eigenvalue
@@ -58,7 +62,7 @@ vectors for each modality (only the first \code{ncomp} entries are used).}
 
 \item{knn}{Number of nearest neighbors for graph construction (default: 10)}
 
-\item{sigma}{Gaussian kernel bandwidth for graph weights. If NULL (default), 
+\item{sigma}{Gaussian kernel bandwidth for graph weights. If NULL (default),
 uses median of nearest neighbor distances.}
 
 \item{spectral_cache}{Optional precomputed spectral cache to reuse
@@ -78,29 +82,29 @@ graph/Laplacian/eigendecomposition steps are skipped.}
 \value{
 A \code{multiblock_biprojector} object containing:
 \itemize{
-  \item \code{s}: Coupled eigenvectors (scores) for all samples
-  \item \code{v}: Projection matrices for out-of-sample extension
-  \item \code{coupled_bases}: List of coupled bases for each modality
-  \item \code{sdev}: Standard deviations of the coupled components
-  \item Additional metadata for reconstruction and diagnostics
+\item \code{s}: Coupled eigenvectors (scores) for all samples
+\item \code{v}: Projection matrices for out-of-sample extension
+\item \code{coupled_bases}: List of coupled bases for each modality
+\item \code{sdev}: Standard deviations of the coupled components
+\item Additional metadata for reconstruction and diagnostics
 }
 
 A multiblock_biprojector object containing:
 \itemize{
-  \item \code{s}: Coupled eigenvectors (scores) concatenated across domains
-  \item \code{v}: Projection matrices for out-of-sample extension  
-  \item \code{coupled_bases}: List of coupled bases V_i for each modality
-  \item \code{sdev}: Standard deviations of coupled components
-  \item \code{eigenvalues}: List of eigenvalues for each domain
-  \item \code{diagnostics}: List with per-iteration cost diagnostics
-  \item \code{converged}: Logical indicating convergence
-  \item \code{iterations}: Number of iterations performed
-  \item \code{final_cost}: Final objective value
+\item \code{s}: Coupled eigenvectors (scores) concatenated across domains
+\item \code{v}: Projection matrices for out-of-sample extension
+\item \code{coupled_bases}: List of coupled bases V_i for each modality
+\item \code{sdev}: Standard deviations of coupled components
+\item \code{eigenvalues}: List of eigenvalues for each domain
+\item \code{diagnostics}: List with per-iteration cost diagnostics
+\item \code{converged}: Logical indicating convergence
+\item \code{iterations}: Number of iterations performed
+\item \code{final_cost}: Final objective value
 }
 }
 \description{
-Performs Coupled Diagonalization alignment on multi-modal data. Finds coupled 
-eigenvectors across multiple modalities that jointly diagonalize graph Laplacians 
+Performs Coupled Diagonalization alignment on multi-modal data. Finds coupled
+eigenvectors across multiple modalities that jointly diagonalize graph Laplacians
 while respecting cross-modal correspondences.
 
 Performs Coupled Diagonalization alignment on hyperdesign data
@@ -109,34 +113,33 @@ that jointly diagonalize graph
 Laplacians while respecting cross-modal correspondences.
 }
 \details{
-Coupled Diagonalization (Eynard et al. 2015) extends spectral methods to 
-multi-modal data by finding bases that simultaneously diagonalize individual 
-Laplacians while being aligned through correspondence constraints. The algorithm 
+Coupled Diagonalization (Eynard et al. 2015) extends spectral methods to
+multi-modal data by finding bases that simultaneously diagonalize individual
+Laplacians while being aligned through correspondence constraints. The algorithm
 uses Stiefel manifold optimization to maintain orthogonality constraints.
-
 
 The algorithm minimizes the objective function:
 \deqn{F(A) = sum_i ||A_i^T L_i A_i - diag(A_i^T L_i A_i)||_F^2 + mu_c sum_{i<j} ||F_i^T U_i A_i - F_j^T U_j A_j||_F^2}
 
 where:
 \itemize{
-  \item \code{A_i} are the coupling matrices on the Stiefel manifold
-  \item \code{L_i} are the eigenvalues of the i-th Laplacian
-  \item \code{U_i} are the eigenvectors of the i-th Laplacian
-  \item \code{F_i} are the correspondence matrices between modalities
-  \item \code{mu_c} controls the coupling strength
+\item \code{A_i} are the coupling matrices on the Stiefel manifold
+\item \code{L_i} are the eigenvalues of the i-th Laplacian
+\item \code{U_i} are the eigenvectors of the i-th Laplacian
+\item \code{F_i} are the correspondence matrices between modalities
+\item \code{mu_c} controls the coupling strength
 }
 
-The first term encourages diagonalization of individual Laplacians, while the 
-second term enforces alignment through correspondences. The algorithm uses 
+The first term encourages diagonalization of individual Laplacians, while the
+second term enforces alignment through correspondences. The algorithm uses
 projected gradient descent on the Stiefel manifold to maintain orthogonality.
 
 Key features:
 \itemize{
-  \item Handles partial correspondences between modalities
-  \item Preserves manifold structure through graph Laplacians
-  \item Maintains orthogonality via Stiefel manifold optimization
-  \item Supports semi-supervised learning with missing correspondences
+\item Handles partial correspondences between modalities
+\item Preserves manifold structure through graph Laplacians
+\item Maintains orthogonality via Stiefel manifold optimization
+\item Supports semi-supervised learning with missing correspondences
 }
 
 The algorithm minimizes the objective
@@ -207,12 +210,12 @@ result <- coupled_diagonalization(hd, ncomp = 3)
 
 }
 \references{
-Eynard, D., Kovnatsky, A., Bronstein, M. M., Glashoff, K., & Bronstein, A. M. 
-(2015). Multimodal manifold analysis by simultaneous diagonalization of 
-Laplacians. IEEE Transactions on Pattern Analysis and Machine Intelligence, 
+Eynard, D., Kovnatsky, A., Bronstein, M. M., Glashoff, K., & Bronstein, A. M.
+(2015). Multimodal manifold analysis by simultaneous diagonalization of
+Laplacians. IEEE Transactions on Pattern Analysis and Machine Intelligence,
 37(12), 2505-2517.
 
-Eynard et al. (2015). Multimodal manifold analysis by simultaneous 
+Eynard et al. (2015). Multimodal manifold analysis by simultaneous
 diagonalization of Laplacians. IEEE TPAMI, 37(12), 2505-2517.
 }
 \seealso{

@@ -2,7 +2,7 @@
 % Please edit documentation in R/global_geo_align.R
 \name{global_geo_align_control}
 \alias{global_geo_align_control}
-\title{Control settings for `global_geo_align.hyperdesign()`}
+\title{Control settings for \code{global_geo_align.hyperdesign()}}
 \usage{
 global_geo_align_control(
   knn = 15L,
@@ -29,8 +29,8 @@ global_geo_align_control(
 \item{knn}{Number of within-dataset nearest neighbors used to build each
 domain graph.}
 
-\item{metric}{Distance metric for within-dataset graph edges (`"euclidean"`
-or `"cosine"`).}
+\item{metric}{Distance metric for within-dataset graph edges (\code{"euclidean"}
+or \code{"cosine"}).}
 
 \item{corr_edge_weight}{Weight assigned to correspondence edges.}
 
@@ -41,8 +41,8 @@ or `"cosine"`).}
 \item{landmark_corr_frac}{Fraction of landmarks reserved for correspondence
 nodes when available.}
 
-\item{k_embed}{Intermediate geometry rank used in landmark MDS. If `NULL`,
-defaults to `max(3 * ncomp, ncomp + 5)` inside the solver.}
+\item{k_embed}{Intermediate geometry rank used in landmark MDS. If \code{NULL},
+defaults to \code{max(3 * ncomp, ncomp + 5)} inside the solver.}
 
 \item{scale_method}{Dataset scale harmonization strategy.}
 
@@ -52,7 +52,7 @@ defaults to `max(3 * ncomp, ncomp + 5)` inside the solver.}
 scale estimation.}
 
 \item{max_pairs_per_label}{Maximum correspondences sampled per shared label
-when `y` is used to generate correspondences.}
+when \code{y} is used to generate correspondences.}
 
 \item{ridge_eps}{Ridge regularization base value for linear map estimation.}
 
@@ -70,10 +70,10 @@ embedding.}
 \item{verbose}{Logical toggle for progress messages.}
 }
 \value{
-A list of class `global_geo_align_control`.
+A list of class \code{global_geo_align_control}.
 }
 \description{
-Control settings for `global_geo_align.hyperdesign()`
+Control settings for \code{global_geo_align.hyperdesign()}
 }
 \examples{
 ctrl <- global_geo_align_control(knn = 10, verbose = FALSE)

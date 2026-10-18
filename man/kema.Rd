@@ -30,6 +30,7 @@ kema(data, y, ...)
   disfun = NULL,
   lambda = 1e-04,
   centre_kernel = FALSE,
+  seed = NULL,
   ...
 )
 
@@ -53,6 +54,7 @@ kema(data, y, ...)
   disfun = NULL,
   lambda = 1e-04,
   centre_kernel = FALSE,
+  seed = NULL,
   ...
 )
 
@@ -61,45 +63,58 @@ kema(data, y, ...)
 \arguments{
 \item{data}{A hyperdesign object containing multiple data domains}
 
-\item{y}{Name of the label variable to use for alignment (can contain NA 
+\item{y}{Name of the label variable to use for alignment (can contain NA
 for unlabeled samples)}
 
 \item{...}{No additional arguments are accepted; unknown arguments error.}
 
 \item{subject}{Name of the subject variable that defines the domains/strata}
 
-\item{preproc}{Preprocessing function to apply to the data (default: 
+\item{preproc}{Preprocessing function to apply to the data (default:
 center())}
 
 \item{ncomp}{Number of components to extract (default: 2)}
 
 \item{knn}{Number of nearest neighbors for graph construction (default: 5)}
 
-\item{sigma}{Kernel bandwidth parameter (default: 0.73)}
+\item{sigma}{Scale parameter with two roles. It is always the heat-kernel
+bandwidth of the within-domain kNN graph
+(\code{adjoin::graph_weights(..., sigma = sigma)}). When \code{kernel = NULL} it is
+also the inverse width of the default kernel \code{kernlab::rbfdot(sigma)},
+\verb{k(x, y) = exp(-sigma * ||x - y||^2)}; these are different
+parameterisations, so pass \code{kernel} explicitly to set the kernel width
+independently of the graph. Default 0.73 (the hyperdesign method's \code{NULL}
+resolves to 0.73).}
 
-\item{u}{Trade-off parameter between data geometry and class alignment 
+\item{u}{Trade-off parameter between data geometry and class alignment
 (0-1, default: 0.5)}
 
-\item{kernel}{Kernel function to use (default: coskern())}
+\item{kernel}{A kernlab kernel object. The defaults differ by method: the
+multidesign method defaults to \code{coskern()}; the hyperdesign method's
+default \code{NULL} means \code{kernlab::rbfdot(sigma = sigma)}.}
 
-\item{sample_frac}{Fraction of samples to use for kernel approximation 
-(default: 1)}
+\item{sample_frac}{Fraction of each domain's rows kept as REKEMA landmarks
+(default 1, full KEMA). The selected landmark rows are stored in
+\code{fit$encoder$landmarks}.}
 
 \item{use_laplacian}{Withdrawn compatibility argument. Supplying it now
 errors because previous releases silently ignored it.}
 
-\item{solver}{Eigensolver contract. Only `"exact"` is supported. The former
-`"regression"` value never selected a distinct implementation and is now
+\item{solver}{Eigensolver contract. Only \code{"exact"} is supported. The former
+\code{"regression"} value never selected a distinct implementation and is now
 rejected.}
 
-\item{backend}{Backend for the original eigensolver. One of `"auto"`,
-`"full_exact"`, `"reduced_exact"`, or `"operator_exact"`. The legacy
-`"operator_exact"` name requests the certified partial quotient solver,
-with a certified dense fallback for small quotients; the quotient matrices
-are currently materialized.}
+\item{backend}{Backend for the original eigensolver. One of \code{"auto"},
+\code{"full_exact"}, \code{"reduced_exact"}, or \code{"operator_exact"}. The legacy
+\code{"operator_exact"} name requests the certified partial quotient solver,
+with a certified dense fallback for small quotients. Every backend,
+including \code{"operator_exact"}, materialises dense kernel blocks and dense
+quotient matrices; a memory guard (\code{backend_control$max_dense_bytes})
+rejects problems whose estimated dense footprint is too large.}
 
-\item{backend_control}{Optional list controlling auto backend thresholds and
-fidelity checks (passed through to `kema_orig()`).}
+\item{backend_control}{Optional list controlling auto backend thresholds,
+fidelity checks and the dense-memory guard (passed through to
+\code{kema_orig()}).}
 
 \item{dweight, rweight, simfun, disfun}{Withdrawn compatibility arguments.
 Supplying any of them errors because they were previously ignored.}
@@ -108,53 +123,62 @@ Supplying any of them errors because they were previously ignored.}
 metric (default: 0.0001).}
 
 \item{centre_kernel}{Withdrawn compatibility argument. Supplying it errors.}
+
+\item{seed}{Optional seed for REKEMA landmark selection. \code{NULL} (default)
+draws landmarks from the session RNG; a value draws them reproducibly
+without disturbing the caller's RNG stream. No effect when
+\code{sample_frac = 1}.}
 }
 \value{
 A \code{multiblock_biprojector} object containing:
 \itemize{
-  \item \code{s}: Scores (embedded coordinates) for all samples
-  \item \code{v}: Primal vectors (feature weights) for out-of-sample 
-    projection
-  \item \code{sdev}: Standard deviations of the components
-  \item \code{alpha}: Dual coefficients in kernel space
-  \item Additional metadata for reconstruction and validation
+\item \code{s}: Scores (embedded coordinates) for all samples
+\item \code{v}: Primal vectors (feature weights) for out-of-sample
+projection
+\item \code{sdev}: Standard deviations of the components
+\item \code{alpha}: Dual coefficients in kernel space
+\item Additional metadata for reconstruction and validation
 }
 
-A multiblock_biprojector object containing the KEMA alignment
+A KEMA fit of class \code{c("kema_fit", "kema_orig", "multiblock_biprojector", ...)}. \code{fit$s} holds the training scores,
+\code{fit$alpha} the dual coefficients and \code{fit$encoder} the kernel encoder
+(kernel, preprocessing, reference or landmark rows, per-domain dual
+coefficients). Use \code{\link[=oos_predict]{oos_predict()}} (or \code{project_block()}) to embed new
+rows; generic \code{project()} errors because KEMA has no linear loading.
+\code{fit$v} is exact only for the linear kernel and is \code{NA} otherwise.
 
-A multiblock_biprojector object containing the KEMA alignment
+A KEMA fit of class \code{c("kema_fit", "kema_orig", "multiblock_biprojector", ...)}; see the multidesign method.
 }
 \description{
-Performs Kernel Manifold Alignment for supervised/semi-supervised domain 
+Performs Kernel Manifold Alignment for supervised/semi-supervised domain
 adaptation. Projects data from multiple domains into a shared latent space.
 
-Performs Kernel Manifold Alignment on multidesign data structures. 
+Performs Kernel Manifold Alignment on multidesign data structures.
 Automatically splits data by subject variable and aligns domains.
 
-Performs Kernel Manifold Alignment on hyperdesign data structures. 
-Projects data from multiple domains into a shared latent space while 
+Performs Kernel Manifold Alignment on hyperdesign data structures.
+Projects data from multiple domains into a shared latent space while
 preserving manifold structure and aligning same-class samples.
 }
 \details{
-KEMA is designed for multi-domain data where you want to find a common 
-representation that preserves both the intrinsic geometry of each domain and 
-the class structure across domains. It supports semi-supervised learning 
+KEMA is designed for multi-domain data where you want to find a common
+representation that preserves both the intrinsic geometry of each domain and
+the class structure across domains. It supports semi-supervised learning
 with missing labels (NA values).
 
-`kema()` is the sole supported public entry point for the original Tuia &
+\code{kema()} is the sole supported public entry point for the original Tuia &
 Camps-Valls generalized eigenproblems. Every returned fit must pass explicit
 generalized-eigen residual and B-orthogonality gates. The duplicate
-`kema_orig()` entry point is deprecated, and formerly ignored extension
+\code{kema_orig()} entry point is deprecated, and formerly ignored extension
 controls are rejected.
-
 
 KEMA solves the original paper objective:
 \deqn{K(L+\mu L_s)K\Lambda = \lambda K L_d K\Lambda}
-and its reduced-rank REKEMA counterpart when `sample_frac < 1`.
+and its reduced-rank REKEMA counterpart when \code{sample_frac < 1}.
 
-`kema()` now delegates to the paper-faithful `kema_orig()` backend and solves
+\code{kema()} now delegates to the paper-faithful \code{kema_orig()} backend and solves
 the original generalized eigenproblems from Tuia & Camps-Valls (2016),
-including the reduced-rank REKEMA form when `sample_frac < 1`.
+including the reduced-rank REKEMA form when \code{sample_frac < 1}.
 
 Legacy extension arguments remain temporarily in the function signature so
 callers receive an actionable error. They are not silently ignored.
@@ -245,6 +269,10 @@ hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign
 # Run KEMA with default settings
 result <- kema(hd, y = labels, ncomp = 2)
 
+# Embed new rows of domain 2 with the fitted kernel encoder
+new_rows <- matrix(rnorm(10), 5, 2)
+oos_predict(result, new_rows, side = "domain2")
+
 # Semi-supervised learning with missing labels
 hd_semi <- hd
 hd_semi$domain1$design$labels[1:10] <- NA  # Mark some samples as unlabeled
@@ -253,16 +281,16 @@ result_semi <- kema(hd_semi, y = labels, ncomp = 2)
 # Use exact solver for highest accuracy
 result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)
 
-# Use REKEMA for large datasets
-result_rekema <- kema(hd, y = labels, sample_frac = 0.5, ncomp = 2)
+# Use REKEMA for large datasets (reproducible landmarks)
+result_rekema <- kema(hd, y = labels, sample_frac = 0.5, ncomp = 2, seed = 1)
 }
 
 }
 \references{
-Tuia, D., & Camps-Valls, G. (2016). Kernel manifold alignment for domain 
+Tuia, D., & Camps-Valls, G. (2016). Kernel manifold alignment for domain
 adaptation. PLoS ONE, 11(2), e0148655.
 
-Tuia, D., & Camps-Valls, G. (2016). Kernel manifold alignment for domain 
+Tuia, D., & Camps-Valls, G. (2016). Kernel manifold alignment for domain
 adaptation. PLoS ONE, 11(2), e0148655.
 }
 \seealso{

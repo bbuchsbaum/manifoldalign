@@ -25,7 +25,7 @@ spectral_mnn_align(data, ...)
 \method{spectral_mnn_align}{default}(data, ...)
 }
 \arguments{
-\item{data}{A `hyperdesign` object or list of matrices.}
+\item{data}{A \code{hyperdesign} object or list of matrices.}
 
 \item{...}{Additional arguments passed to methods.}
 
@@ -42,15 +42,32 @@ spectral_mnn_align(data, ...)
 \item{control}{Control settings from spectral_mnn_align_control()}
 }
 \value{
-A `multiblock_biprojector` with subclass `spectral_mnn_align`.
+A \code{multiblock_biprojector} with subclass \code{spectral_mnn_align}.
 }
 \description{
 A fast, correspondence-optional aligner that:
-1) builds a within-domain kNN graph per domain,
-2) computes Laplacian eigenmaps,
-3) constructs intrinsic Heat Kernel Signatures (HKS),
-4) discovers anchors via mutual nearest neighbors (or optional supervision),
-5) aligns domains to a reference via Procrustes.
+\enumerate{
+\item builds a within-domain kNN graph per domain,
+\item computes Laplacian eigenmaps,
+\item constructs intrinsic Heat Kernel Signatures (HKS),
+\item discovers anchors via mutual nearest neighbors (or optional supervision),
+\item aligns domains to a reference via Procrustes (rotation plus
+translation estimated on the anchors).
+}
+}
+\details{
+Heat-kernel signatures use one time grid shared by all domains (stored in
+\code{hks_times}); in \code{time_mode = "auto"} it is derived from the pooled
+retained eigenvalues of every domain.
+
+Training scores \code{s} are the aligned Laplacian eigenmaps. The eigenmaps have
+no exact out-of-sample extension, so the loadings \code{v} are an explicit,
+separately fitted approximation: a linear ridge regression ("bridge") from
+each domain's preprocessed features to its aligned scores, with relative
+penalty \code{control$bridge_ridge}. Out-of-sample prediction (\code{\link[=oos_predict]{oos_predict()}},
+\code{project()}) uses this bridge; its fit quality is reported in \code{bridge}
+(\code{r_squared}, \code{max_abs_residual}). Bridge predictions for training rows
+therefore differ from \code{s} unless the bridge interpolates.
 }
 \examples{
 \donttest{

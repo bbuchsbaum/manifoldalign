@@ -24,7 +24,7 @@ uot_kl_logpi2_meanF_sparse_cpp(
 
 \item{col_idx}{Integer vector of length nnz giving 1-based column indices.}
 
-\item{cost}{Numeric vector of length nnz aligned with `col_idx`.}
+\item{cost}{Numeric vector of length nnz aligned with \code{col_idx}.}
 
 \item{n_rows}{Number of source nodes.}
 
@@ -43,8 +43,8 @@ uot_kl_logpi2_meanF_sparse_cpp(
 \item{F}{Optional source features (n_rows x D).}
 }
 \value{
-A list with `log_pi2` and optionally `mean_F`.
+A list with \code{log_pi2} and optionally \code{mean_F}.
 }
 \description{
-Same as `uot_kl_logpi2_meanF_dense_cpp` but for a sparse cost graph.
+Same as \code{uot_kl_logpi2_meanF_dense_cpp} but for a sparse cost graph.
 }

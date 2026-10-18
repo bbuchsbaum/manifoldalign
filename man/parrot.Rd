@@ -23,8 +23,9 @@ parrot(data, anchors, ...)
   tau = 0.05,
   alpha = 0.2,
   gamma = 0.1,
-  solver = c("sinkhorn", "exact"),
-  max_iter = 100,
+  solver = "sinkhorn",
+  max_iter = 1000,
+  max_outer = 10,
   tol = 1e-06,
   use_cpp = FALSE,
   verbose = FALSE,
@@ -40,59 +41,95 @@ parrot(data, anchors, ...)
 
 \item{...}{Additional arguments (currently unused)}
 
-\item{preproc}{Preprocessing function to apply to the data (default: center())}
+\item{preproc}{Preprocessing applied to each domain before graph construction
+(default: \code{multivarious::center()}). A \code{prepper}/\code{pre_processor}
+is fitted separately on each domain and the fitted pre-processors are stored
+in the result; a plain function is applied to each domain's matrix; a list
+gives one entry per domain; \code{NULL} disables preprocessing.}
 
-\item{ncomp}{Number of latent dimensions for barycenter (default: NULL, auto-determine)}
+\item{ncomp}{Number of embedding dimensions taken from the SVD of the transport
+plan (default: \code{NULL}, i.e. \code{min(10, min(n1, n2) - 1)})}
 
-\item{sigma}{RWR restart probability and diffusion parameter (default: 0.15)}
+\item{sigma}{RWR restart probability (\eqn{\beta} in the paper; default: 0.15)}
 
-\item{lambda}{Overall consistency regularization weight (default: 0.1). Can also specify
-lambda_e, lambda_n, lambda_p separately for fine control}
+\item{lambda}{Overall consistency regularization weight (default: 0.1). Used to
+derive \code{lambda_e}, \code{lambda_n} and \code{lambda_p} when those are
+not given.}
 
-\item{lambda_e}{Edge consistency weight (default: lambda * 0.5)}
+\item{lambda_e}{Edge consistency weight (default: \code{lambda * 0.5})}
 
-\item{lambda_n}{Neighborhood consistency weight (default: lambda * 0.5)}
+\item{lambda_n}{Neighborhood consistency (KL) weight (default: \code{lambda * 0.5})}
 
-\item{lambda_p}{Anchor prior weight (default: lambda * 0.1)}
+\item{lambda_p}{Anchor prior (KL) weight (default: \code{lambda})}
 
-\item{tau}{Entropy regularization parameter for Sinkhorn (default: 0.01)}
+\item{tau}{Proximal (KL) step weight of the outer loop (default: 0.05). Each
+inner Sinkhorn solve uses entropic regularization
+\code{tau_t + lambda_n + lambda_p}, where \code{tau_t >= tau} is increased
+automatically when a step would not decrease the objective.}
 
-\item{alpha}{Weight for feature vs RWR cost in Sylvester equation (default: 0.5)}
+\item{alpha}{Weight of the attribute (feature) cosine cost in the node cost;
+the RWR positional cost gets weight \code{1 - alpha}:
+\code{C_node = (1 - alpha) * cost_rwr + alpha * cost_attr} (default: 0.2)}
 
-\item{gamma}{Cross-graph mixing parameter for Sylvester iteration (default: 0.1)}
+\item{gamma}{Cross-graph discount factor of the Sylvester iteration (default: 0.1)}
 
-\item{solver}{Transport solver: "sinkhorn" for entropic (default), "exact" for unregularized}
+\item{solver}{Transport solver. Only \code{"sinkhorn"} (entropic, log-domain)
+is implemented; \code{"exact"} is rejected with an error.}
 
-\item{max_iter}{Maximum number of iterations (default: 100)}
+\item{max_iter}{Maximum number of iterations for the RWR power iteration and for
+each inner Sinkhorn solve (default: 1000). It is never raised internally; a
+final Sinkhorn solve that does not reach \code{tol} triggers a warning and is
+reported in \code{convergence}.}
 
-\item{tol}{Convergence tolerance (default: 1e-6)}
+\item{max_outer}{Maximum number of outer proximal steps (default: 10)}
 
-\item{use_cpp}{Whether to use C++ optimizations (default: FALSE)}
+\item{tol}{Convergence tolerance for RWR, for the Sinkhorn marginal residual,
+and for the largest entrywise plan change between outer steps (default: 1e-6)}
+
+\item{use_cpp}{Whether to use the compiled kernels (default: FALSE). Both
+backends solve the same problem.}
 
 \item{verbose}{Logical flag to print progress information during fitting}
 }
 \value{
 A \code{multiblock_biprojector} object containing:
 \itemize{
-  \item \code{s}: Aligned network embeddings 
-  \item \code{v}: Primal vectors for out-of-sample projection
-  \item \code{alignment_matrix}: Soft alignment/transport plan between networks
-  \item \code{transport_plan}: Dense transport matrix S
-  \item \code{sdev}: Standard deviations of aligned components
-  \item Additional metadata for reconstruction and validation
+\item \code{s}: Aligned network embeddings
+\item \code{v}: Primal vectors for out-of-sample projection
+\item \code{alignment_matrix}: Soft alignment/transport plan between networks
+\item \code{transport_plan}: Dense transport matrix S
+\item \code{sdev}: Standard deviations of aligned components
+\item Additional metadata for reconstruction and validation
 }
 
 A \code{multiblock_biprojector} object containing:
 \itemize{
-  \item \code{s}: Aligned network embeddings 
-  \item \code{v}: Primal vectors for out-of-sample projection
-  \item \code{alignment_matrix}: Soft alignment/transport plan between networks
-  \item \code{transport_plan}: Dense transport matrix S
-  \item \code{sdev}: Standard deviations of aligned components
-  \item Additional metadata for reconstruction and validation
+\item \code{s}: Node embeddings of both networks from the SVD of the plan
+\item \code{v}: Descriptive feature loadings; not a projector (PARROT is
+transductive), see \code{\link{parrot.hyperdesign}}
+\item \code{alignment_matrix}: Soft alignment/transport plan between networks
+\item \code{transport_plan}: Dense transport matrix S
+\item \code{objective_history}, \code{convergence}: solver diagnostics
+\item \code{sdev}: Standard deviations of the embedding columns
 }
 
-A multiblock_biprojector object containing the PARROT alignment results
+A \code{multiblock_biprojector} object (subclass \code{"parrot"}) with
+\itemize{
+\item \code{s}: embeddings of the nodes of both networks (rows of domain 1,
+then domain 2) from the leading singular vectors of the transport plan
+\item \code{v}: per-domain feature loadings \eqn{X_i^T U_i}, where
+\eqn{U_i} are the domain's rows of \code{s}. These are descriptive only:
+PARROT is transductive and \code{v} is \emph{not} a projector, so
+\code{project()} does not reproduce \code{s} or embed new nodes.
+\item \code{transport_plan}, \code{alignment_matrix}: the transport plan S
+\item \code{objective_history}: objective at the initial product plan and
+after each accepted outer step (non-increasing)
+\item \code{convergence}: list with \code{converged}, \code{status},
+\code{outer_iterations}, \code{backtracks} and the final Sinkhorn
+diagnostics (\code{sinkhorn_converged}, \code{sinkhorn_iterations},
+\code{sinkhorn_marginal_error})
+\item \code{anchors}: the anchor vector used
+}
 }
 \description{
 Performs PARROT alignment on hyperdesign data structures. Aligns networks
@@ -110,13 +147,12 @@ problem. The method incorporates position-aware features through Random Walk wit
 (RWR) descriptors and enforces structural consistency through neighborhood-preserving
 regularization terms.
 
-
 PARROT operates through the following algorithmic components:
 \itemize{
-  \item \strong{Position-Aware Features}: Compute RWR descriptors capturing network position
-  \item \strong{Cross-Network Cost}: Build transport cost matrix between networks
-  \item \strong{Consistency Regularization}: Add structural similarity constraints
-  \item \strong{Optimal Transport}: Solve regularized transport problem via Sinkhorn
+\item \strong{Position-Aware Features}: Compute RWR descriptors capturing network position
+\item \strong{Cross-Network Cost}: Build transport cost matrix between networks
+\item \strong{Consistency Regularization}: Add structural similarity constraints
+\item \strong{Optimal Transport}: Solve regularized transport problem via Sinkhorn
 }
 
 The algorithm minimizes the objective:
@@ -127,10 +163,10 @@ regularizers, and \eqn{H(S)} is the entropy regularization term with parameter \
 
 Key parameters:
 \itemize{
-  \item \code{sigma}: RWR restart probability and diffusion parameter
-  \item \code{lambda}: Consistency regularization weights
-  \item \code{tau}: Entropy regularization parameter for Sinkhorn
-  \item \code{solver}: Transport solver ("sinkhorn" or "exact")
+\item \code{sigma}: RWR restart probability and diffusion parameter
+\item \code{lambda}: Consistency regularization weights
+\item \code{tau}: Entropy regularization parameter for Sinkhorn
+\item \code{solver}: Transport solver ("sinkhorn" or "exact")
 }
 
 PARROT tackles network alignment by formulating it as a regularized
@@ -139,31 +175,34 @@ features through Random Walk with Restart (RWR) descriptors and
 enforces structural consistency through neighborhood-preserving
 regularization terms.
 
-
 PARROT operates through the following algorithmic components:
 \itemize{
-  \item \strong{Position-Aware Features}: Compute RWR descriptors
-    capturing network position
-  \item \strong{Cross-Network Cost}: Build transport cost matrix between
-    networks
-  \item \strong{Consistency Regularization}: Add structural similarity
-    constraints
-  \item \strong{Optimal Transport}: Solve regularized transport problem via
-    Sinkhorn
+\item \strong{Position-Aware Features}: Compute RWR descriptors
+capturing network position
+\item \strong{Cross-Network Cost}: Build the position-aware cost
+\eqn{C_{rwr}} from RWR and attribute cosine costs via a Sylvester
+iteration
+\item \strong{Consistency Regularization}: Edge, neighborhood and anchor
+prior terms
+\item \strong{Optimal Transport}: Minimise the regularized objective over
+transport plans with a KL proximal-gradient loop whose steps are
+log-domain Sinkhorn solves
 }
 
-The algorithm minimizes the objective:
-\deqn{L(S) = \langle C, S \rangle + \lambda_1 \Omega_1(S) + \lambda_2 \Omega_2(S) + \tau H(S)}
-
-where \eqn{C} is the position-aware cost matrix, \eqn{\Omega_1, \Omega_2} are consistency
-regularizers, and \eqn{H(S)} is the entropy regularization term with parameter \eqn{\tau}.
+The algorithm minimizes, over plans \eqn{S} with uniform marginals,
+\deqn{F(S) = \langle C_{rwr}, S \rangle + \lambda_e L_e(S) +
+  \lambda_n KL(S \| W_1^T S W_2) + \lambda_p KL(S \| H)}
+where \eqn{L_e} is the edge-consistency term and \eqn{H} the anchor prior.
+Each outer step solves an entropic OT problem with proximal weight
+\eqn{\tau_t \ge \tau}; a step is accepted only if it does not increase
+\eqn{F}, so \code{objective_history} is non-increasing.
 
 Key parameters:
 \itemize{
-  \item \code{sigma}: RWR restart probability and diffusion parameter
-  \item \code{lambda}: Consistency regularization weights
-  \item \code{tau}: Entropy regularization parameter for Sinkhorn
-  \item \code{solver}: Transport solver ("sinkhorn" or "exact")
+\item \code{sigma}: RWR restart probability
+\item \code{lambda}: Consistency regularization weights
+\item \code{tau}: Proximal (KL) step weight of the outer loop
+\item \code{solver}: Transport solver (only \code{"sinkhorn"})
 }
 }
 \examples{
@@ -241,14 +280,14 @@ result_strong <- parrot(hd, anchors = anchors, lambda = 0.5, tau = 0.1)
 
 }
 \references{
-Wang, S., Chen, Z., Yu, X., Li, T., Yang, J., & Liu, X. (2022). PARROT: 
-Position-aware regularized optimal transport for network alignment. 
-In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery 
+Wang, S., Chen, Z., Yu, X., Li, T., Yang, J., & Liu, X. (2022). PARROT:
+Position-aware regularized optimal transport for network alignment.
+In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery
 and Data Mining (pp. 1896-1905).
 
-Wang, S., Chen, Z., Yu, X., Li, T., Yang, J., & Liu, X. (2022). PARROT: 
-Position-aware regularized optimal transport for network alignment. 
-In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery 
+Wang, S., Chen, Z., Yu, X., Li, T., Yang, J., & Liu, X. (2022). PARROT:
+Position-aware regularized optimal transport for network alignment.
+In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery
 and Data Mining (pp. 1896-1905).
 }
 \seealso{

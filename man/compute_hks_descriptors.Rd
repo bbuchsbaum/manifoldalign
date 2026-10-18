@@ -20,36 +20,36 @@ compute_hks_descriptors(
 )
 }
 \arguments{
-\item{basis}{Optional basis list with fields `values` and `vectors`.}
+\item{basis}{Optional basis list with fields \code{values} and \code{vectors}.}
 
-\item{values}{Optional numeric vector of eigenvalues (overrides `basis$values`).}
+\item{values}{Optional numeric vector of eigenvalues (overrides \code{basis$values}).}
 
 \item{vectors}{Optional matrix (or sparse Matrix) of eigenvectors (overrides
-`basis$vectors`).}
+\code{basis$vectors}).}
 
 \item{q}{Integer number of time points.}
 
-\item{times}{Optional numeric time grid. If provided, `time_*` arguments are
+\item{times}{Optional numeric time grid. If provided, \verb{time_*} arguments are
 ignored.}
 
-\item{time_mode}{Either `"auto"` (derive a time range from the spectrum) or
-`"fixed"` (use `time_range`).}
+\item{time_mode}{Either \code{"auto"} (derive a time range from the spectrum) or
+\code{"fixed"} (use \code{time_range}).}
 
 \item{time_range}{Length-2 positive numeric vector giving min/max times when
-`time_mode="fixed"`.}
+\code{time_mode="fixed"}.}
 
-\item{spacing}{Either `"log"` (default; typical for HKS) or `"linear"`.}
+\item{spacing}{Either \code{"log"} (default; typical for HKS) or \code{"linear"}.}
 
 \item{time_scale}{Positive scalar multiplier applied to the time grid.}
 
-\item{eigen_tol}{Positive threshold; eigenpairs with `value <= eigen_tol` are
+\item{eigen_tol}{Positive threshold; eigenpairs with \code{value <= eigen_tol} are
 dropped.}
 
-\item{normalize}{Descriptor normalization: `"both"` (default), `"column"`,
-`"row"`, or `"none"`.}
+\item{normalize}{Descriptor normalization: \code{"both"} (default), \code{"column"},
+\code{"row"}, or \code{"none"}.}
 
-\item{clamp_exponent}{Lower clamp for the exponent (default `-745`), used to
-avoid denormal underflow in `exp(-λ t)`.}
+\item{clamp_exponent}{Lower clamp for the exponent (default \code{-745}), used to
+avoid denormal underflow in \verb{exp(-λ t)}.}
 }
 \value{
 A numeric matrix of dimension N x q.

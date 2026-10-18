@@ -38,9 +38,9 @@ Transport new samples using learned FPGW alignment
 \details{
 This method provides out-of-sample extension for FPGW by:
 \itemize{
-  \item Finding nearest neighbors in the source domain
-  \item Using the transport plan to map to target domain
-  \item Interpolating based on transport weights
+\item Finding nearest neighbors in the source domain
+\item Using the transport plan to map to target domain
+\item Interpolating based on transport weights
 }
 The object must contain the training data used for fitting,
 otherwise an error is thrown.

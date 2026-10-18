@@ -28,7 +28,8 @@ compute_grasp_assignment(
 
 \item{distance_method}{Distance method: "cosine" or "euclidean"}
 
-\item{solver_method}{Assignment solver: "linear", "hungarian", or "auction"}
+\item{solver_method}{Assignment solver: "linear" or "hungarian" (synonyms
+for the exact Hungarian solver; "auction" is not available)}
 }
 \value{
 List with assignment and related matrices

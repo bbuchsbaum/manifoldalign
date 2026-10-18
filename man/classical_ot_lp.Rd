@@ -10,6 +10,7 @@ classical_ot_lp(cost, p, q)
 A numeric matrix representing the optimal transport plan.
 }
 \description{
-Classical OT linear program
+Exact network-simplex solution of \eqn{\min \langle C, \gamma\rangle} over
+\eqn{\Pi(p, q)}. Solver failures are errors (no silent fallback).
 }
 \keyword{internal}

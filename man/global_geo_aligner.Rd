@@ -7,11 +7,12 @@
 global_geo_aligner()
 }
 \value{
-An object of class `c("global_geo_aligner", "aligner")` representing
-  a global geometry alignment algorithm descriptor.
+An object of class \code{c("global_geo_aligner", "aligner")} representing
+a global geometry alignment algorithm descriptor.
 }
 \description{
-Global geometry aligner (native multi-view)
+The capability record declares per-domain linear maps with out-of-sample
+projection of new rows, no new-domain calibration and no inverse map.
 }
 \examples{
 algo <- global_geo_aligner()

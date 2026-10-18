@@ -29,62 +29,62 @@ uot_build_cost(
 \arguments{
 \item{X}{Source coordinates (n x q), with any number of columns q.}
 
-\item{Y}{Template coordinates (m x q), with the same columns as `X`.}
+\item{Y}{Template coordinates (m x q), with the same columns as \code{X}.}
 
 \item{F}{Optional source features (n x D).}
 
 \item{G}{Optional template features (m x D).}
 
 \item{lambda_coord}{Weight for the squared distance between coordinates
-(`X` versus `Y`).}
+(\code{X} versus \code{Y}).}
 
 \item{lambda_feat}{Weight for feature squared distance.}
 
 \item{prior_map}{Optional integer vector (length n) giving a preferred target
-index (1..m) for each source node. When provided with `lambda_prior > 0`,
+index (1..m) for each source node. When provided with \code{lambda_prior > 0},
 adds a soft identity bias term based on squared distances in
-template space between `Y[j,]` and `Y[prior_map[i],]`.}
+template space between \code{Y[j,]} and \code{Y[prior_map[i],]}.}
 
 \item{lambda_prior}{Nonnegative weight for the soft prior term.}
 
-\item{prior_sigma}{Optional positive scale (in the units of `Y`). When set,
-the prior penalty uses `||Y[j]-Y[pref]||^2 / prior_sigma^2`.}
+\item{prior_sigma}{Optional positive scale (in the units of \code{Y}). When set,
+the prior penalty uses \verb{||Y[j]-Y[pref]||^2 / prior_sigma^2}.}
 
-\item{neighbor_mode}{Neighborhood mode: `"auto"`, `"dense"`, `"knn"`,
-`"radius"`, or `"hybrid"`.}
+\item{neighbor_mode}{Neighborhood mode: \code{"auto"}, \code{"dense"}, \code{"knn"},
+\code{"radius"}, or \code{"hybrid"}.}
 
-\item{k_neighbors}{Integer k for kNN neighborhoods (used by `"knn"` and
-`"hybrid"`).}
+\item{k_neighbors}{Integer k for kNN neighborhoods (used by \code{"knn"} and
+\code{"hybrid"}).}
 
-\item{radius}{Positive scalar radius for `"radius"` / `"hybrid"` modes.}
+\item{radius}{Positive scalar radius for \code{"radius"} / \code{"hybrid"} modes.}
 
-\item{maxk}{Maximum number of candidate neighbors requested in `"radius"` /
-`"hybrid"` mode (prevents quadratic blowups).}
+\item{maxk}{Maximum number of candidate neighbors requested in \code{"radius"} /
+\code{"hybrid"} mode (prevents quadratic blowups).}
 
 \item{min_neighbors}{Minimum number of within-radius neighbors required
-per row in `"hybrid"` mode before falling back to kNN.}
+per row in \code{"hybrid"} mode before falling back to kNN.}
 
 \item{group_X}{Optional vector (length n) of hard constraint group labels for
-source nodes. When provided with `group_Y`, neighborhoods are computed
+source nodes. When provided with \code{group_Y}, neighborhoods are computed
 within matching groups only.}
 
 \item{group_Y}{Optional vector (length m) of hard constraint group labels for
-template nodes. Must share the same label alphabet as `group_X`.}
+template nodes. Must share the same label alphabet as \code{group_X}.}
 
 \item{dense_max_bytes}{Maximum dense cost size (in bytes) allowed when
-`neighbor_mode="auto"`. Above this threshold, `"auto"` selects a sparse
+\code{neighbor_mode="auto"}. Above this threshold, \code{"auto"} selects a sparse
 neighborhood.}
 
 \item{ensure_cols}{Logical; if TRUE (default for sparse kNN/hybrid modes),
 adds a minimal set of reverse 1NN edges to ensure every template column has
 at least one incoming edge in the sparse graph.}
 
-\item{lambda_anat}{Deprecated alias of `lambda_coord`; supplying it warns.}
+\item{lambda_anat}{Deprecated alias of \code{lambda_coord}; supplying it warns.}
 }
 \value{
-A dense numeric matrix (n x m) when `neighbor_mode="dense"` (or when
-  `neighbor_mode="auto"` selects dense); otherwise a sparse cost list with
-  CSR+CSC fields.
+A dense numeric matrix (n x m) when \code{neighbor_mode="dense"} (or when
+\code{neighbor_mode="auto"} selects dense); otherwise a sparse cost list with
+CSR+CSC fields.
 }
 \description{
 Cost builder for the multi-set alignment loop. Supports dense costs for

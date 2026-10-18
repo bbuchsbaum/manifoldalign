@@ -9,7 +9,7 @@ gram_Ls(Zop, F)
 \arguments{
 \item{Zop}{Operator for kernel blocks.}
 
-\item{F}{Label factor list from `label_factors()`.}
+\item{F}{Label factor list from \code{label_factors()}.}
 }
 \value{
 Symmetric dense matrix of size r x r.

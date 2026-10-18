@@ -2,9 +2,16 @@
 % Please edit documentation in R/parrot_proximal.R
 \name{solve_sinkhorn_stabilized_r}
 \alias{solve_sinkhorn_stabilized_r}
-\title{Log-domain Stabilized Sinkhorn Algorithm (R implementation)}
+\title{Log-domain Sinkhorn with uniform marginals (R implementation)}
 \usage{
-solve_sinkhorn_stabilized_r(C, tau, max_iter, tol)
+solve_sinkhorn_stabilized_r(
+  C,
+  tau,
+  max_iter,
+  tol,
+  log_u0 = NULL,
+  log_v0 = NULL
+)
 }
 \arguments{
 \item{C}{Cost matrix}
@@ -13,14 +20,22 @@ solve_sinkhorn_stabilized_r(C, tau, max_iter, tol)
 
 \item{max_iter}{Maximum iterations}
 
-\item{tol}{Convergence tolerance}
+\item{tol}{Convergence tolerance on the marginal residual}
+
+\item{log_u0, log_v0}{Optional warm-start log scalings (lengths
+\code{nrow(C)} and \code{ncol(C)})}
 }
 \value{
-Transport plan matrix
+List with \code{plan}, \code{log_u}, \code{log_v} (the plan is
+exactly \code{exp(-C/tau + log_u + t(log_v))}), \code{converged},
+\code{iterations} and \code{marginal_error}.
 }
 \description{
-Implements numerically stable Sinkhorn in log domain.
-For a square matrix (n1=n2), it produces a doubly-stochastic matrix (row/col sums = 1).
-For a rectangular matrix, it produces a transport plan with uniform probability marginals.
+Solves \eqn{\min_{S \in \Pi(\mu,\nu)} \langle C, S\rangle + \tau \sum S(\log S - 1)}
+with uniform marginals on the raw (unscaled) cost, using the same
+iteration and stopping rule as the compiled \code{sinkhorn_unified()}:
+each sweep updates the column then the row potentials, and the loop stops
+when the marginal residual is below \code{tol} or after \code{max_iter}
+sweeps. The plan is returned as computed (no rebalancing).
 }
 \keyword{internal}

@@ -23,12 +23,12 @@ compute_hks_from_adjacency(
 \item{use_normalized_laplacian}{Logical; use the normalized Laplacian
 (default TRUE).}
 
-\item{store_basis}{Logical; if TRUE, return `list(descriptors=, basis=)`.}
+\item{store_basis}{Logical; if TRUE, return \code{list(descriptors=, basis=)}.}
 
-\item{...}{Passed to [compute_hks_descriptors()] (e.g., time grid settings).}
+\item{...}{Passed to \code{\link[=compute_hks_descriptors]{compute_hks_descriptors()}} (e.g., time grid settings).}
 }
 \value{
-A numeric matrix (n x q), or a list when `store_basis=TRUE`.
+A numeric matrix (n x q), or a list when \code{store_basis=TRUE}.
 }
 \description{
 Convenience: compute HKS descriptors from an adjacency matrix

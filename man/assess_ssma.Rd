@@ -32,9 +32,9 @@ assess_ssma(
 \item{noise_sd}{Numeric noise standard deviation added to target features.}
 
 \item{structure}{Synthetic geometry for base coordinates:
-`"ring"`, `"grid"`, `"random"`, or `"community"`.}
+\code{"ring"}, \code{"grid"}, \code{"random"}, or \code{"community"}.}
 
-\item{permute_fraction}{Fraction of nodes to permute (in `(0,1]`).}
+\item{permute_fraction}{Fraction of nodes to permute (in \verb{(0,1]}).}
 
 \item{n_anchors}{Number of synthetic anchor pairs to sample.}
 
@@ -43,22 +43,22 @@ assess_ssma(
 \item{n_reps}{Integer number of replications per size.}
 
 \item{solvers}{Character vector of SSMA solvers to assess:
-`"reduced"` and/or `"operator"`.}
+\code{"reduced"} and/or \code{"operator"}.}
 
 \item{serial}{Logical vector indicating whether to run serial decontamination
-variants (`FALSE`, `TRUE`, or both).}
+variants (\code{FALSE}, \code{TRUE}, or both).}
 
 \item{ssma_knn}{Integer k used for SSMA within-domain graph construction.}
 
 \item{ssma_rank_per_domain}{Integer rank cap for SSMA per-domain reduction.}
 
 \item{ssma_lag_exclusion}{Integer lag exclusion for hard serial masking when
-`serial = TRUE`.}
+\code{serial = TRUE}.}
 
-\item{ncomp}{Optional integer embedding dimension. If `NULL`, uses
-`min(10, n - 2)`.}
+\item{ncomp}{Optional integer embedding dimension. If \code{NULL}, uses
+\code{min(10, n - 2, 2 * min(d, ssma_rank_per_domain))}.}
 
-\item{decode_k}{Integer `k` used for top-k retrieval metrics.}
+\item{decode_k}{Integer \code{k} used for top-k retrieval metrics.}
 
 \item{seed}{Integer base random seed.}
 
@@ -66,11 +66,20 @@ variants (`FALSE`, `TRUE`, or both).}
 }
 \value{
 A data.frame with per-run SSMA diagnostics including:
-  runtime, embedding finite-ness, raw/procrustes decoding metrics, holdout
-  anchor recovery, eigen diagnostics, serial diagnostics, and cross-solver
-  subspace distance when both solvers are run.
+runtime, embedding finite-ness, raw/procrustes decoding metrics, holdout
+anchor recovery, eigen diagnostics, serial diagnostics, and cross-solver
+subspace distance when both solvers are run. Top-1 accuracies use every
+query in the denominator: a missing or out-of-range prediction counts as
+wrong, and \code{top1_procrustes_lap_coverage} reports the fraction of queries
+that received a valid assignment. \code{lap_status} is \code{"ok"}, \code{"unavailable"}
+(the clue package could not be loaded; no assignment accuracy is
+reported) or \code{"not_run"} (no Procrustes map could be estimated or the
+fit failed). The Procrustes map is a rotation plus translation estimated
+on the anchor pairs, \verb{(E2 - mean(E2_anchor)) Q + mean(E1_anchor)}.
+Synthetic data are generated with local seeds; the caller's RNG stream
+is not changed.
 }
 \description{
-Runs `ssma_align()` on synthetic paired-domain problems and reports diagnostics
+Runs \code{ssma_align()} on synthetic paired-domain problems and reports diagnostics
 that separate embedding quality from decoding quality.
 }

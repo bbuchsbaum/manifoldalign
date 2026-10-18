@@ -29,14 +29,14 @@ uot_ti_sinkhorn_kl_sparse_csr_csc_cpp(
 \item{col_idx}{Integer vector of length nnz giving 1-based column indices.}
 
 \item{cost}{Numeric vector of length nnz giving cost values aligned with
-`col_idx`.}
+\code{col_idx}.}
 
 \item{col_ptr}{Integer vector of length m+1 with CSC column offsets (0-based
 or 1-based accepted).}
 
 \item{row_idx}{Integer vector of length nnz giving 1-based row indices.}
 
-\item{cost_csc}{Numeric vector of length nnz aligned with `row_idx`.}
+\item{cost_csc}{Numeric vector of length nnz aligned with \code{row_idx}.}
 
 \item{n_rows}{Number of source nodes (n).}
 
@@ -57,9 +57,9 @@ or 1-based accepted).}
 \item{tol}{Stopping tolerance on the infinity-norm iterate difference.}
 }
 \value{
-A list with translation-invariant potentials `fbar`, `gbar`,
-  translated dual potentials `f`, `g`, translation `lambda`, iteration
-  count, convergence flag, last residual, and backend tag.
+A list with translation-invariant potentials \code{fbar}, \code{gbar},
+translated dual potentials \code{f}, \code{g}, translation \code{lambda}, iteration
+count, convergence flag, last residual, and backend tag.
 }
 \description{
 Sparse CPU implementation using both CSR and CSC representations.

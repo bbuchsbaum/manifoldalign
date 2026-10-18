@@ -23,10 +23,15 @@ compute_laplacian_basis(
 
 \item{normalized}{Logical; use the normalized Laplacian (default TRUE).}
 
-\item{which}{Which eigenpairs to request (passed to the eigensolver). Default
-is `"SA"` (smallest algebraic) for Laplacian bases.}
+\item{which}{Which end of the spectrum to return: \code{"SA"} (smallest
+algebraic; default, the usual choice for Laplacian bases) or \code{"LA"}
+(largest algebraic). Because the Laplacian is positive semi-definite,
+\code{"SM"} and \code{"LM"} are accepted as synonyms; other values are an error.
+If the iterative solver converges fewer eigenpairs than requested, the
+decomposition is recomputed densely for graphs with at most 3000 nodes and
+is an error for larger graphs.}
 
-\item{eig_tol}{Positive threshold; eigenvalues `<= eig_tol` are treated as
+\item{eig_tol}{Positive threshold; eigenvalues \verb{<= eig_tol} are treated as
 trivial and dropped.}
 
 \item{extra}{Integer number of extra eigenpairs requested to survive multiple
@@ -35,12 +40,12 @@ near-zero modes on disconnected graphs.}
 \item{seed}{Integer seed used to build a deterministic initial vector for
 RSpectra (helps reproducibility).}
 
-\item{tol}{Numeric tolerance passed to RSpectra/PRIMME when available.}
+\item{tol}{Numeric convergence tolerance passed to RSpectra.}
 
 \item{maxitr}{Maximum iterations passed to RSpectra when available.}
 }
 \value{
-A list with fields `values` (length k) and `vectors` (n x k).
+A list with fields \code{values} (length k) and \code{vectors} (n x k).
 }
 \description{
 Compute a Laplacian spectral basis (eigenpairs) from an adjacency matrix

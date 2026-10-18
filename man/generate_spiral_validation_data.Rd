@@ -15,7 +15,8 @@ generate_spiral_validation_data(
 
 \item{noise_level}{Gaussian noise standard deviation.}
 
-\item{seed}{Random seed for reproducibility.}
+\item{seed}{Random seed for reproducibility. The fixture is generated with
+this seed locally; the caller's RNG stream is left unchanged.}
 }
 \value{
 A list with domain data, labels, and combined strata.

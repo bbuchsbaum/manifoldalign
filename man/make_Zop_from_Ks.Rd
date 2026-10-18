@@ -8,7 +8,7 @@ pre-computed kernel blocks.}
 make_Zop_from_Ks(Ks)
 }
 \arguments{
-\item{Ks}{List of `Matrix` objects (each n_i x r_i) representing kernel
+\item{Ks}{List of \code{Matrix} objects (each n_i x r_i) representing kernel
 evaluations for a block.}
 }
 \value{

@@ -29,11 +29,11 @@ benchmark_token_ot_graph_align_scalability(
 
 \item{n_levels}{Integer number of multilevel hierarchy levels.}
 
-\item{prior_mode}{Prior lifting mode for multilevel (`"none"`, `"hard"`, `"soft"`).}
+\item{prior_mode}{Prior lifting mode for multilevel (\code{"none"}, \code{"hard"}, \code{"soft"}).}
 
-\item{token_mode}{Tokenization mode passed to [token_ot_graph_align_control()].}
+\item{token_mode}{Tokenization mode passed to \code{\link[=token_ot_graph_align_control]{token_ot_graph_align_control()}}.}
 
-\item{views}{Views passed to [token_ot_graph_align_control()].}
+\item{views}{Views passed to \code{\link[=token_ot_graph_align_control]{token_ot_graph_align_control()}}.}
 
 \item{n_reps}{Integer number of replications per size.}
 

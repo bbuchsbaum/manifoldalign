@@ -13,7 +13,7 @@
 }
 \value{
 A data.frame with columns for sample index, label, and
-  representative status.
+representative status.
 }
 \description{
 Convert pseudolabels to data.frame

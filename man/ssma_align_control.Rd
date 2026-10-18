@@ -2,7 +2,7 @@
 % Please edit documentation in R/ssma_align.R
 \name{ssma_align_control}
 \alias{ssma_align_control}
-\title{Control settings for `ssma_align()`}
+\title{Control settings for \code{ssma_align()}}
 \usage{
 ssma_align_control(
   knn = 15L,
@@ -28,7 +28,7 @@ ssma_align_control(
 \item{knn}{Integer k used to build within-domain kNN graphs.}
 
 \item{sigma}{Optional positive heat-kernel bandwidth for within-domain
-graph weights. If `NULL`, per-domain auto-tuning via [choose_sigma()] is
+graph weights. If \code{NULL}, per-domain auto-tuning via \code{\link[=choose_sigma]{choose_sigma()}} is
 used.}
 
 \item{corr_edge_weight}{Non-negative scalar correspondence edge weight.}
@@ -48,10 +48,10 @@ correspondences.}
 \item{eig_tol}{Non-negative threshold for filtering trivial generalized
 eigenvalues.}
 
-\item{regularization}{Positive ridge regularizer added to reduced `B` matrix
+\item{regularization}{Positive ridge regularizer added to reduced \code{B} matrix
 before whitening.}
 
-\item{solver}{One of `"auto"`, `"reduced"`, or `"operator"`.}
+\item{solver}{One of \code{"auto"}, \code{"reduced"}, or \code{"operator"}.}
 
 \item{operator_tol}{Positive convergence tolerance for operator eigensolve.}
 
@@ -65,11 +65,11 @@ operator spectral scale.}
 \item{verbose}{Logical progress toggle.}
 
 \item{serial_control}{Serial-correlation handling settings from
-[ssma_serial_control()].}
+\code{\link[=ssma_serial_control]{ssma_serial_control()}}.}
 }
 \value{
-A list of class `ssma_align_control`.
+A list of class \code{ssma_align_control}.
 }
 \description{
-Control settings for `ssma_align()`
+Control settings for \code{ssma_align()}
 }

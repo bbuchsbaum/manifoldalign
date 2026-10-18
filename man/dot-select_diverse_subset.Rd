@@ -20,7 +20,7 @@
 
 \item{target_size}{Target number of representatives}
 
-\item{diversity_weight}{Weight for diversity vs confidence [0,1]. 
+\item{diversity_weight}{Weight for diversity vs confidence \verb{[0, 1]}.
 0 = pure confidence (largest clusters), 1 = pure diversity, 0.5 = balanced}
 
 \item{cluster_assignments}{Vector of cluster assignments (for confidence scores)}
@@ -31,7 +31,7 @@
 Vector of selected representative indices
 }
 \description{
-ENHANCED: Use a greedy algorithm with continuous weighting between 
+ENHANCED: Use a greedy algorithm with continuous weighting between
 diversity and cluster confidence scores.
 }
 \keyword{internal}

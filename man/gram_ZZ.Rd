@@ -7,7 +7,7 @@
 gram_ZZ(Zop, block_size = 128L)
 }
 \arguments{
-\item{Zop}{Operator as returned by `make_Zop_from_Ks` or similar.}
+\item{Zop}{Operator as returned by \code{make_Zop_from_Ks} or similar.}
 
 \item{block_size}{Number of identity columns processed per batch.}
 }

@@ -80,7 +80,7 @@ plot_cycle_consistency <- function(diagnostics,
 #' symmetric residuals (min over directions when both i->j and j->i are given),
 #' then draws a heatmap.
 #'
-#' @param diagnostics List returned by align_many(...)[["diagnostics"]]
+#' @param diagnostics The `diagnostics` element of an [align_many()] result
 #' @param N Optional number of domains; inferred when NULL
 #' @param na_color Fill color for missing cells
 #' @return ggplot object
@@ -118,7 +118,7 @@ plot_edge_residuals_heatmap <- function(diagnostics, N = NULL, na_color = "#f0f0
 #' Returns a data.frame of the top-K edges with largest residuals; includes
 #' edge weights when available.
 #'
-#' @param diagnostics List returned by align_many(...)[["diagnostics"]]
+#' @param diagnostics The `diagnostics` element of an [align_many()] result
 #' @param top Number of worst edges to return
 #' @return data.frame with columns i, j, residual, weight
 #' @examples

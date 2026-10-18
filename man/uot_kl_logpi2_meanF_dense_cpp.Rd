@@ -22,7 +22,7 @@ uot_kl_logpi2_meanF_dense_cpp(cost, alpha, beta, fbar, gbar, epsilon, F = NULL)
 \item{F}{Optional source features (n x D). If provided, returns mean features.}
 }
 \value{
-A list with `log_pi2` (length m) and optionally `mean_F` (m x D).
+A list with \code{log_pi2} (length m) and optionally \code{mean_F} (m x D).
 }
 \description{
 Given translation-invariant dual potentials (fbar,gbar), compute the log of

@@ -16,7 +16,7 @@ choose_sigma(X, sample_size = 1000)
 Suggested sigma value
 }
 \description{
-Estimates a reasonable sigma parameter for RBF kernels using the median 
+Estimates a reasonable sigma parameter for RBF kernels using the median
 pairwise distance heuristic, which often works well in practice.
 }
 \examples{

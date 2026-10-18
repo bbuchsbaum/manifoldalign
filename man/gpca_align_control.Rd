@@ -2,7 +2,7 @@
 % Please edit documentation in R/gpca_align.R
 \name{gpca_align_control}
 \alias{gpca_align_control}
-\title{Control settings for `gpca_align.hyperdesign()`}
+\title{Control settings for \code{gpca_align.hyperdesign()}}
 \usage{
 gpca_align_control(
   knn = NA_integer_,
@@ -29,17 +29,17 @@ gpca_align_control(
 
 \item{verbose}{Logical toggle for informational messages}
 
-\item{max_dense_elems}{Maximum dense elements permitted when forming the block matrix (set `NA` to auto-tune)}
+\item{max_dense_elems}{Maximum dense elements permitted when forming the block matrix (set \code{NA} to auto-tune)}
 
 \item{memory_fraction}{Fraction of available RAM to consider safe when auto-tuning densification}
 
 \item{memory_safety_bytes}{Absolute byte cushion to subtract when auto-tuning densification}
 }
 \value{
-A list of class `gpca_align_control`
+A list of class \code{gpca_align_control}
 }
 \description{
-Control settings for `gpca_align.hyperdesign()`
+Control settings for \code{gpca_align.hyperdesign()}
 }
 \examples{
 ctrl <- gpca_align_control(knn = 15, normalize = "fro")

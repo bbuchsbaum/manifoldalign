@@ -31,17 +31,17 @@ gromov_wasserstein(data, ...)
 
 \item{...}{Additional arguments passed to methods:
 \itemize{
-  \item \code{epsilon}: Entropic regularization parameter (default: 0.1)
-  \item \code{metric}: Distance metric for within-domain distances (default: "euclidean")
-  \item \code{init}: Initialization method: "uniform" (default), "random", or initial transport plans
-  \item \code{max_iter}: Maximum iterations for optimization (default: 100)
-  \item \code{tol}: Convergence tolerance (default: 1e-9)
-  \item \code{verbose}: Print convergence information (default: FALSE)
-  \item \code{marginals}: Optional list of marginal distributions
-  \item \code{scale}: How to scale distance matrices (default: "per_domain")
-  \item \code{inner_max_iter}: Maximum iterations for inner Sinkhorn loop (default: 30)
-  \item \code{inner_tol}: Convergence tolerance for inner Sinkhorn iterations (default: 1e-9)
-  \item \code{dist_chunk_size}: Chunk size for memory-efficient distance computation (default: 1000)
+\item \code{epsilon}: Entropic regularization parameter (default: 0.1)
+\item \code{metric}: Distance metric for within-domain distances (default: "euclidean")
+\item \code{init}: Initialization method: "uniform" (default), "random", or initial transport plans
+\item \code{max_iter}: Maximum iterations for optimization (default: 100)
+\item \code{tol}: Convergence tolerance (default: 1e-9)
+\item \code{verbose}: Print convergence information (default: FALSE)
+\item \code{marginals}: Optional list of marginal distributions
+\item \code{scale}: How to scale distance matrices (default: "per_domain")
+\item \code{inner_max_iter}: Maximum iterations for inner Sinkhorn loop (default: 30)
+\item \code{inner_tol}: Convergence tolerance for inner Sinkhorn iterations (default: 1e-9)
+\item \code{dist_chunk_size}: Chunk size for memory-efficient distance computation (default: 1000)
 }}
 
 \item{epsilon}{Entropic regularization parameter. Default: 0.1}
@@ -67,10 +67,31 @@ gromov_wasserstein(data, ...)
 \item{dist_chunk_size}{Chunk size for distance computation. Default: 1000}
 }
 \value{
-A `gromov_wasserstein` object containing transport plans, pairwise distances, convergence status, and domain metadata. See `gromov_wasserstein.hyperdesign` for full details.
+A \code{gromov_wasserstein} object containing transport plans, pairwise distances, convergence status, and domain metadata. See \code{gromov_wasserstein.hyperdesign} for full details.
 }
 \description{
 Generic function for computing Gromov-Wasserstein distance between domains
+}
+\details{
+For each pair of domains the solver minimises the entropic GW objective
+\deqn{E(P) = \sum_{i,j,k,l} (C^1_{ik} - C^2_{jl})^2 P_{ij} P_{kl} +
+  \epsilon \sum_{ij} P_{ij} \log P_{ij}}
+over couplings with marginals \code{p} and \code{q} by the projected
+mirror-descent scheme of Peyre, Cuturi & Solomon (2016): each outer step
+solves an entropic OT problem whose cost is the gradient \eqn{2M(P)} of the
+quadratic term, with regularisation \code{epsilon}. Its fixed points are
+stationary points of \eqn{E} with the same \code{epsilon}, and the
+reported \code{losses} are \eqn{E(P)}. The inner entropic OT problems use a
+log-stabilised Sinkhorn iteration; if it cannot produce a finite coupling
+the function stops with an error rather than substituting another plan.
+\code{distances} are \eqn{\sqrt{\langle M(P), P\rangle}} (without the
+entropy term).
+
+The returned object is not a projector and does not inherit from
+\code{multiblock_biprojector}. Dense plans for all pairs are held in memory;
+the estimated size is checked against
+\code{getOption("manifoldalign.ot_max_dense_bytes")} (default 4e9 bytes)
+before any work starts.
 }
 \examples{
 \donttest{

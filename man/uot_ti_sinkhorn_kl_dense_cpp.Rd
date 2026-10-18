@@ -33,9 +33,9 @@ uot_ti_sinkhorn_kl_dense_cpp(
 \item{tol}{Stopping tolerance on the infinity-norm iterate difference.}
 }
 \value{
-A list with translation-invariant potentials `fbar`, `gbar`,
-  translated dual potentials `f`, `g`, translation `lambda`, iteration
-  count, convergence flag, and last residual.
+A list with translation-invariant potentials \code{fbar}, \code{gbar},
+translated dual potentials \code{f}, \code{g}, translation \code{lambda}, iteration
+count, convergence flag, and last residual.
 }
 \description{
 CPU implementation of the KL translation-invariant Sinkhorn updates for

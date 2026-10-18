@@ -7,16 +7,16 @@
 multiset_uot_map(fit, datasets, signals, epsilon = NULL, delta = 1e-08)
 }
 \arguments{
-\item{fit}{A result from [multiset_uot_align()].}
+\item{fit}{A result from \code{\link[=multiset_uot_align]{multiset_uot_align()}}.}
 
-\item{datasets}{The datasets list originally passed to [multiset_uot_align()].
-Each dataset must contain `alpha`.}
+\item{datasets}{The datasets list originally passed to \code{\link[=multiset_uot_align]{multiset_uot_align()}}.
+Each dataset must contain \code{alpha}.}
 
 \item{signals}{A list of length K of signals, each a numeric vector (length N_k)
 or matrix (T x N_k).}
 
 \item{epsilon}{Optional override of the entropic parameter. If NULL, uses
-`fit$params$epsilon`.}
+\code{fit$params$epsilon}.}
 
 \item{delta}{Stabilizer for the barycentric denominator.}
 }
@@ -24,7 +24,7 @@ or matrix (T x N_k).}
 A list of mapped signals (length K), each in template space.
 }
 \description{
-Convenience helper for [multiset_uot_align()]. It applies each dataset's
-fitted UOT map to the corresponding signal, using the **final** template
-weights and the pairwise potentials stored in `fit$fits`.
+Convenience helper for \code{\link[=multiset_uot_align]{multiset_uot_align()}}. It applies each dataset's
+fitted UOT map to the corresponding signal, using the \strong{final} template
+weights and the pairwise potentials stored in \code{fit$fits}.
 }

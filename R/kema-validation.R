@@ -98,9 +98,9 @@ validate_kema_eigenvalues <- function(expected_eigenvals = c(0.82, 0.41),
 #' @details
 #' Historical results from this function are invalid. KEMA fits now carry a
 #' kernel encoder: embed held-out rows with [oos_predict()] (see
-#' [oos_predict.kema_fit()]), and use [cv_alignment_rows()] for leakage-safe
+#' \code{\link[=oos_predict.kema_fit]{oos_predict.kema_fit()}}), and use [cv_alignment_rows()] for leakage-safe
 #' held-out alignment scoring.
-#' @seealso [oos_predict.kema_fit()], [cv_alignment_rows()]
+#' @seealso \code{\link[=oos_predict.kema_fit]{oos_predict.kema_fit()}}, [cv_alignment_rows()]
 #' @examples
 #' \dontrun{
 #' validate_out_of_sample_reconstruction()

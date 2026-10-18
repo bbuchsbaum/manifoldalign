@@ -2,7 +2,8 @@
 % Please edit documentation in R/adapters_rapid_ma.R
 \name{oos_predict.rapid_ma}
 \alias{oos_predict.rapid_ma}
-\title{Out-of-sample RAPID-MA embedding and prediction}
+\alias{oos_predict.rapid_ma_pair_fit}
+\title{Out-of-Sample RAPID-MA Embedding and Prediction}
 \usage{
 \method{oos_predict}{rapid_ma}(
   fit_or_transform,
@@ -16,13 +17,17 @@
   view_weights = c(feature = 1),
   ...
 )
+
+\method{oos_predict}{rapid_ma_pair_fit}(fit_or_transform, newX, side = c("i", "j"), ...)
 }
 \arguments{
-\item{fit_or_transform}{A fitted `rapid_ma` or `rapid_ma_pair_fit`.}
+\item{fit_or_transform}{A fitted \code{rapid_ma} or \code{rapid_ma_pair_fit}.}
 
-\item{newX}{New rows in the original feature space of `side`.}
+\item{newX}{New rows in the original feature space of \code{side}.}
 
-\item{side}{Domain name, index, or pairwise alias `"i"`/`"j"`.}
+\item{side}{Domain name, index, or pairwise alias \code{"i"}/\code{"j"}. A fitted
+domain whose name is literally \code{"i"} or \code{"j"} takes precedence over the
+alias.}
 
 \item{type}{Return embedding coordinates, class probabilities, class labels,
 or all diagnostics.}
@@ -37,14 +42,29 @@ interpolation.}
 \item{new_attributes}{Optional attribute data frame for structure-aware OOS
 interpolation.}
 
-\item{view_weights}{Named nonnegative weights over `feature`, `position`, and
-`attribute`. The default is feature-only for backward compatibility.}
+\item{view_weights}{Named nonnegative weights over \code{feature}, \code{position}, and
+\code{attribute}. The default is feature-only for backward compatibility.}
 
-\item{...}{Unused.}
+\item{...}{Additional arguments forwarded by the pair-fit method; unused by
+the \code{rapid_ma} method.}
 }
 \value{
-A matrix/vector, or a diagnostic list when `type = "all"`.
+A matrix or vector (with the row names of \code{newX}), or a list
+containing embeddings, probabilities, classes, confidence, and
+bounded-neighbour diagnostics when \code{type = "all"}.
 }
 \description{
-Out-of-sample RAPID-MA embedding and prediction
+Applies retained deterministic feature, position, and attribute encoders and
+interpolates fitted RAPID-MA scores and probabilities from bounded
+nearest-neighbour supports. Feature-only interpolation remains the default.
+Exact training-row reapplication reproduces the fitted values.
+}
+\details{
+Each active view contributes Gaussian-kernel interpolation weights over its
+\code{k} nearest retained training rows (bandwidth: the median neighbour distance
+of the query row); views are mixed with the normalized \code{view_weights}. When
+the feature view is active and a query row lies within \code{zero_tolerance} of a
+retained training row, the fitted values of that row (or the average of
+exact duplicates) are returned. The feature nearest-neighbour search runs
+only when the feature view has positive weight.
 }

@@ -25,87 +25,99 @@ lowrank_align(data, y, ...)
 \arguments{
 \item{data}{Input data object}
 
-\item{y}{Variable name for labels (unquoted). Can contain NA values for 
+\item{y}{Variable name for labels (unquoted). Can contain NA values for
 unlabeled samples in semi-supervised learning scenarios.}
 
 \item{...}{Additional arguments passed to specific methods}
 
-\item{preproc}{Preprocessing function (default: center())}
+\item{preproc}{Preprocessing (default: center()): a single preprocessor
+broadcast to all domains, a list with one entry per domain, or \code{NULL} for
+none. \code{NULL} entries are recorded as an identity transform.}
 
 \item{ncomp}{Number of components to extract (default: 2)}
 
-\item{simfun}{Function to compute similarity matrix from labels. Should 
+\item{simfun}{Function to compute similarity matrix from labels. Should
 handle NA labels gracefully (e.g., created with createSimFun())}
 
-\item{mu}{Balance parameter between low-rank (μ=0) and similarity (μ=1) 
+\item{mu}{Balance parameter between low-rank (μ=0) and similarity (μ=1)
 terms (default: 0.5)}
 
-\item{lambda}{Regularization parameter for glmnet. If NULL (default), uses 
-cross-validation to select optimal lambda via cv.glmnet. If specified, 
+\item{lambda}{Regularization parameter for glmnet. If NULL (default), uses
+cross-validation to select optimal lambda via cv.glmnet. If specified,
 uses the provided value directly.}
 
-\item{scale_M}{Logical. If TRUE, scales M matrix to have similar eigenvalue 
-magnitude as L. This can improve numerical conditioning but changes the 
-mathematical objective. When enabled, consider adjusting the mu parameter 
+\item{scale_M}{Logical. If TRUE, scales M matrix to have similar eigenvalue
+magnitude as L. This can improve numerical conditioning but changes the
+mathematical objective. When enabled, consider adjusting the mu parameter
 accordingly (default: FALSE)}
 
-\item{n_cores}{Number of threads for PRIMME eigenvalue computations. If 
-NULL (default), uses system default. Set to 1 for reproducible results 
+\item{n_cores}{Number of threads for PRIMME eigenvalue computations. If
+NULL (default), uses system default. Set to 1 for reproducible results
 across systems.}
 
 \item{sv_thresh}{Singular value threshold used when forming R (default: 1).
-Values at or below the threshold are discarded, matching Eq. 11 of the
-original Low-Rank Alignment paper.}
+Only singular values strictly greater than \code{max(sv_thresh, 1)} are kept:
+the closed-form factor \code{1 - 1/s^2} of Eq. 11 of the original Low-Rank
+Alignment paper is non-positive for \code{s <= 1}, so values of \code{sv_thresh}
+below 1 behave exactly like \code{sv_thresh = 1}. Larger values discard more
+directions. Must be a finite non-negative number.}
 
-\item{solver}{Eigen solver backend. `"explicit"` (default) forms the dense
-matrices and uses PRIMME, matching the original implementation. `"operator"`
-keeps low-rank factors and uses RSpectra with a matrix-vector operator to
-reduce memory and runtime.}
+\item{solver}{Eigen solver backend. \code{"explicit"} (default) forms the
+matrices and uses PRIMME when it is installed (otherwise a dense
+eigendecomposition for up to 2000 samples, or RSpectra), matching the
+original implementation. \code{"operator"} keeps low-rank factors and uses
+RSpectra with a matrix-vector operator to reduce memory and runtime.}
 }
 \value{
-The return value depends on the specific method. For hyperdesign 
-  objects, returns a multiblock_biprojector object containing alignment 
-  results, eigenvectors, preprocessing information, and metadata.
+The return value depends on the specific method. For hyperdesign
+objects, returns a multiblock_biprojector object containing alignment
+results, eigenvectors, preprocessing information, and metadata.
 }
 \description{
-Performs low-rank alignment using eigenvalue decomposition. Balances 
-low-rank structure with similarity-based constraints. Supports 
+Performs low-rank alignment using eigenvalue decomposition. Balances
+low-rank structure with similarity-based constraints. Supports
 semi-supervised learning with missing labels.
 }
 \details{
-Low-rank alignment optimizes the objective function Z = (1-μ) * M + 2μ * L 
-where M captures low-rank structure and L is the graph Laplacian from 
-similarity matrix. The method balances preserving low-rank structure 
+Low-rank alignment optimizes the objective function Z = (1-μ) * M + 2μ * L
+where M captures low-rank structure and L is the graph Laplacian from
+similarity matrix. The method balances preserving low-rank structure
 (μ=0) with enforcing similarity constraints (μ=1).
 
-**Semi-supervised Learning Support:**
+\strong{Semi-supervised Learning Support:}
 The algorithm handles NA labels gracefully. Unlabeled samples:
-- Still contribute to the low-rank structure term M through their data
-- Do not participate in the similarity constraints (L term)
-- Receive coordinates in the joint embedding space
-- Create isolated nodes that produce zero eigenvalues (automatically 
-  skipped)
+\itemize{
+\item Still contribute to the low-rank structure term M through their data
+\item Do not participate in the similarity constraints (L term)
+\item Receive coordinates in the joint embedding space
+\item Create isolated nodes that produce zero eigenvalues (automatically
+skipped)
+}
 
 The scale_M parameter controls whether to apply eigenvalue-based scaling:
-- scale_M = FALSE (default): Uses original formulation 
-  Z = (1-μ) * M + 2μ * L
-- scale_M = TRUE: Applies scaling M := M * (λ₁(L)/λ₁(M)), changing the 
-  objective
+\itemize{
+\item scale_M = FALSE (default): Uses original formulation
+Z = (1-μ) * M + 2μ * L
+\item scale_M = TRUE: Applies scaling M := M * (λ₁(L)/λ₁(M)), changing the
+objective
+}
 
-When scale_M = TRUE, the mu parameter no longer has its original 
-mathematical meaning for balancing the two terms, as the relative scales 
+When scale_M = TRUE, the mu parameter no longer has its original
+mathematical meaning for balancing the two terms, as the relative scales
 have been artificially adjusted.
 
-For reproducibility across different systems, set n_cores = 1 to ensure 
+For reproducibility across different systems, set n_cores = 1 to ensure
 deterministic results from PRIMME eigenvalue computations.
 
-**Handling NA Labels:**
+\strong{Handling NA Labels:}
 Samples with NA labels are supported through the following mechanism:
-- They contribute to the low-rank reconstruction term M = (I-R)ᵀ(I-R)
-- They do not participate in similarity constraints (zero rows/columns in C)
-- They create isolated nodes with zero degree, producing zero eigenvalues
-- The algorithm automatically detects and skips these zero modes
-- Final embedding includes coordinates for all samples (labeled and unlabeled)
+\itemize{
+\item They contribute to the low-rank reconstruction term M = (I-R)ᵀ(I-R)
+\item They do not participate in similarity constraints (zero rows/columns in C)
+\item They create isolated nodes with zero degree, producing zero eigenvalues
+\item The algorithm automatically detects and skips these zero modes
+\item Final embedding includes coordinates for all samples (labeled and unlabeled)
+}
 }
 \examples{
 \donttest{

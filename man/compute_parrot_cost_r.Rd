@@ -20,7 +20,7 @@ compute_parrot_cost_r(
 
 \item{anchor_info}{List with anchor information for both networks}
 
-\item{alpha}{Weight for RWR vs attribute cost (default: 0.5)}
+\item{alpha}{Weight of the attribute cost; the RWR cost gets \code{1 - alpha}}
 
 \item{sigma}{RWR restart probability (beta in paper)}
 
@@ -31,7 +31,9 @@ Position-aware cost matrix C_rwr
 }
 \description{
 Follows the two-stage process from the paper:
-1. Compute C_node = alpha * cost_RWR + (1-alpha) * cost_attr (Eq. 3)
-2. Solve Sylvester equation for C_rwr (Eq. 4)
+\enumerate{
+\item Compute C_node = (1 - alpha) * cost_RWR + alpha * cost_attr (Eq. 3)
+\item Solve Sylvester equation for C_rwr (Eq. 4)
+}
 }
 \keyword{internal}

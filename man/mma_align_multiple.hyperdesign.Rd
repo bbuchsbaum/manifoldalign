@@ -40,7 +40,11 @@
 
 \item{ref_idx}{Integer; which domain acts as reference (default 1)}
 
-\item{preproc}{Preprocessing function (default multivarious::center())}
+\item{preproc}{A multivarious pre-processor (default \code{center()}), a
+list with one per domain, a plain function, or \code{NULL}. Pre-processors
+are fitted on each domain separately and stored in \code{result$preproc}
+(concatenated by feature block) for out-of-sample projection. A plain
+function is applied to the training data only and is not stored.}
 
 \item{ncomp}{Number of components; set NULL to choose automatically}
 
@@ -74,7 +78,11 @@
 
 \item{em_sigma0}{Optional initial stddev in embedding units; NULL for auto}
 
-\item{em_outlier}{Prior mass for uniform outlier component (default 0.01)}
+\item{em_outlier}{Prior mass \eqn{w} of the uniform outlier component
+(default 0.01). Posteriors follow Coherent Point Drift: with \eqn{M}
+Gaussian centroids, \eqn{N} data points and embedding dimension \eqn{K},
+the outlier term in the posterior denominator is
+\eqn{(2\pi\sigma^2)^{K/2} \frac{w}{1-w} \frac{M}{N}}.}
 
 \item{force_SO}{Logical; if TRUE, force det(R)=+1 (default FALSE)}
 
@@ -90,14 +98,34 @@ match_to="consensus": "ref" (use ref domain size) or "min" (use minimum size)}
 \item{consensus_init}{Initialization for consensus centers: "ref" or "kmeans"}
 
 \item{final_assignment}{Optional post-processing: "none" (default), "hungarian",
-or "argmax". Affects only extras$assignment; core EM remains soft.}
+or "argmax". Affects only extras$assignment; core EM remains soft. Both
+rules return, for every domain \eqn{g}, an integer vector of length
+\eqn{n_g}: entry \eqn{j} is the reference row (reference mode) or
+consensus centre (consensus mode) matched to row \eqn{j} of domain
+\eqn{g}. "argmax" takes the highest posterior per row (many-to-one);
+"hungarian" solves a one-to-one assignment maximising the summed
+posterior, and rows left unmatched when \eqn{n_g} exceeds the number of
+reference rows/centres are \code{NA}. The reference domain's own
+assignment is the identity.}
 
 \item{...}{Unused.}
 }
 \value{
 A multiblock alignment object with stacked scores, block loadings,
-  and extras (rotations, posteriors, histogram alignment info, and optionally
-  consensus and final assignment).
+and extras (rotations, posteriors, histogram alignment info, and optionally
+consensus and final assignment). Score rows follow the input row order of
+each domain. \code{rotations[[g]]} is the orthogonal \eqn{R_g} with
+\eqn{E_g \approx E_{ref} R_g^\top} (reference mode) or
+\eqn{E_g \approx C R_g^\top} (consensus mode), so the aligned scores are
+\eqn{E_g R_g}. \code{posteriors[[g]]} has one row per reference row or
+consensus centre and one column per row of domain \eqn{g}. The loadings
+\code{v} are the minimum-norm least-squares map from each domain's
+preprocessed features to its aligned scores, an approximation of the
+nonlinear spectral embedding that is exact only when the features have
+full row rank. \code{em_stats} reports EM iterations, whether the
+relative log-likelihood change fell below \code{em_tol}
+(\code{converged}), the final \eqn{\sigma^2} and the CPD
+log-likelihood.
 }
 \description{
 Aligns 3+ domains by: (i) building spectral embeddings (commute-time or
@@ -107,14 +135,18 @@ probabilistic point-registration on the orthogonal group.
 }
 \details{
 Two matching modes are supported:
-- match_to = "reference": pairwise EM to a chosen reference domain.
-- match_to = "consensus": joint EM that learns a shared template (consensus centers)
-  along with per-domain orthogonal transforms; supports unequal node counts naturally.
+\itemize{
+\item match_to = "reference": pairwise EM to a chosen reference domain.
+\item match_to = "consensus": joint EM that learns a shared template (consensus centers)
+along with per-domain orthogonal transforms; supports unequal node counts naturally.
+}
 
 The implementation reuses shared helpers in this package:
-- adjoin::graph_weights + adjacency for graph building
-- graph_laplacian (internal) for Laplacian construction
-- safe_compute, compute_block_indices, feature_block_indices, new_alignment_result
+\itemize{
+\item adjoin::graph_weights + adjacency for graph building
+\item graph_laplacian (internal) for Laplacian construction
+\item safe_compute, compute_block_indices, feature_block_indices, new_alignment_result
+}
 }
 \examples{
 \donttest{

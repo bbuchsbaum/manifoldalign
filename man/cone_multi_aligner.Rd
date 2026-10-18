@@ -7,11 +7,13 @@
 cone_multi_aligner()
 }
 \value{
-An object of class `c("cone_multi_aligner", "aligner")` representing
-  a CONE-Align multiple alignment algorithm descriptor.
+An object of class \code{c("cone_multi_aligner", "aligner")} representing
+a CONE-Align multiple alignment algorithm descriptor.
 }
 \description{
-CONE-Align multiple aligner (native multi-view)
+CONE-Align embeds each domain's neighbourhood graph and matches nodes, so
+it is transductive: the capability record declares no feature encoder and
+no out-of-sample prediction.
 }
 \examples{
 algo <- cone_multi_aligner()

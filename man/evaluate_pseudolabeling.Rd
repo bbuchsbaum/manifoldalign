@@ -15,18 +15,18 @@ evaluate_pseudolabeling(predicted_labels, true_labels, verbose = TRUE)
 }
 \value{
 A list containing evaluation metrics:
-  \item{n_predicted_clusters}{Number of predicted clusters found}
-  \item{n_true_clusters}{Number of true clusters in ground truth}
-  \item{coverage}{Proportion of samples assigned to clusters}
-  \item{purity}{Average purity of predicted clusters (proportion of 
-    dominant class)}
-  \item{completeness}{Average majority-class recall (proportion of true 
-    cluster members captured by their dominant predicted cluster)}
-  \item{confusion_matrix}{Confusion matrix between predicted and true 
-    labels}
+\item{n_predicted_clusters}{Number of predicted clusters found}
+\item{n_true_clusters}{Number of true clusters in ground truth}
+\item{coverage}{Proportion of samples assigned to clusters}
+\item{purity}{Average purity of predicted clusters (proportion of
+dominant class)}
+\item{completeness}{Average majority-class recall (proportion of true
+cluster members captured by their dominant predicted cluster)}
+\item{confusion_matrix}{Confusion matrix between predicted and true
+labels}
 }
 \description{
-Compares pseudolabeling results with known true cluster assignments. 
+Compares pseudolabeling results with known true cluster assignments.
 Uses various clustering evaluation metrics for assessment.
 }
 \examples{

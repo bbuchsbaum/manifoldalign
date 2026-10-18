@@ -2,7 +2,7 @@
 % Please edit documentation in R/adapters_rapid_ma.R
 \name{rapid_ma_match}
 \alias{rapid_ma_match}
-\title{Bounded multi-view matching for a RAPID-MA fit}
+\title{Bounded Multi-View Matching for a RAPID-MA Fit}
 \usage{
 rapid_ma_match(
   fit,
@@ -23,7 +23,7 @@ rapid_ma_match(
 )
 }
 \arguments{
-\item{fit}{A fitted `rapid_ma` object.}
+\item{fit}{A fitted \code{rapid_ma} object.}
 
 \item{from, to}{Source and target domains.}
 
@@ -47,9 +47,16 @@ retrieval. Pair transforms use the one-to-one default.}
 \item{latent_weight, structure_weight, position_weight, attribute_weight, prototype_weight}{Nonnegative reranking weights.}
 }
 \value{
-A `rapid_ma_matching` object with a sparse assignment operator,
-  match table, coverage, confidence, and unmatched-node diagnostics.
+A \code{rapid_ma_matching} object with a sparse assignment operator,
+match table, coverage, confidence, anchors, candidate-set size, and
+unmatched-node diagnostics.
 }
 \description{
-Bounded multi-view matching for a RAPID-MA fit
+Generates candidates through sparse node-to-prototype supports and bounded
+nearest-neighbour indexes over retained comparable views. It reranks only
+the bounded candidate set with latent, structural, position, attribute, and
+prototype evidence and constructs either a one-to-one assignment or an
+independent retrieval result. It never materializes a dense cross-domain
+node-pair matrix; the returned \code{candidate_edges} and \code{candidate_density}
+report the size of the scored candidate set.
 }

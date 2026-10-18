@@ -43,9 +43,9 @@ multiscale_manifold_align_control(
 \arguments{
 \item{enabled}{Logical; enable multiscale mode.}
 
-\item{backend}{Character backend name. One of `"spectral"` or `"randomized_dwt"`.}
+\item{backend}{Character backend name. One of \code{"spectral"} or \code{"randomized_dwt"}.}
 
-\item{operator_mode}{Character operator mode. Currently `"compressed_graph_core"`.}
+\item{operator_mode}{Character operator mode. Currently \code{"compressed_graph_core"}.}
 
 \item{rank_per_domain}{Integer per-domain truncation rank for compressed operators.}
 
@@ -55,15 +55,15 @@ multiscale_manifold_align_control(
 
 \item{max_levels}{Integer maximum hierarchy depth.}
 
-\item{eps_rank}{Numeric relative truncation threshold in `(0, 1]`.}
+\item{eps_rank}{Numeric relative truncation threshold in \verb{(0, 1]}.}
 
-\item{eigen_solver}{Character eigensolver selector. One of `"lobpcg"` or `"lanczos"`.}
+\item{eigen_solver}{Character eigensolver selector. One of \code{"lobpcg"} or \code{"lanczos"}.}
 
 \item{eigen_k_max}{Integer cap on eigenvectors for spectral hierarchy.}
 
 \item{knn}{Integer nearest-neighbor graph degree for within-domain graphs.}
 
-\item{sigma}{Optional positive scalar graph bandwidth. If `NULL`, auto-tuned per domain.}
+\item{sigma}{Optional positive scalar graph bandwidth. If \code{NULL}, auto-tuned per domain.}
 
 \item{cross_edge_weight}{Numeric non-negative weight for cross-domain correspondence edges.}
 
@@ -86,12 +86,12 @@ multiscale_manifold_align_control(
 \item{cg_max_iter}{Integer maximum iterations for iterative solves.}
 
 \item{scale_selection}{How to weight scales when assembling the multiscale
-dictionary. One of `"energy"`, `"supervised"`, or `"hybrid"`.}
+dictionary. One of \code{"energy"}, \code{"supervised"}, or \code{"hybrid"}.}
 
-\item{supervision_weight}{Weight in `[0, 1]` used when
-`scale_selection = "hybrid"`.}
+\item{supervision_weight}{Weight in \verb{[0, 1]} used when
+\code{scale_selection = "hybrid"}.}
 
-\item{min_scale_weight}{Relative threshold in `[0, 1)` for keeping a scale in
+\item{min_scale_weight}{Relative threshold in \verb{[0, 1)} for keeping a scale in
 the final dictionary.}
 
 \item{max_basis_per_scale}{Integer cap on the number of basis vectors retained
@@ -100,24 +100,24 @@ from each scale after compression.}
 \item{regularization}{Positive ridge regularization for the final dictionary
 generalized eigenproblem.}
 
-\item{tune}{Logical; whether to tune `cross_edge_weight`, `rank_per_domain`,
-and `max_levels` over small candidate grids before the final fit.}
+\item{tune}{Logical; whether to tune \code{cross_edge_weight}, \code{rank_per_domain},
+and \code{max_levels} over small candidate grids before the final fit.}
 
 \item{candidate_cross_edge_weight}{Optional numeric vector of candidate
-cross-edge weights used when `tune = TRUE`.}
+cross-edge weights used when \code{tune = TRUE}.}
 
 \item{candidate_rank_per_domain}{Optional integer vector of candidate
-`rank_per_domain` values used when `tune = TRUE`.}
+\code{rank_per_domain} values used when \code{tune = TRUE}.}
 
-\item{candidate_max_levels}{Optional integer vector of candidate `max_levels`
-values used when `tune = TRUE`.}
+\item{candidate_max_levels}{Optional integer vector of candidate \code{max_levels}
+values used when \code{tune = TRUE}.}
 
 \item{seed}{Integer random seed.}
 
 \item{verbose}{Logical; print backend progress messages.}
 }
 \value{
-A list with class `multiscale_manifold_align_control`.
+A list with class \code{multiscale_manifold_align_control}.
 }
 \description{
 Control settings for multiscale manifold alignment backends

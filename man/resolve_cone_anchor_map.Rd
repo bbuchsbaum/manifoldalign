@@ -12,8 +12,8 @@ resolve_cone_anchor_map(vec1, vec2)
 \item{vec2}{Anchor labels for target domain (length n2)}
 }
 \value{
-A list with `map` (integer vector length n1, NA for unanchored)
-  and `values` of shared anchors; or NULL if no anchors found.
+A list with \code{map} (integer vector length n1, NA for unanchored)
+and \code{values} of shared anchors; or NULL if no anchors found.
 }
 \description{
 Returns a mapping from source indices to target indices using label vectors

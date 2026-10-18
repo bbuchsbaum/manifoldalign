@@ -2,7 +2,7 @@
 % Please edit documentation in R/rapid_ma_semisup.R
 \name{rapid_ma_semisup_control}
 \alias{rapid_ma_semisup_control}
-\title{Control RAPID-MA semi-supervised teacher refinement}
+\title{Control RAPID-MA Semi-Supervised Teacher Refinement}
 \usage{
 rapid_ma_semisup_control(
   rounds = 3L,
@@ -31,7 +31,8 @@ rapid_ma_semisup_control(
 \arguments{
 \item{rounds}{Maximum pseudo-label refresh rounds.}
 
-\item{ema_decay}{EMA teacher retention in `[0, 1)`.}
+\item{ema_decay}{Teacher retention in \verb{[0, 1)} for the exponential moving
+average (EMA) teacher.}
 
 \item{confidence_threshold}{Base class confidence threshold.}
 
@@ -39,7 +40,11 @@ rapid_ma_semisup_control(
 
 \item{balance_strength}{Amount by which rare classes receive lower thresholds.}
 
-\item{max_pseudo_fraction}{Maximum fraction of eligible nodes selected per round.}
+\item{max_pseudo_fraction}{Hard maximum fraction of eligible unlabelled
+nodes per domain that can be pseudo-labelled in one round. The budget is
+split evenly across classes (at least one candidate per class while budget
+remains); when the per-class floor would exceed the total budget, the most
+confident candidates are kept.}
 
 \item{min_margin}{Minimum top-one versus top-two probability margin.}
 
@@ -47,16 +52,17 @@ rapid_ma_semisup_control(
 
 \item{min_weight}{Minimum accepted pseudo-label weight.}
 
-\item{relation_consistency}{Require agreement with trusted relation neighbours.}
+\item{relation_consistency}{Whether candidates must agree with trusted
+relation neighbours.}
 
-\item{relation_validation}{Use explicitly supplied out-of-fold probabilities
-to guard against misleading relation channels.}
+\item{relation_validation}{Whether explicitly supplied out-of-fold
+probabilities guard against misleading relation channels.}
 
 \item{relation_validation_margin}{Minimum balanced-accuracy improvement over
 the full relation set before selecting a safer subset.}
 
 \item{relation_validation_max_relations}{Maximum highest-weight relations
-considered when constructing bounded single and pair candidates.}
+used to construct bounded single and pair candidates.}
 
 \item{propagation_steps}{Fixed number of sparse relation-propagation steps.}
 
@@ -73,8 +79,9 @@ considered when constructing bounded single and pair candidates.}
 \item{rollback_tolerance}{Allowed score increase before rollback.}
 }
 \value{
-A `rapid_ma_semisup_control` object.
+A \code{rapid_ma_semisup_control} object.
 }
 \description{
-Control RAPID-MA semi-supervised teacher refinement
+Controls deterministic relation propagation, class-balanced guarded
+pseudo-label selection, EMA teacher updates, and rollback.
 }

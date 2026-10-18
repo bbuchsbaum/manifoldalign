@@ -2,7 +2,7 @@
 % Please edit documentation in R/rapid_ma_control.R
 \name{rapid_ma_control}
 \alias{rapid_ma_control}
-\title{Control RAPID-MA optimization and bounded sparse components}
+\title{Control RAPID-MA Optimization and Bounded Sparse Components}
 \usage{
 rapid_ma_control(
   max_iter = 8L,
@@ -38,29 +38,79 @@ rapid_ma_control(
 
 \item{max_backtracks}{Maximum damped retries after an objective increase.}
 
-\item{backtrack_factor}{Multiplicative step reduction in `(0, 1)`.}
+\item{backtrack_factor}{Multiplicative step reduction in \verb{(0, 1)}.}
 
-\item{map_type}{Shared-coordinate map: `"ridge"`, `"orthogonal"`, or
-`"identity"`.}
+\item{map_type}{Shared-coordinate map: \code{"ridge"}, \code{"orthogonal"}, or
+\code{"identity"}. Orthogonal maps stay orthogonal under damped updates: the
+blended coefficient matrix is replaced by its polar factor.}
 
 \item{map_ridge}{Positive ridge penalty for small latent map solves.}
 
-\item{map_step}{Initial map update fraction in `(0, 1]`.}
-
-\item{prototype_step}{Initial prototype update fraction in `(0, 1]`.}
+\item{map_step, prototype_step}{Initial map and prototype update fractions in
+\verb{(0, 1]}.}
 
 \item{uot_weight, structure_weight, supervised_weight}{Nonnegative objective
 component weights.}
 
-\item{relation, diffusion, prototype, uot, relmatch}{Named nested control lists.}
+\item{relation, diffusion, prototype, uot, relmatch}{Optional named nested
+control lists for the corresponding RAPID-MA components; see Details.}
 
-\item{seed}{Nonnegative deterministic seed.}
+\item{seed}{Nonnegative deterministic seed for hashed sketches.}
 
-\item{verbose}{Emit iteration progress.}
+\item{verbose}{Whether to emit iteration progress.}
 }
 \value{
-A `rapid_ma_control` object.
+A \code{rapid_ma_control} object.
 }
 \description{
-Control RAPID-MA optimization and bounded sparse components
+Validates the alternating solver settings and resolves all nested sparse
+graph, diffusion, prototype, transport, and relation-matching controls.
+}
+\details{
+Each nested component (\code{relation}, \code{diffusion}, \code{prototype}, \code{uot},
+\code{relmatch}) accepts \code{NULL} (defaults) or a named list of fields. Every path,
+including a plain named list passed as \code{control} to \code{\link[=rapid_ma]{rapid_ma()}} and a
+previously constructed control object that was edited afterwards, is
+revalidated field by field; unknown field names are an error.
+
+Fields of the nested components:
+\itemize{
+\item \code{relation}: \code{build_feature}, \code{feature_k}, \code{feature_sketch_dim},
+\code{spatial_mode} (\code{"relative"}, \code{"common"}, \code{"ignore"}), \code{spatial_k},
+\code{spatial_radius}, \code{spatial_sigma}, \code{attribute_mode} (\code{"relation"},
+\code{"shared"}, \code{"ignore"}), \code{attribute_k}, \code{attribute_hash_dim},
+\code{normalization} (\code{"random_walk"}, \code{"symmetric"}), \code{weight_mode}
+(\code{"heat"}, \code{"binary"}), \code{degree_cap}, \code{custom_symmetrize}, \code{dense_max_n}.
+When \code{feature_sketch_dim} is \code{NULL} the feature sketch width is
+\code{min(ncol(X), max(128, 4 * ncomp))}.
+\item \code{diffusion}: \code{steps}, \code{sketch_dim}, \code{output_dim}, \code{gate} (\code{"energy"},
+\code{"uniform"}, \code{"fixed"}), \code{relation_weights}, \code{gate_temperature},
+\code{label_gate_weight}, \code{include_position}, \code{include_attribute},
+\code{include_signatures}, \code{direction_mode} (\code{"bidirectional"}, \code{"forward"}),
+\code{reverse_degree_cap}, \code{block_size}, \code{ridge}, \code{store_propagations}, \code{seed}.
+\code{output_dim} and \code{seed} are overwritten by \code{\link[=rapid_ma]{rapid_ma()}} with \code{ncomp} and
+the top-level \code{seed}, and \code{sketch_dim} is raised to at least the feature
+sketch width and \code{ncomp} (it is a floor, not a cap). In
+\code{"bidirectional"} mode a reverse propagation channel is added only for
+relations that are directed before normalization.
+\item \code{prototype}: \code{prototypes_per_class}, \code{unknown_prototypes},
+\code{unknown_level}, \code{embedding_weight}, \code{structure_weight},
+\code{attribute_weight}, \code{min_mass}, \code{class_smoothing}, \code{max_recoveries},
+\code{seed}. Prototype initialization is deterministic farthest-point seeding
+in canonical row order and draws no random numbers; \code{seed} is only
+recorded in the prototype diagnostics.
+\item \code{uot}: \code{q}, \code{epsilon}, \code{rho_source}, \code{rho_target}, \code{latent_weight},
+\code{structure_weight}, \code{attribute_weight}, \code{position_weight}, \code{label_weight},
+\code{label_confidence_threshold}, \code{hard_labels}, \code{anchor_weight},
+\code{hard_anchors}, \code{block_size}, \code{ensure_prototype_coverage}, \code{cost_cap},
+\code{max_iter}, \code{tol}, \code{require_convergence}. \code{\link[=rapid_ma]{rapid_ma()}} folds position
+coordinates into the structure cost view (weighted by
+\code{structure_weight}); \code{position_weight} applies only to a separate
+position view, which \code{\link[=rapid_ma]{rapid_ma()}} never supplies, so a non-default value
+triggers a warning there.
+\item \code{relmatch}: \code{normalization} (\code{"mass"}, \code{"frobenius"}, \code{"symmetric"}),
+\code{storage}, \code{sparse_threshold}, \code{relation_gate} (\code{"robust"}, \code{"uniform"},
+\code{"fixed"}), \code{relation_weights}, \code{gate_temperature}, \code{min_mass},
+\code{dense_coupling_max_entries}.
+}
 }

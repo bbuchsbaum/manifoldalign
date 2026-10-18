@@ -12,7 +12,7 @@ plot_cycle_consistency(
 )
 }
 \arguments{
-\item{diagnostics}{List returned in `align_many(...)[["diagnostics"]]`}
+\item{diagnostics}{List returned in \code{align_many(...)[["diagnostics"]]}}
 
 \item{N}{Optional number of domains; inferred from diagnostics when NULL}
 

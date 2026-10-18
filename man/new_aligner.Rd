@@ -11,7 +11,10 @@ new_aligner(name, group, supports_multi = FALSE, ...)
 
 \item{group}{One of "O" (orthogonal), "GL" (linear), "perm" (assignment),
 "kernel" (embedding-only), or "encoder" (a native multi-domain method that
-learns per-domain encoders and is never synchronised pairwise)}
+learns per-domain encoders and is never synchronised pairwise). Only
+"O", "GL" and "perm" have relative transforms that \code{\link[=align_many]{align_many()}} can
+synchronise; "kernel" and "encoder" aligners must be native
+(\code{supports_multi = TRUE}).}
 
 \item{supports_multi}{Logical; if TRUE, adapter should also implement
 a native multi-domain entry point via fit_many()}
@@ -19,7 +22,7 @@ a native multi-domain entry point via fit_many()}
 \item{...}{Additional fields stored on the object}
 }
 \value{
-An object of class c("<name>_aligner", "aligner")
+An object of class c("\if{html}{\out{<name>}}_aligner", "aligner")
 }
 \description{
 This file defines a minimal, method-agnostic interface for lifting

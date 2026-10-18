@@ -4,7 +4,14 @@
 \alias{align_bases_multiset}
 \title{Joint Basis Alignment for Multiple Graphs}
 \usage{
-align_bases_multiset(bases, descriptors, lambda, max_iter = 100, tol = 1e-06)
+align_bases_multiset(
+  bases,
+  descriptors,
+  lambda,
+  max_iter = 100,
+  tol = 1e-06,
+  verbose = FALSE
+)
 }
 \arguments{
 \item{bases}{List of spectral bases from compute_grasp_basis}
@@ -16,6 +23,8 @@ align_bases_multiset(bases, descriptors, lambda, max_iter = 100, tol = 1e-06)
 \item{max_iter}{Maximum iterations}
 
 \item{tol}{Convergence tolerance}
+
+\item{verbose}{Logical; report convergence via message()}
 }
 \value{
 List with rotations and convergence info

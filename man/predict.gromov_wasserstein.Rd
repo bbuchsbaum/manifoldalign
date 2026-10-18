@@ -23,9 +23,12 @@
 
 \item{to}{Target domain index or name}
 
-\item{type}{Prediction type. `"weights"` (default) returns barycentric
-weights over target-domain samples. `"transport"` returns barycentric
-combinations of target-domain features when available.}
+\item{type}{Prediction type. \code{"weights"} (default) returns barycentric
+weights over target-domain samples: the inverse-distance weighted
+average of the row-normalised coupling rows of the \code{k} nearest
+source-domain training samples. \code{"transport"} returns those weights
+multiplied by the target-domain features (the barycentric projection), so
+both types always agree; there is no implicit fallback to another map.}
 
 \item{k}{Number of nearest neighbours used to build the barycentric
 combination (default: 5).}
@@ -33,8 +36,8 @@ combination (default: 5).}
 \item{...}{Reserved for future use.}
 }
 \value{
-Matrix of barycentric weights (`type = "weights"`) or transported
-  samples (`type = "transport"`).
+Matrix of barycentric weights (\code{type = "weights"}) or transported
+samples (\code{type = "transport"}).
 }
 \description{
 Transport new samples using the learned GW alignment.

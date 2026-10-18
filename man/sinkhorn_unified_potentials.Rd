@@ -31,14 +31,17 @@ sinkhorn_unified_potentials(
 
 \item{max_iter}{Maximum iterations}
 
-\item{tol}{Convergence tolerance}
+\item{tol}{Convergence tolerance on the marginal residual}
 
-\item{stabilized}{Use log-domain stabilization for small epsilon}
+\item{stabilized}{Use log-domain iterations}
 }
 \value{
-A list with elements pi (plan), log_u, log_v
+A list with elements \code{pi} (plan), \code{log_u}, \code{log_v},
+\code{converged}, \code{iterations} and \code{marginal_error}
+(max absolute row/column marginal violation of \code{pi}).
 }
 \description{
-This variant returns both the transport plan and the (log) scaling vectors
-that can be reused to warm-start subsequent Sinkhorn solves.
+Same solver as \code{sinkhorn_unified()}, additionally returning the log
+scaling vectors (\code{pi = exp(-cost/epsilon + log_u + log_v^T)} exactly)
+and convergence diagnostics.
 }

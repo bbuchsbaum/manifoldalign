@@ -14,7 +14,7 @@
   sigma = 0.73,
   lambda = 0.1,
   use_laplacian = TRUE,
-  solver = c("linear", "hungarian", "auction"),
+  solver = c("linear", "hungarian"),
   ...
 )
 }
@@ -37,14 +37,19 @@
 
 \item{use_laplacian}{Logical; if TRUE use graph Laplacian, else adjacency}
 
-\item{solver}{Assignment solver: "linear", "hungarian", or "auction"}
+\item{solver}{Assignment solver: \code{"linear"} or \code{"hungarian"}; both run the
+exact linear assignment solver.}
 
 \item{...}{Additional arguments (unused)}
 }
 \value{
-An object of class grasp_pair_fit containing rotation (kxk matrix),
-  mapping_matrix (assignment matrix), assignment vector, loss (numeric),
-  and k (latent dimension).
+An object of class grasp_pair_fit containing rotation (kxk signed
+permutation \code{M} with \code{C_j \%*\% M ~ C_i}), the descriptor coefficients
+\code{coefficients = list(i = C_i, j = C_j)} (\code{C = t(F) \%*\% Phi}, q x k),
+mapping_matrix (assignment matrix), assignment vector, loss (numeric),
+and k (latent dimension). The rotation acts on spectral-basis
+coordinates, not on the raw features, so \code{align_many()} cannot embed the
+raw domains with it.
 }
 \description{
 GRASP-specific method for pairwise alignment using spectral bases and

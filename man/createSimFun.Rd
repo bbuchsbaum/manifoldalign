@@ -8,13 +8,13 @@ createSimFun(S, na_value = 0)
 }
 \arguments{
 \item{S}{A square similarity matrix whose row/column names define the label
-vocabulary. Only labels present in `rownames(S)` are assigned similarities.}
+vocabulary. Only labels present in \code{rownames(S)} are assigned similarities.}
 
 \item{na_value}{Deprecated; ignored (kept for backward compatibility). NA and
 unknown labels always map to zero similarity to preserve sparsity.}
 }
 \value{
-A function `f(labels)` that returns an `n x n` sparse similarity matrix.
+A function \code{f(labels)} that returns an \verb{n x n} sparse similarity matrix.
 }
 \description{
 Builds a function that maps a vector of labels to a sparse similarity matrix.
@@ -22,7 +22,7 @@ Unknown/NA labels receive all-zero rows/columns, and the result is guaranteed
 symmetric with zero diagonal.
 }
 \details{
-This is useful as `simfun` for [`lowrank_align()`], where labels may include
+This is useful as \code{simfun} for \code{\link[=lowrank_align]{lowrank_align()}}, where labels may include
 missing values in semi-supervised settings.
 }
 \examples{

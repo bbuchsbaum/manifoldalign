@@ -19,9 +19,9 @@ nonnegative; the diagonal is set to 0 by default.}
 \eqn{L = I - D^{-1/2} A D^{-1/2}}. If FALSE, compute the unnormalized
 Laplacian \eqn{L = D - A}.}
 
-\item{symmetrize}{Logical; if TRUE (default), symmetrize via `(A + t(A))/2`.}
+\item{symmetrize}{Logical; if TRUE (default), symmetrize via \code{(A + t(A))/2}.}
 
-\item{zero_diagonal}{Logical; if TRUE (default), set `diag(A)=0` before
+\item{zero_diagonal}{Logical; if TRUE (default), set \code{diag(A)=0} before
 forming the Laplacian.}
 }
 \value{

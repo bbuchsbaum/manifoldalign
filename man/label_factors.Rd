@@ -10,8 +10,8 @@ label_factors(labels)
 \item{labels}{Character/factor vector with NA for unlabeled samples}
 }
 \value{
-List with sparse label factor matrix `C`, indicator vector `ell`, and
-  diagonal entries for the same/different-class Laplacians.
+List with sparse label factor matrix \code{C}, indicator vector \code{ell}, and
+diagonal entries for the same/different-class Laplacians.
 }
 \description{
 These helpers avoid materializing dense class similarity matrices and block

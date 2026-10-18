@@ -50,74 +50,74 @@ benchmark_graph_alignment_methods(
 \item{noise_sd}{Numeric noise standard deviation added to target features.}
 
 \item{structure}{Character vector of synthetic geometries for base node
-coordinates: `"ring"`, `"grid"`, `"random"`, or `"community"`.}
+coordinates: \code{"ring"}, \code{"grid"}, \code{"random"}, or \code{"community"}.}
 
-\item{permute_fraction}{Fraction of nodes to permute (in `(0,1]`).}
+\item{permute_fraction}{Fraction of nodes to permute (in \verb{(0,1]}).}
 
 \item{n_anchors}{Integer number of anchor correspondences to add (0 allowed).}
 
 \item{methods}{Character vector of methods to run. Options include:
-`"token_ot_graph"`, `"cone_align"`, `"grasp"`, `"parrot"`, `"fpgw"`,
-`"ssma"`, `"lra"`, `"gpca"`.}
+\code{"token_ot_graph"}, \code{"cone_align"}, \code{"grasp"}, \code{"parrot"}, \code{"fpgw"},
+\code{"ssma"}, \code{"lra"}, \code{"gpca"}.}
 
 \item{decode_mode}{Decoding mode for mapping source nodes to targets:
-`"native"` uses each method's native assignment/transport decoding;
-`"common_nn"` uses nearest-neighbor decoding on aligned scores for all
-methods; `"common_procrustes_lap"` uses anchor-Procrustes (when anchors are
+\code{"native"} uses each method's native assignment/transport decoding;
+\code{"common_nn"} uses nearest-neighbor decoding on aligned scores for all
+methods; \code{"common_procrustes_lap"} uses anchor-Procrustes (when anchors are
 available) followed by LAP/Hungarian decoding on aligned scores.}
 
-\item{ssma_procrustes}{Logical; when `FALSE` (default), SSMA ignores
-`"common_procrustes_lap"` and decodes in its own common space via
-nearest-neighbor (`"common_nn"`). Set `TRUE` to explicitly benchmark an
-`SSMA+Procrustes` decode variant.}
+\item{ssma_procrustes}{Logical; when \code{FALSE} (default), SSMA ignores
+\code{"common_procrustes_lap"} and decodes in its own common space via
+nearest-neighbor (\code{"common_nn"}). Set \code{TRUE} to explicitly benchmark an
+\code{SSMA+Procrustes} decode variant.}
 
 \item{candidate_k}{Integer number of candidates per source node for
-`token_ot_graph_align()`.}
+\code{token_ot_graph_align()}.}
 
 \item{coarsen_method}{Coarsening method for multilevel Token-OT alignment:
-`"kmeans"` or `"louvain"`.}
+\code{"kmeans"} or \code{"louvain"}.}
 
-\item{token_mode}{Tokenization mode passed to [token_ot_graph_align_control()].}
+\item{token_mode}{Tokenization mode passed to \code{\link[=token_ot_graph_align_control]{token_ot_graph_align_control()}}.}
 
-\item{views}{Views passed to [token_ot_graph_align_control()].}
+\item{views}{Views passed to \code{\link[=token_ot_graph_align_control]{token_ot_graph_align_control()}}.}
 
 \item{n_levels}{Integer number of multilevel hierarchy levels for
-`token_ot_graph_align()`.}
+\code{token_ot_graph_align()}.}
 
-\item{prior_mode}{Prior lifting mode for multilevel (`"none"`, `"hard"`, `"soft"`).}
+\item{prior_mode}{Prior lifting mode for multilevel (\code{"none"}, \code{"hard"}, \code{"soft"}).}
 
-\item{fpgw_omega1}{Weight of the feature term for `fpgw()` (0–1).}
+\item{fpgw_omega1}{Weight of the feature term for \code{fpgw()} (0–1).}
 
-\item{fpgw_epsilon}{Entropic warm-start regularization for `fpgw()`.}
+\item{fpgw_epsilon}{Entropic warm-start regularization for \code{fpgw()}.}
 
-\item{fpgw_max_iter}{Maximum Frank-Wolfe iterations for `fpgw()`.}
+\item{fpgw_max_iter}{Maximum Frank-Wolfe iterations for \code{fpgw()}.}
 
-\item{fpgw_inner_max_iter}{Inner iterations for `fpgw()` updates.}
+\item{fpgw_inner_max_iter}{Inner iterations for \code{fpgw()} updates.}
 
-\item{fpgw_tol}{Convergence tolerance for `fpgw()`.}
+\item{fpgw_tol}{Convergence tolerance for \code{fpgw()}.}
 
-\item{ssma_solver}{Solver passed to [ssma_align_control()] for `ssma_align()`.}
+\item{ssma_solver}{Solver passed to \code{\link[=ssma_align_control]{ssma_align_control()}} for \code{ssma_align()}.}
 
 \item{ssma_knn}{Integer k for within-domain graph construction in SSMA.}
 
 \item{ssma_rank_per_domain}{Integer per-domain rank cap in SSMA reduction.}
 
-\item{ssma_use_serial}{Logical; if `TRUE`, enable serial decontamination in SSMA.}
+\item{ssma_use_serial}{Logical; if \code{TRUE}, enable serial decontamination in SSMA.}
 
 \item{ssma_lag_exclusion}{Non-negative lag exclusion radius for SSMA serial
-hard masking when `ssma_use_serial = TRUE`.}
+hard masking when \code{ssma_use_serial = TRUE}.}
 
-\item{lra_mu}{Mixing parameter for `lowrank_align()` (`mu` argument).}
+\item{lra_mu}{Mixing parameter for \code{lowrank_align()} (\code{mu} argument).}
 
-\item{lra_lambda}{Ridge parameter passed to `lowrank_align()`.}
+\item{lra_lambda}{Ridge parameter passed to \code{lowrank_align()}.}
 
-\item{lra_sv_thresh}{Singular-value threshold passed to `lowrank_align()`.}
+\item{lra_sv_thresh}{Singular-value threshold passed to \code{lowrank_align()}.}
 
-\item{lra_solver}{Solver backend passed to `lowrank_align()`.}
+\item{lra_solver}{Solver backend passed to \code{lowrank_align()}.}
 
-\item{gpca_u}{Within/between trade-off parameter passed to `gpca_align()`.}
+\item{gpca_u}{Within/between trade-off parameter passed to \code{gpca_align()}.}
 
-\item{gpca_lambda}{Ridge regularization passed to `gpca_align()`.}
+\item{gpca_lambda}{Ridge regularization passed to \code{gpca_align()}.}
 
 \item{n_reps}{Integer number of replications per size.}
 

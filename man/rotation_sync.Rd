@@ -7,7 +7,8 @@
 rotation_sync(G, W, E, N, k)
 }
 \arguments{
-\item{G}{list of align_transform objects (group="O"), each a relative g_ij}
+\item{G}{list of align_transform objects (group="O"), each a relative g_ij
+from domain \code{E$i} to domain \code{E$j}}
 
 \item{W}{numeric weights per edge in E}
 
@@ -21,7 +22,11 @@ rotation_sync(G, W, E, N, k)
 list of per-domain align_transform objects mapping to consensus
 }
 \description{
-Rotation synchronization for orthogonal group O(k)
+Solves \code{T_i ~ g_ij \%*\% T_j} over all edges (the relation implied by the
+transform contract in \code{\link[=new_align_transform]{new_align_transform()}}) by the spectral relaxation:
+the top-\code{k} eigenvectors of the degree-normalised block matrix with blocks
+\verb{W_ij g_ij} (and \verb{W_ij t(g_ij)} below the diagonal), projected blockwise to
+O(k).
 }
 \examples{
 \donttest{

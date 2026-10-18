@@ -17,10 +17,11 @@ cone_align_multiple(data, ...)
   sigma = 0.73,
   lambda = 0.1,
   use_laplacian = TRUE,
-  solver = c("linear", "auction"),
+  solver = "linear",
   max_iter = 30,
   tol = 0.01,
   knn = NULL,
+  verbose = FALSE,
   ...
 )
 
@@ -35,7 +36,7 @@ cone_align_multiple(data, ...)
 
 \item{ref_idx}{Which domain acts as initial reference (default: 1)}
 
-\item{preproc}{Preprocessing function to apply to the data (default: center())}
+\item{preproc}{See the hyperdesign method.}
 
 \item{ncomp}{Number of embedding dimensions (default: 10)}
 
@@ -45,8 +46,7 @@ cone_align_multiple(data, ...)
 
 \item{use_laplacian}{Whether to use Laplacian normalization (default: TRUE)}
 
-\item{solver}{Assignment algorithm: "linear" for exact assignment (default), 
-"auction" for large-scale approximation}
+\item{solver}{Assignment algorithm; see the hyperdesign method.}
 
 \item{max_iter}{Maximum number of iterations (default: 30)}
 
@@ -54,15 +54,29 @@ cone_align_multiple(data, ...)
 
 \item{knn}{Number of nearest neighbors for graph construction
 (default: adaptive)}
+
+\item{verbose}{Logical; if TRUE, report convergence of the alternating
+assignment/rotation updates (default: FALSE).}
 }
 \value{
 A \code{multiblock_biprojector} object containing alignment results
-  for all graphs
+for all graphs
 }
 \description{
 Performs CONE-Align on three or more graph domains simultaneously. Extends the
 pairwise CONE-Align algorithm to handle multiple graphs through iterative
 alignment to a common reference frame.
+}
+\details{
+The result is a \code{multiblock_biprojector} of class
+\code{cone_align_multiple}. Score rows follow each domain's input row
+order; every domain is rotated into the frame of the reference domain.
+\code{assignment[[g]][i]} is the row of domain \code{g} matched to row
+\code{i} of the reference domain. \code{v} holds least-squares loadings
+from each domain's preprocessed features to its aligned scores (exact only
+for full-row-rank features; otherwise the best linear approximation).
+\code{converged} is a per-domain logical and \code{iterations} the
+largest number of pairwise iterations.
 }
 \examples{
 \donttest{
@@ -75,5 +89,5 @@ result <- cone_align_multiple(list(X1, X2, X3), ncomp = 2)
 }
 \seealso{
 \code{\link{cone_align}} for pairwise alignment,
-  \code{\link{cone_align_multiple.hyperdesign}} for detailed documentation
+\code{\link{cone_align_multiple.hyperdesign}} for detailed documentation
 }

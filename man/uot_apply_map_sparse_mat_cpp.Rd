@@ -25,7 +25,7 @@ or 1-based accepted; if 1-based, it must start at 0 or 1 and be nondecreasing).}
 
 \item{row_idx}{Integer vector of length nnz giving 1-based row indices.}
 
-\item{cost_csc}{Numeric vector of length nnz aligned with `row_idx`.}
+\item{cost_csc}{Numeric vector of length nnz aligned with \code{row_idx}.}
 
 \item{n_rows}{Number of source nodes.}
 

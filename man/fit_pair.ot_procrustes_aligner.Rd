@@ -18,7 +18,7 @@
   decay = 0.95,
   n_init = 1L,
   seed = NULL,
-  max_iter = 50,
+  max_iter = 100,
   tol = 1e-06,
   sinkhorn_max_iter = 200,
   sinkhorn_tol = 1e-06,
@@ -40,9 +40,9 @@
 
 \item{links}{Optional correspondence links (currently unused).}
 
-\item{i}{Internal domain index used by [align_many()] (unused).}
+\item{i}{Internal domain index used by \code{\link[=align_many]{align_many()}} (unused).}
 
-\item{j}{Internal domain index used by [align_many()] (unused).}
+\item{j}{Internal domain index used by \code{\link[=align_many]{align_many()}} (unused).}
 
 \item{a}{Optional source marginal (length nrow(X_i)); defaults to uniform.}
 
@@ -54,32 +54,40 @@
 
 \item{decay}{Multiplicative decay factor in (0,1] applied each iteration.}
 
-\item{n_init}{Number of random restarts. When `init="identity"` and
-`n_init>1`, the method tries the identity, then a deterministic
+\item{n_init}{Number of random restarts. When \code{init="identity"} and
+\code{n_init>1}, the method tries the identity, then a deterministic
 distance-signature initialization, and uses remaining runs for random
 orthogonal restarts. The best run (lowest loss) is returned.}
 
 \item{seed}{Optional seed for reproducible initialization. When called via
-[align_many()], the internal `i` and `j` indices are used to derive a
-per-edge seed from this value.}
+\code{\link[=align_many]{align_many()}}, the internal \code{i} and \code{j} indices are used to derive a
+per-edge seed from this value. The caller's RNG state is restored
+afterwards.}
 
-\item{max_iter}{Maximum number of outer (alternating) iterations.}
+\item{max_iter}{Maximum number of outer (alternating) iterations. The
+default (100) lets the default annealing schedule (\code{epsilon0 = 1},
+\code{decay = 0.95}) reach \code{epsilon_min = 0.05} after 60 iterations and leaves
+room to converge there.}
 
-\item{tol}{Convergence tolerance on max entrywise change in the rotation.}
+\item{tol}{Convergence tolerance on max entrywise change in the rotation.
+A run is reported as \code{converged} only once the annealing schedule has
+reached \code{epsilon_min} and the rotation changed by less than \code{tol}; a
+schedule that cannot reach \code{epsilon_min} within \code{max_iter} iterations
+therefore never reports convergence.}
 
 \item{sinkhorn_max_iter}{Maximum number of Sinkhorn iterations.}
 
 \item{sinkhorn_tol}{Sinkhorn convergence tolerance.}
 
 \item{stabilized}{Logical; use log-domain stabilization in Sinkhorn (slower
-but helpful when `epsilon_min` is very small).}
+but helpful when \code{epsilon_min} is very small).}
 
-\item{cost_scale}{Cost normalization used before Sinkhorn: `"median"` divides
-by the median positive cost, `"max"` divides by the maximum cost, and
-`"none"` disables scaling.}
+\item{cost_scale}{Cost normalization used before Sinkhorn: \code{"median"} divides
+by the median positive cost, \code{"max"} divides by the maximum cost, and
+\code{"none"} disables scaling.}
 
-\item{init}{Initialization method: `"identity"`, `"signature"`, or
-`"random_orthogonal"`.}
+\item{init}{Initialization method: \code{"identity"}, \code{"signature"}, or
+\code{"random_orthogonal"}.}
 
 \item{force_SO}{Logical; if TRUE enforce det(R)=+1 for the learned rotation.}
 
@@ -90,9 +98,10 @@ by the median positive cost, `"max"` divides by the maximum cost, and
 \item{...}{Additional arguments (unused).}
 }
 \value{
-An object of class `ot_procrustes_pair_fit` containing the learned
-  rotation (i->j), loss, convergence diagnostics, and optionally the final
-  transport plan.
+An object of class \code{ot_procrustes_pair_fit} containing the learned
+rotation (i->j), loss, convergence diagnostics (\code{converged},
+\code{iterations}, \code{epsilon_floor_reached}, \code{loss_trace}, \code{epsilon_trace}), and
+optionally the final transport plan.
 }
 \description{
 Estimates an orthogonal map between two domains without known correspondences

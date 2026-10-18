@@ -9,9 +9,9 @@ compute_edge_gradient_cpp(S, A1, A2, X1, X2)
 \arguments{
 \item{S}{Current transport plan (n1 x n2)}
 
-\item{A1}{Adjacency matrix of network 1 (sparse)}
+\item{A1}{Adjacency matrix of network 1 (sparse; nonzero pattern is used)}
 
-\item{A2}{Adjacency matrix of network 2 (sparse)}
+\item{A2}{Adjacency matrix of network 2 (sparse; nonzero pattern is used)}
 
 \item{X1}{Features of network 1 (n1 x d)}
 
@@ -21,5 +21,13 @@ compute_edge_gradient_cpp(S, A1, A2, X1, X2)
 Gradient matrix (n1 x n2)
 }
 \description{
-Efficient computation of the gradient of edge consistency regularizer
+Edge-length consistency term over undirected edges (each counted once,
+\eqn{i < j}, \eqn{a < b}) with squared Euclidean feature distances
+\eqn{d}: for every edge pair, \eqn{G_{ia} += 2 (d^1_{ij} - d^2_{ab}) S_{jb}}
+and \eqn{G_{jb} += 2 (d^1_{ij} - d^2_{ab}) S_{ia}}. Instead of looping over
+all \eqn{|E_1| |E_2|} edge pairs, this is evaluated with sparse products:
+with \eqn{D_k} the strictly upper-triangular edge-distance matrix and
+\eqn{U_k} its 0/1 pattern,
+\eqn{G = 2 (D_1 S U_2^T - U_1 S D_2^T + D_1^T S U_2 - U_1^T S D_2)},
+at cost \eqn{O((|E_1| + |E_2|) \max(n_1, n_2))}.
 }

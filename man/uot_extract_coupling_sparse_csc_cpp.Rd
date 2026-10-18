@@ -27,7 +27,7 @@ or 1-based accepted; if 1-based, it must start at 0 or 1 and be nondecreasing).}
 
 \item{row_idx}{Integer vector of length nnz giving 1-based row indices.}
 
-\item{cost_csc}{Numeric vector of length nnz aligned with `row_idx`.}
+\item{cost_csc}{Numeric vector of length nnz aligned with \code{row_idx}.}
 
 \item{n_rows}{Number of source nodes.}
 
@@ -52,19 +52,23 @@ or 1-based accepted; if 1-based, it must start at 0 or 1 and be nondecreasing).}
 \item{threshold}{Optional threshold pruning (<= 0 keeps all).}
 }
 \value{
-A list with `coupling` (dgCMatrix) and `log_pi2` (length n_cols).
+A list with \code{coupling} (dgCMatrix) and \code{log_pi2} (length n_cols).
 }
 \description{
 Given translation-invariant dual potentials (fbar,gbar), compute edge weights
-on a sparse cost graph in CSC form and return a `dgCMatrix`.
+on a sparse cost graph in CSC form and return a \code{dgCMatrix}.
 }
 \details{
 Supported weight types:
-- weight_type = 0: map operator weights, w_ij / (pi2_j + delta)
-- weight_type = 1: conditional weights, w_ij / pi2_j (column-stochastic)
-- weight_type = 2: raw coupling weights, w_ij
+\itemize{
+\item weight_type = 0: map operator weights, w_ij / (pi2_j + delta)
+\item weight_type = 1: conditional weights, w_ij / pi2_j (column-stochastic)
+\item weight_type = 2: raw coupling weights, w_ij
+}
 
 Pruning is column-wise:
-- keep only weights >= threshold (after weight_type transform)
-- optionally keep only the topk_col largest weights per column
+\itemize{
+\item keep only weights >= threshold (after weight_type transform)
+\item optionally keep only the topk_col largest weights per column
+}
 }

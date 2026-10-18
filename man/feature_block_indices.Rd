@@ -7,7 +7,7 @@
 feature_block_indices(domains)
 }
 \arguments{
-\item{domains}{List of domain objects with element `$x`}
+\item{domains}{List of domain objects with element \verb{$x}}
 }
 \value{
 Named list of integer sequences matching the column ranges per block

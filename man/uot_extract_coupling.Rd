@@ -18,43 +18,47 @@ uot_extract_coupling(
 )
 }
 \arguments{
-\item{cost}{A sparse cost list as returned by [uot_build_cost()] containing
-CSC fields `col_ptr`, `row_idx`, `cost_csc`, plus dimensions `n_rows`,
-`n_cols`.}
+\item{cost}{A sparse cost list as returned by \code{\link[=uot_build_cost]{uot_build_cost()}} containing
+CSC fields \code{col_ptr}, \code{row_idx}, \code{cost_csc}, plus dimensions \code{n_rows},
+\code{n_cols}.}
 
-\item{alpha}{Source masses (length `n_rows`, nonnegative, not all zero).}
+\item{alpha}{Source masses (length \code{n_rows}, nonnegative, not all zero).}
 
-\item{beta}{Target masses (length `n_cols`, nonnegative, not all zero).}
+\item{beta}{Target masses (length \code{n_cols}, nonnegative, not all zero).}
 
-\item{fbar}{Translation-invariant source potential (length `n_rows`).}
+\item{fbar}{Translation-invariant source potential (length \code{n_rows}).}
 
-\item{gbar}{Translation-invariant target potential (length `n_cols`).}
+\item{gbar}{Translation-invariant target potential (length \code{n_cols}).}
 
 \item{epsilon}{Entropic regularization parameter (> 0).}
 
 \item{weights}{Which weights to compute:
-- `"map"`: barycentric map weights \eqn{w_{ij} / (\pi_{2,j} + \delta)}
-- `"cond"`: conditional weights \eqn{w_{ij} / \pi_{2,j}} (column-stochastic)
-- `"coupling"`: raw coupling weights \eqn{w_{ij}} (may overflow for extreme
-  parameter regimes).}
+\itemize{
+\item \code{"map"}: barycentric map weights \eqn{w_{ij} / (\pi_{2,j} + \delta)}
+\item \code{"cond"}: conditional weights \eqn{w_{ij} / \pi_{2,j}} (column-stochastic)
+\item \code{"coupling"}: raw coupling weights \eqn{w_{ij}} (may overflow for extreme
+parameter regimes).
+}}
 
-\item{delta}{Stabilizer for `"map"` weights.}
+\item{delta}{Stabilizer for \code{"map"} weights.}
 
 \item{prune_topk_col}{Optional integer top-k pruning per template column.
-`NULL` keeps all edges.}
+\code{NULL} keeps all edges.}
 
 \item{prune_threshold}{Optional nonnegative threshold pruning applied after
-the weight transform. `NULL` keeps all edges.}
+the weight transform. \code{NULL} keeps all edges.}
 }
 \value{
 A list with:
-- `coupling`: a `dgCMatrix` of dimension `n_rows x n_cols`
-- `log_pi2`: numeric vector (length `n_cols`) with `log(pi2)` on the sparse graph
+\itemize{
+\item \code{coupling}: a \code{dgCMatrix} of dimension \verb{n_rows x n_cols}
+\item \code{log_pi2}: numeric vector (length \code{n_cols}) with \code{log(pi2)} on the sparse graph
+}
 }
 \description{
-Given translation-invariant dual potentials from [uot_ti_sinkhorn_kl()], this
+Given translation-invariant dual potentials from \code{\link[=uot_ti_sinkhorn_kl]{uot_ti_sinkhorn_kl()}}, this
 function computes edge weights on a sparse cost graph and returns a
-`Matrix::dgCMatrix`. This is useful for downstream pipelines that want to:
+\code{Matrix::dgCMatrix}. This is useful for downstream pipelines that want to:
 (1) prune the coupling and/or (2) reuse the same operator across multiple
 signals without recomputing exponentials.
 }

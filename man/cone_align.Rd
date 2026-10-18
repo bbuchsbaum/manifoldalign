@@ -19,10 +19,11 @@ cone_align(data, ...)
   sigma = 0.73,
   lambda = 0.1,
   use_laplacian = TRUE,
-  solver = c("linear", "auction"),
+  solver = "linear",
   max_iter = 30,
   tol = 0.01,
   knn = NULL,
+  verbose = FALSE,
   ...
 )
 
@@ -33,10 +34,11 @@ cone_align(data, ...)
   sigma = 0.73,
   lambda = 0.1,
   use_laplacian = TRUE,
-  solver = c("linear", "auction"),
+  solver = "linear",
   max_iter = 30,
   tol = 0.01,
   knn = NULL,
+  verbose = FALSE,
   ...
 )
 
@@ -48,11 +50,12 @@ for each graph domain. Each matrix should have format: nodes x features.}
 
 \item{...}{Additional arguments (currently unused)}
 
-\item{anchors}{Optional anchor information for semi-supervised alignment.
-For hyperdesign inputs, use an unquoted column name in each domain's design
-table. For list inputs, anchors are currently ignored.}
+\item{anchors}{Optional unquoted column name in each domain's design table
+containing anchor/correspondence labels. Shared non-NA values indicate
+fixed correspondences used to estimate the rotation and constrain the
+assignment update.}
 
-\item{preproc}{Preprocessing function to apply to the data (default: center())}
+\item{preproc}{See the hyperdesign method.}
 
 \item{ncomp}{Number of embedding dimensions (default: 10)}
 
@@ -62,8 +65,7 @@ table. For list inputs, anchors are currently ignored.}
 
 \item{use_laplacian}{Whether to use Laplacian normalization (default: TRUE)}
 
-\item{solver}{Assignment algorithm: "linear" for exact assignment (default), 
-"auction" for large-scale approximation}
+\item{solver}{Assignment algorithm; see the hyperdesign method.}
 
 \item{max_iter}{Maximum number of iterations (default: 30)}
 
@@ -71,26 +73,42 @@ table. For list inputs, anchors are currently ignored.}
 
 \item{knn}{Number of nearest neighbors for graph construction
 (default: adaptive)}
+
+\item{verbose}{Logical; if TRUE, report convergence of the alternating
+assignment/rotation updates (default: FALSE).}
 }
 \value{
 A \code{multiblock_biprojector} object containing:
 \itemize{
-  \item \code{s}: Aligned embeddings for all nodes
-  \item \code{v}: Primal vectors for out-of-sample projection
-  \item \code{assignment}: Node-to-node correspondence assignments
-  \item \code{rotation}: Orthogonal transformation matrices
-  \item \code{sdev}: Standard deviations of aligned components
-  \item Additional metadata for reconstruction and validation
+\item \code{s}: Aligned embeddings for all nodes
+\item \code{v}: Primal vectors for out-of-sample projection
+\item \code{assignment}: Node-to-node correspondence assignments
+\item \code{rotation}: Orthogonal transformation matrices
+\item \code{sdev}: Standard deviations of aligned components
+\item Additional metadata for reconstruction and validation
 }
 
 A \code{multiblock_biprojector} object containing:
 \itemize{
-  \item \code{s}: Aligned embeddings for all nodes
-  \item \code{v}: Primal vectors for out-of-sample projection
-  \item \code{assignment}: Node-to-node correspondence assignments
-  \item \code{rotation}: Orthogonal transformation matrices
-  \item \code{sdev}: Standard deviations of aligned components
-  \item Additional metadata for reconstruction and validation
+\item \code{s}: Aligned embeddings. Rows follow the input row order of
+each domain (domain 1 rows first, then domain 2 rows); domain 1 is
+rotated into the frame of domain 2.
+\item \code{v}: Loadings for out-of-sample projection, fitted by least
+squares so that the preprocessed \eqn{X_i v_i} best approximates the
+aligned scores of block \eqn{i} (minimum-norm solution). This is a
+linear bridge to a nonlinear spectral embedding: it reproduces the
+training scores exactly only when \eqn{X_i} has full row rank, and is
+otherwise the best linear approximation.
+\item \code{assignment}: Integer vector of length \eqn{n_1};
+\code{assignment[i]} is the row of domain 2 matched to row \code{i} of
+domain 1. Score rows are not reordered by it.
+\item \code{rotation}: Orthogonal transformation matrices
+(\code{list(Q, I)}; domain 1 scores are \code{E1 \%*\% Q})
+\item \code{converged}, \code{iterations}: Whether the assignment
+stabilised before \code{max_iter}, and the number of iterations run
+\item \code{sdev}: Standard deviations of aligned components
+\item \code{preproc}: The fitted per-domain preprocessor (concatenated by
+feature block), or \code{NULL} when \code{preproc = NULL}
 }
 
 A multiblock_biprojector object containing the CONE-Align results
@@ -117,13 +135,12 @@ between two steps: (1) finding optimal orthogonal rotations given current
 assignments via Procrustes analysis, and (2) updating assignments given
 current transformations via linear assignment.
 
-
 CONE-Align operates through the following algorithmic blocks:
 \itemize{
-  \item \strong{Spectral Embedding}: Compute Laplacian eigenmaps for each graph
-  \item \strong{Orthogonal Alignment}: Find rotation matrices via Procrustes analysis
-  \item \strong{Assignment Update}: Solve linear assignment problem for correspondences
-  \item \strong{Convergence Check}: Iterate until assignments stabilize
+\item \strong{Spectral Embedding}: Compute Laplacian eigenmaps for each graph
+\item \strong{Orthogonal Alignment}: Find rotation matrices via Procrustes analysis
+\item \strong{Assignment Update}: Solve linear assignment problem for correspondences
+\item \strong{Convergence Check}: Iterate until assignments stabilize
 }
 
 The algorithm minimizes the objective:
@@ -134,10 +151,10 @@ and \eqn{P_{ij}} are permutation matrices.
 
 Key parameters:
 \itemize{
-  \item \code{ncomp}: Dimension of spectral embeddings
-  \item \code{sigma}: Bandwidth for embedding computation
-  \item \code{lambda}: Regularization for numerical stability
-  \item \code{solver}: Assignment algorithm ("linear" or "auction")
+\item \code{ncomp}: Dimension of spectral embeddings
+\item \code{sigma}: Bandwidth for embedding computation
+\item \code{lambda}: Regularization for numerical stability
+\item \code{solver}: Assignment algorithm (\code{"linear"}, the exact solver)
 }
 
 CONE-Align tackles graph alignment by iteratively refining both orthogonal
@@ -146,15 +163,14 @@ between two steps: (1) finding optimal orthogonal rotations given current
 assignments via Procrustes analysis, and (2) updating assignments given
 current transformations via linear assignment.
 
-
 CONE-Align operates through the following algorithmic blocks:
 \itemize{
-  \item \strong{Spectral Embedding}: Compute Laplacian eigenmaps for each graph
-  \item \strong{Orthogonal Alignment}: Find rotation matrices via
-    Procrustes analysis
-  \item \strong{Assignment Update}: Solve linear assignment problem
-    for correspondences
-  \item \strong{Convergence Check}: Iterate until assignments stabilize
+\item \strong{Spectral Embedding}: Compute Laplacian eigenmaps for each graph
+\item \strong{Orthogonal Alignment}: Find rotation matrices via
+Procrustes analysis
+\item \strong{Assignment Update}: Solve linear assignment problem
+for correspondences
+\item \strong{Convergence Check}: Iterate until assignments stabilize
 }
 
 The algorithm minimizes the objective:
@@ -163,16 +179,17 @@ The algorithm minimizes the objective:
 where \eqn{Z_i} are the embeddings, \eqn{Q_i} are orthogonal transforms,
 and \eqn{P_{ij}} are permutation matrices.
 
-Currently supports *exactly two* domains. For multi-graph alignment with
+Currently supports \emph{exactly two} domains. For multi-graph alignment with
 three or more domains, see \code{\link{cone_align_multiple}}.
 
 Key parameters:
 \itemize{
-  \item \code{ncomp}: Dimension of spectral embeddings
-  \item \code{sigma}: Bandwidth for embedding computation
-  \item \code{lambda}: Regularization for numerical stability
-  \item \code{solver}: Assignment algorithm ("linear" or "auction")
-  \item \code{knn}: Number of nearest neighbors for graph construction
+\item \code{ncomp}: Dimension of spectral embeddings
+\item \code{sigma}: Bandwidth for embedding computation
+\item \code{lambda}: Regularization for numerical stability
+\item \code{solver}: Assignment algorithm; only the exact Hungarian
+solver (\code{"linear"}) is available
+\item \code{knn}: Number of nearest neighbors for graph construction
 }
 }
 \examples{
@@ -252,12 +269,12 @@ embeddings <- result$s
 
 }
 \references{
-Heimann, M., Shen, H., Safavi, T., & Koutra, D. (2018). REGAL: Representation 
-learning-based graph alignment. In Proceedings of the 27th ACM International 
+Heimann, M., Shen, H., Safavi, T., & Koutra, D. (2018). REGAL: Representation
+learning-based graph alignment. In Proceedings of the 27th ACM International
 Conference on Information and Knowledge Management (pp. 117-126).
 
-Heimann, M., Shen, H., Safavi, T., & Koutra, D. (2018). REGAL: Representation 
-learning-based graph alignment. In Proceedings of the 27th ACM International 
+Heimann, M., Shen, H., Safavi, T., & Koutra, D. (2018). REGAL: Representation
+learning-based graph alignment. In Proceedings of the 27th ACM International
 Conference on Information and Knowledge Management (pp. 117-126).
 }
 \seealso{

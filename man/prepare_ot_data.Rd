@@ -7,7 +7,7 @@
 prepare_ot_data(data, preproc = NULL)
 }
 \value{
-A list with elements `X_list` (list of data matrices), `n_samples` (integer vector), `n_domains` (integer), `domain_names` (character vector), and `data` (the preprocessed hyperdesign).
+A list with elements \code{X_list} (list of data matrices), \code{n_samples} (integer vector), \code{n_domains} (integer), \code{domain_names} (character vector), and \code{data} (the preprocessed hyperdesign).
 }
 \description{
 Extract data from hyperdesign and apply preprocessing

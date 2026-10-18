@@ -15,7 +15,7 @@ fit_many(algo, domains, ...)
 }
 \value{
 The return value depends on the aligner method. Typically a
-  multiblock_biprojector or similar alignment result object.
+multiblock_biprojector or similar alignment result object.
 }
 \description{
 Native multi-domain entry point (optional)

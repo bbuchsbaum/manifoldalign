@@ -7,11 +7,15 @@
 gpa_aligner()
 }
 \value{
-An object of class `c("gpa_aligner", "aligner")` representing a
-  Generalized Procrustes alignment algorithm descriptor.
+An object of class \code{c("gpa_aligner", "aligner")} representing a
+Generalized Procrustes alignment algorithm descriptor.
 }
 \description{
-Generalized Procrustes aligner (native multi-view)
+Generalized Procrustes rotates every domain's feature space onto a common
+consensus, so the output dimension is the shared feature dimension and no
+latent dimension \code{k} can be chosen. The capability record declares a
+linear, invertible (orthogonal) map without an out-of-sample prediction
+method or new-domain calibration.
 }
 \examples{
 algo <- gpa_aligner()

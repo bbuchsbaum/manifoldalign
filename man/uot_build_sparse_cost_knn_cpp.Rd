@@ -12,7 +12,7 @@ uot_build_sparse_cost_knn_cpp(
   F = NULL,
   G = NULL,
   lambda_feat = 0,
-  max_dist,
+  max_dist = NA_real_,
   extra_i = NULL,
   extra_j = NULL,
   extra_dists = NULL,
@@ -27,7 +27,7 @@ uot_build_sparse_cost_knn_cpp(
 template support.}
 
 \item{nn_dists}{Numeric matrix (n x k) of Euclidean distances aligned with
-`nn_idx`.}
+\code{nn_idx}.}
 
 \item{n_cols}{Number of template nodes (m).}
 
@@ -39,18 +39,19 @@ template support.}
 
 \item{lambda_feat}{Weight for feature distance-squared term.}
 
-\item{max_dist}{Optional maximum distance threshold; edges with
-`nn_dists > max_dist` are dropped.}
+\item{max_dist}{Maximum distance threshold; edges with
+\code{nn_dists > max_dist} are dropped. The default \code{NA} (like \code{Inf}) keeps
+all edges.}
 
 \item{extra_i}{Optional 1-based row indices for additional edges.}
 
 \item{extra_j}{Optional 1-based column indices for additional edges.}
 
 \item{extra_dists}{Optional distances for additional edges (aligned to
-`extra_i`, `extra_j`).}
+\code{extra_i}, \code{extra_j}).}
 
 \item{Y_template}{Optional template coordinates/features (m x d). When
-provided together with `prior_map` and `lambda_prior > 0`, adds a soft
+provided together with \code{prior_map} and \code{lambda_prior > 0}, adds a soft
 diagonal/identity bias term based on squared distances in template space.}
 
 \item{prior_map}{Optional integer vector (length n) giving the preferred
@@ -58,15 +59,18 @@ template index (1..m) for each source node. Use NA for “no prior” on a row.}
 
 \item{lambda_prior}{Nonnegative weight for the soft prior term.}
 
-\item{prior_sigma}{Optional positive scale (in the units of `Y_template`).
-When finite, the prior penalty uses `||y_j - y_pref||^2 / prior_sigma^2`.}
+\item{prior_sigma}{Optional positive scale (in the units of \code{Y_template}).
+When finite, the prior penalty uses \verb{||y_j - y_pref||^2 / prior_sigma^2}.}
 }
 \value{
-A list with CSR fields `row_ptr`, `col_idx`, `cost` and CSC fields
-  `col_ptr`, `row_idx`, `cost_csc`, plus dimensions.
+A list with CSR fields \code{row_ptr}, \code{col_idx}, \code{cost} and CSC fields
+\code{col_ptr}, \code{row_idx}, \code{cost_csc}, plus dimensions. Within each row the
+edges are sorted by column; duplicate \verb{(i, j)} edges (for example a kNN
+edge that is also supplied through \code{extra_i}/\code{extra_j}) are merged into a
+single edge that keeps the smallest cost.
 }
 \description{
 Helper for CPU pipelines: given neighbor indices and distances (e.g. from
-`RANN::nn2`), compute a sparse bipartite cost graph between source nodes and
+\code{RANN::nn2}), compute a sparse bipartite cost graph between source nodes and
 a fixed template.
 }

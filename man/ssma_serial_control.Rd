@@ -17,29 +17,29 @@ ssma_serial_control(
 }
 \arguments{
 \item{enabled}{Logical; enable serial-correlation adjustments when
-`serial_index` is provided.}
+\code{serial_index} is provided.}
 
-\item{row_whiten}{One of `"none"` or `"ar1"`. Controls optional row-wise
+\item{row_whiten}{One of \code{"none"} or \code{"ar1"}. Controls optional row-wise
 whitening applied before within-domain kNN graph construction.}
 
-\item{ar1_shrink}{Scalar in `[0, 1)` used to shrink estimated AR(1)
+\item{ar1_shrink}{Scalar in \verb{[0, 1)} used to shrink estimated AR(1)
 coefficient toward zero.}
 
 \item{ar1_clip}{Maximum absolute AR(1) coefficient allowed for stability.}
 
-\item{lag_mode}{One of `"none"`, `"hard"`, `"exponential"`, or `"gaussian"`.
+\item{lag_mode}{One of \code{"none"}, \code{"hard"}, \code{"exponential"}, or \code{"gaussian"}.
 Controls how short-lag neighbor edges are downweighted.}
 
 \item{lag_exclusion}{Non-negative integer lag exclusion radius used when
-`lag_mode = "hard"`.}
+\code{lag_mode = "hard"}.}
 
 \item{lag_scale}{Positive scalar lag scale used for soft lag kernels.}
 
-\item{preserve_degree}{Logical; if `TRUE`, rescale filtered adjacency to keep
+\item{preserve_degree}{Logical; if \code{TRUE}, rescale filtered adjacency to keep
 row-degree magnitudes near pre-filter values.}
 }
 \value{
-A list of class `ssma_serial_control`.
+A list of class \code{ssma_serial_control}.
 }
 \description{
 Control settings for serial-correlation handling in SSMA graph construction

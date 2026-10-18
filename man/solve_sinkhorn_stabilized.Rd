@@ -2,9 +2,17 @@
 % Please edit documentation in R/parrot_proximal.R
 \name{solve_sinkhorn_stabilized}
 \alias{solve_sinkhorn_stabilized}
-\title{Log-domain Stabilized Sinkhorn Algorithm (Dispatcher)}
+\title{Log-domain Sinkhorn with uniform marginals (Dispatcher)}
 \usage{
-solve_sinkhorn_stabilized(C, tau, max_iter, tol, use_cpp = FALSE)
+solve_sinkhorn_stabilized(
+  C,
+  tau,
+  max_iter,
+  tol,
+  use_cpp = FALSE,
+  log_u0 = NULL,
+  log_v0 = NULL
+)
 }
 \arguments{
 \item{C}{Cost matrix}
@@ -13,15 +21,18 @@ solve_sinkhorn_stabilized(C, tau, max_iter, tol, use_cpp = FALSE)
 
 \item{max_iter}{Maximum iterations}
 
-\item{tol}{Convergence tolerance}
+\item{tol}{Convergence tolerance on the marginal residual}
 
 \item{use_cpp}{Whether to use C++ implementation}
+
+\item{log_u0, log_v0}{Optional warm-start log scalings}
 }
 \value{
-Transport plan matrix
+List with \code{plan}, \code{log_u}, \code{log_v},
+\code{converged}, \code{iterations} and \code{marginal_error}.
 }
 \description{
-Implements numerically stable Sinkhorn in log domain.
-Routes to either R or C++ implementation based on use_cpp flag.
+Routes to the R or the compiled implementation; both solve the same problem
+on the raw cost and return the same structure.
 }
 \keyword{internal}

@@ -2,12 +2,12 @@
 % Please edit documentation in R/uot_multiset_align.R
 \name{uot_map}
 \alias{uot_map}
-\title{Map signals into template space using a `uot_pair_fit`}
+\title{Map signals into template space using a \code{uot_pair_fit}}
 \usage{
 uot_map(fit, signal, delta = 1e-08)
 }
 \arguments{
-\item{fit}{An object returned by [uot_fit_pair()].}
+\item{fit}{An object returned by \code{\link[=uot_fit_pair]{uot_fit_pair()}}.}
 
 \item{signal}{Numeric vector (length n) or matrix (T x n).}
 
@@ -17,5 +17,5 @@ uot_map(fit, signal, delta = 1e-08)
 A numeric vector (length m) or matrix (T x m).
 }
 \description{
-Map signals into template space using a `uot_pair_fit`
+Map signals into template space using a \code{uot_pair_fit}
 }

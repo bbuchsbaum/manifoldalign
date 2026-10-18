@@ -23,7 +23,7 @@ latent_dim(fit, ...)
 }
 \value{
 An integer giving the latent dimension selected by the method, or
-  NULL if not applicable.
+NULL if not applicable.
 }
 \description{
 Latent dimension selected by the method (if applicable)

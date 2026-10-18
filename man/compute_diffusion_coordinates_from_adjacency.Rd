@@ -23,13 +23,13 @@ compute_diffusion_coordinates_from_adjacency(
 \item{use_normalized_laplacian}{Logical; use the normalized Laplacian
 (default TRUE).}
 
-\item{store_basis}{Logical; if TRUE, return `list(coords=, basis=)`.}
+\item{store_basis}{Logical; if TRUE, return \code{list(coords=, basis=)}.}
 
-\item{...}{Passed to [compute_diffusion_coordinates()].}
+\item{...}{Passed to \code{\link[=compute_diffusion_coordinates]{compute_diffusion_coordinates()}}.}
 }
 \value{
 A numeric matrix (n x k) or list of matrices, or a list when
-  `store_basis=TRUE`.
+\code{store_basis=TRUE}.
 }
 \description{
 Convenience: compute diffusion coordinates from an adjacency matrix

@@ -7,7 +7,7 @@
 gpca_align(data, ...)
 }
 \arguments{
-\item{data}{A `hyperdesign` object or other supported input.}
+\item{data}{A \code{hyperdesign} object or other supported input.}
 
 \item{...}{Additional arguments passed to methods.}
 }

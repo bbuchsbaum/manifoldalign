@@ -11,11 +11,13 @@ alignment_quality(object)
 }
 \value{
 A list with fields:
-  - mode: "reference" or "consensus"
-  - per_domain: data.frame with per-domain metrics (n, mse, mse_soft,
-                matched, coverage, mean_confidence, converged, iterations)
-  - global: aggregate metrics (mse_weighted, mse_soft_weighted, K, ref_idx,
-            mean_confidence, all_converged)
+\itemize{
+\item mode: "reference" or "consensus"
+\item per_domain: data.frame with per-domain metrics (n, mse, mse_soft,
+matched, coverage, mean_confidence, converged, iterations)
+\item global: aggregate metrics (mse_weighted, mse_soft_weighted, K, ref_idx,
+mean_confidence, all_converged)
+}
 }
 \description{
 Compute compact, label-free quality diagnostics for multiset alignment

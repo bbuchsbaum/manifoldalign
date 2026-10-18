@@ -364,7 +364,7 @@ oos_predict.kema_fit <- function(fit_or_transform, newX, side, ...) {
 #'
 #' A KEMA fit is a per-domain kernel encoder, not a linear projector on the
 #' concatenated feature space. `project_block()` encodes rows of one domain
-#' with the fitted kernel map (see [oos_predict.kema_fit()]); `project()` and
+#' with the fitted kernel map (see \code{\link[=oos_predict.kema_fit]{oos_predict.kema_fit()}}); `project()` and
 #' `partial_project()` are not defined for KEMA and error rather than return
 #' a linear surrogate. The stored loadings `fit$v` are exact only for the
 #' linear kernel (`kernlab::vanilladot()`); for every other kernel they are

@@ -2,7 +2,7 @@
 % Please edit documentation in R/token_ot_graph_align.R
 \name{token_ot_graph_align_control}
 \alias{token_ot_graph_align_control}
-\title{Control settings for `token_ot_graph_align()`}
+\title{Control settings for \code{token_ot_graph_align()}}
 \usage{
 token_ot_graph_align_control(
   n_levels = 1L,
@@ -44,24 +44,24 @@ token_ot_graph_align_control(
 )
 }
 \arguments{
-\item{n_levels}{Integer number of hierarchy levels. `1` disables multilevel
+\item{n_levels}{Integer number of hierarchy levels. \code{1} disables multilevel
 refinement.}
 
 \item{coarsen_ratio}{Numeric factor > 1 controlling the coarse-to-fine size
-reduction (roughly `n_next ≈ n_prev / coarsen_ratio`).}
+reduction (roughly \verb{n_next ≈ n_prev / coarsen_ratio}).}
 
 \item{coarsen_method}{Coarsening strategy for multilevel:
-`"kmeans"` (fast, feature-based) or `"louvain"` (graph community-based with
+\code{"kmeans"} (fast, feature-based) or \code{"louvain"} (graph community-based with
 fallback to k-means if the number of communities is unsuitable).}
 
 \item{min_clusters}{Minimum nodes per level (stops coarsening once the graph
 is small).}
 
-\item{prior_mode}{Prior lifting mode for multilevel: `"none"`, `"hard"` (use
-discrete coarse assignment), or `"soft"` (use top-k coarse coupling mass).}
+\item{prior_mode}{Prior lifting mode for multilevel: \code{"none"}, \code{"hard"} (use
+discrete coarse assignment), or \code{"soft"} (use top-k coarse coupling mass).}
 
 \item{prior_cluster_k}{Integer number of coarse target clusters kept per
-coarse source cluster when `prior_mode="soft"`.}
+coarse source cluster when \code{prior_mode="soft"}.}
 
 \item{prior_max_candidates}{Maximum prior candidates lifted per fine node
 (cap to prevent blowups).}
@@ -69,36 +69,36 @@ coarse source cluster when `prior_mode="soft"`.}
 \item{graph_knn}{Integer k for within-domain kNN graph construction.}
 
 \item{graph_sigma}{Optional numeric bandwidth for heat-kernel affinities.
-Use `NULL` to auto-tune per domain via [choose_sigma()].}
+Use \code{NULL} to auto-tune per domain via \code{\link[=choose_sigma]{choose_sigma()}}.}
 
 \item{use_laplacian}{Logical; if TRUE use normalized Laplacian bases.}
 
-\item{views}{Character vector of view names in `c("raw", "eigenmap", "hks")`.}
+\item{views}{Character vector of view names in \code{c("raw", "eigenmap", "hks")}.}
 
 \item{view_weights}{Optional numeric vector of nonnegative weights, same
-length as `views` (will be normalized to sum to 1).}
+length as \code{views} (will be normalized to sum to 1).}
 
 \item{k_embed}{Optional integer number of eigenpairs used for eigenmap/HKS.
-If `NULL`, defaults to `max(3*ncomp, ncomp + 10)` inside the solver.}
+If \code{NULL}, defaults to \code{max(3*ncomp, ncomp + 10)} inside the solver.}
 
 \item{hks_q}{Integer number of HKS time steps.}
 
-\item{lambda_view}{Mix weight in [0,1] for view-distance vs token-OT cost.}
+\item{lambda_view}{Mix weight in \verb{[0, 1]} for view-distance vs token-OT cost.}
 
 \item{candidate_k}{Integer number of ANN candidates per source node.}
 
 \item{ann_backend}{Nearest-neighbor backend for candidate generation:
-`"auto"` (default), `"rann"`, or `"annoy"` (requires RcppAnnoy).}
+\code{"auto"} (default), \code{"rann"}, or \code{"annoy"} (requires RcppAnnoy).}
 
-\item{ann_trees}{Number of trees used by Annoy when `ann_backend="annoy"`.}
+\item{ann_trees}{Number of trees used by Annoy when \code{ann_backend="annoy"}.}
 
 \item{prior_k}{Integer number of candidates taken from prior (reserved).}
 
 \item{ensure_cols}{Logical; ensure every target column has at least one
 incoming candidate edge (adds reverse-1NN edges if needed).}
 
-\item{token_mode}{Either `"view_only"` (self token only) or
-`"view_plus_neighbors"` (includes sampled neighbor tokens).}
+\item{token_mode}{Either \code{"view_only"} (self token only) or
+\code{"view_plus_neighbors"} (includes sampled neighbor tokens).}
 
 \item{max_hops}{Integer hop depth for neighborhood tokens.}
 
@@ -106,7 +106,7 @@ incoming candidate edge (adds reverse-1NN edges if needed).}
 
 \item{max_tokens}{Maximum tokens retained per node (cap for runtime).}
 
-\item{token_metric}{Token distance: `"cosine"` or `"sqeuclidean"`.}
+\item{token_metric}{Token distance: \code{"cosine"} or \code{"sqeuclidean"}.}
 
 \item{eps_token}{Entropic regularization for token-level OT (>0).}
 
@@ -120,7 +120,7 @@ incoming candidate edge (adds reverse-1NN edges if needed).}
 
 \item{tol_node}{Node-level Sinkhorn convergence tolerance.}
 
-\item{projection}{Discrete projection mode: `"greedy"` or `"hungarian"`.}
+\item{projection}{Discrete projection mode: \code{"greedy"} or \code{"hungarian"}.}
 
 \item{anchor_weight}{Nonnegative weight applied to an anchor mismatch penalty.}
 
@@ -132,8 +132,8 @@ edges when both endpoints are anchored.}
 \item{verbose}{Logical; print progress messages.}
 }
 \value{
-A list of class `token_ot_graph_align_control`.
+A list of class \code{token_ot_graph_align_control}.
 }
 \description{
-Control settings for `token_ot_graph_align()`
+Control settings for \code{token_ot_graph_align()}
 }

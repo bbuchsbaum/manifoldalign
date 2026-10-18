@@ -2,7 +2,7 @@
 % Please edit documentation in R/grasp.R
 \name{align_grasp_bases}
 \alias{align_grasp_bases}
-\title{Block C: Base Alignment - Corrected}
+\title{Block C: Base Alignment}
 \usage{
 align_grasp_bases(
   basis1,
@@ -23,16 +23,32 @@ align_grasp_bases(
 
 \item{desc2}{Second domain's descriptors}
 
-\item{lambda}{Regularization parameter}
+\item{lambda}{Non-negative weight of the descriptor term. With
+\code{lambda = 0} the signed-permutation start is already optimal.}
 
-\item{max_iter}{Maximum iterations}
+\item{max_iter}{Maximum number of gradient iterations (0 returns the
+signed-permutation start, reported as not converged).}
 
-\item{tol}{Convergence tolerance}
+\item{tol}{Convergence tolerance on the relative decrease of \eqn{f}.}
 }
 \value{
-List with rotation matrix and convergence info
+List with \code{rotation} (\eqn{M}), \code{iterations} (gradient
+iterations run), \code{converged} (relative decrease below \code{tol}, a
+vanishing gradient, or no further descent possible, before
+\code{max_iter}), \code{objective} (final \eqn{f}) and
+\code{objective_init} (\eqn{f} at the start).
 }
 \description{
-Block C: Base Alignment - Corrected
+Aligns the spectral basis of domain 2 to that of domain 1 with an orthogonal
+\eqn{k \times k} matrix \eqn{M} minimising the GRASP base-alignment objective
+\deqn{f(M) = \mathrm{off}(M^\top \Lambda_2 M) +
+  \lambda \| F^\top \Phi_1 - G^\top \Phi_2 M \|_F^2,}
+where \eqn{\mathrm{off}(\cdot)} is the squared Frobenius norm of the
+off-diagonal part, \eqn{\Lambda_2} holds the eigenvalues of domain 2 and
+\eqn{F, G} are the descriptor matrices. The optimisation starts from the
+signed permutation that best matches descriptor projections column by column
+(at which the off-diagonal term is zero) and then takes Riemannian gradient
+steps on the orthogonal group with a polar retraction and Armijo
+backtracking. Every accepted step decreases \eqn{f}.
 }
 \keyword{internal}

@@ -2,7 +2,7 @@
 % Please edit documentation in R/fpgw.R
 \name{classical_ot_lp_r}
 \alias{classical_ot_lp_r}
-\title{Classical OT linear program (R implementation)}
+\title{Classical OT linear program (lpSolve reference implementation)}
 \usage{
 classical_ot_lp_r(cost, p, q)
 }
@@ -10,6 +10,6 @@ classical_ot_lp_r(cost, p, q)
 A numeric matrix representing the optimal transport plan.
 }
 \description{
-Classical OT linear program (R implementation)
+Classical OT linear program (lpSolve reference implementation)
 }
 \keyword{internal}

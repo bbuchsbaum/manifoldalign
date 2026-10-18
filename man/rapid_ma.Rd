@@ -4,7 +4,7 @@
 \alias{rapid_ma}
 \alias{rapid_ma.list}
 \alias{rapid_ma.hyperdesign}
-\title{Scalable structure-aware manifold alignment}
+\title{Scalable Structure-Aware Manifold Alignment}
 \usage{
 rapid_ma(data, ...)
 
@@ -31,27 +31,67 @@ rapid_ma(data, ...)
 )
 }
 \arguments{
-\item{data}{A list of numeric domain matrices or a `hyperdesign`.}
+\item{data}{A list of numeric domain matrices (rows are samples) or a
+\code{hyperdesign}.}
 
 \item{...}{Method-specific arguments.}
 
-\item{labels}{Optional list of partially observed label vectors.}
+\item{labels}{Optional list of partially observed label vectors, one per
+domain. Missing labels may be represented by \code{NA}.}
 
-\item{relations}{Optional list of custom named sparse relations per domain.}
+\item{relations}{Optional list containing custom named sparse relations for
+each domain. A relation may be a sparse \code{Matrix} (pattern matrices such as
+\code{ngCMatrix} are treated as unit weights), a small dense matrix, or an edge
+\code{data.frame} with \code{from}, \code{to}, and optional \code{weight} columns.}
 
-\item{positions}{Optional list of spatial coordinate matrices per domain.}
+\item{positions}{Optional list of spatial coordinate matrices, one per
+domain.}
 
-\item{attributes}{Optional list of mixed attribute data.frames per domain.}
+\item{attributes}{Optional list of mixed attribute data frames, one per
+domain.}
 
-\item{ncomp}{Shared embedding dimension.}
+\item{ncomp}{Positive shared embedding dimension.}
 
-\item{control}{Settings from [rapid_ma_control()].}
+\item{control}{Settings returned by \code{\link[=rapid_ma_control]{rapid_ma_control()}}, or a named list of
+its arguments (nested component lists are validated field by field).}
 
-\item{y}{Optional unquoted or string label column in each domain design.}
+\item{y}{For a \code{hyperdesign}, an unquoted or string label column present in
+every domain design.}
 }
 \value{
-A `rapid_ma` embedding result with sparse couplings and diagnostics.
+A \code{rapid_ma} object containing per-domain scores (\code{scores}, and their
+row-bound concatenation \code{s}), shared prototypes, sparse node-to-prototype
+couplings, relation barycenters, predictions, prediction probabilities and
+confidence, dropped transport mass, and objective/convergence diagnostics.
+Couplings, scores, probabilities, predictions, and confidences keep the row
+names of the corresponding input domain.
 }
 \description{
-Scalable structure-aware manifold alignment
+Fits a scalable multi-domain alignment using bounded sparse relation
+diffusion, class-aware shared prototypes, sparse unbalanced transport, and
+prototype-level relation matching.
+}
+\details{
+RAPID-MA is an embedding method rather than a linear feature projector. Its
+result therefore does not contain artificial feature loadings
+(\code{preprocessing$loadings_available} is \code{FALSE}). Out-of-sample application
+uses the fitted RAPID-MA adapter and retained preprocessing state; see
+\code{\link[=oos_predict.rapid_ma]{oos_predict.rapid_ma()}}.
+
+Domain matrices may be dense base matrices, data frames, or sparse \code{Matrix}
+objects. Sparse inputs stay sparse through the feature sketch; only the
+bounded-width hashed feature view is dense.
+
+The alternating solver accepts a candidate update only when the composite
+objective does not increase (within \code{control$objective_tolerance}), damping
+the map and prototype steps by \code{control$backtrack_factor} on each retry. With
+\code{control$map_type = "orthogonal"} every accepted map, including damped
+blends, is retracted back to an orthogonal matrix by a polar factor. When no
+retry of an iteration is accepted the fit stops with status \code{"stalled"} and
+keeps the last accepted state; if a retry failed with an error, the message
+is recorded in \code{convergence$last_candidate_error} and a warning is emitted.
+}
+\seealso{
+\code{\link[=rapid_ma_control]{rapid_ma_control()}}, \code{\link[=rapid_ma_semisup]{rapid_ma_semisup()}}, \code{\link[=rapid_ma_match]{rapid_ma_match()}},
+\code{\link[=oos_predict.rapid_ma]{oos_predict.rapid_ma()}}, \code{\link[=rapid_ma_aligner]{rapid_ma_aligner()}}
 }

@@ -4,12 +4,14 @@
 \alias{partial_ot_mass}
 \title{Mass-constrained partial OT oracle}
 \usage{
-partial_ot_mass(cost, p, q, rho, method = c("lpSolve", "Rsymphony"))
+partial_ot_mass(cost, p, q, rho)
 }
 \value{
 A numeric matrix representing the optimal transport plan.
 }
 \description{
-Mass-constrained partial OT oracle
+Exact solution of \eqn{\min \langle C, \gamma\rangle} over
+\eqn{\gamma \ge 0}, \eqn{\gamma 1 \le p}, \eqn{\gamma^T 1 \le q},
+\eqn{|\gamma| = \rho} (network simplex on an extended graph).
 }
 \keyword{internal}

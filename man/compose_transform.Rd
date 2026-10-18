@@ -15,7 +15,7 @@ compose_transform(T_ab, T_bc, ...)
 }
 \value{
 An align_transform object representing the composed transform from
-  domain a to domain c.
+domain a to domain c.
 }
 \description{
 Compose two transforms (a->b and b->c)

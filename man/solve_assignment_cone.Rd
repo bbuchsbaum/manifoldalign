@@ -13,7 +13,7 @@ solve_assignment_cone(Z1, Z2, Q, solver, anchors = NULL)
 
 \item{Q}{Orthogonal transformation matrix}
 
-\item{solver}{Assignment algorithm ("linear" or "auction")}
+\item{solver}{Assignment algorithm (only "linear", the exact Hungarian solver)}
 }
 \value{
 Vector of assignment indices

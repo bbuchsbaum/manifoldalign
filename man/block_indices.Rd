@@ -7,7 +7,9 @@
 block_indices(data_list)
 }
 \arguments{
-\item{data_list}{List of data blocks}
+\item{data_list}{List of data blocks, each with an \code{x} component whose rows
+are samples. Dense matrices, sparse \code{Matrix} objects and vectors are
+accepted; a vector counts as one sample per element.}
 }
 \value{
 Matrix with start and end indices for each block

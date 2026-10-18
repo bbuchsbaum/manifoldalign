@@ -7,11 +7,11 @@
 sumcor_aligner()
 }
 \value{
-An object of class `c("sumcor_aligner", "aligner")`.
+An object of class \code{c("sumcor_aligner", "aligner")}.
 }
 \description{
-The aligner is a native multi-domain encoder: [align_many()] and
-[fit_many()] call [sumcor_align()] directly and never synchronise pairwise
+The aligner is a native multi-domain encoder: \code{\link[=align_many]{align_many()}} and
+\code{\link[=fit_many]{fit_many()}} call \code{\link[=sumcor_align]{sumcor_align()}} directly and never synchronise pairwise
 transforms. Its capability record declares a linear encoder with
 prediction and new-domain calibration, no auxiliary inputs at prediction,
 and no inverse.

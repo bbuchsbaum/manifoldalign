@@ -7,7 +7,7 @@
 find_knn_indices(query, data, k = 5, metric = "euclidean")
 }
 \value{
-A list with elements `idx` (integer matrix of neighbor indices) and `dists` (numeric matrix of distances).
+A list with elements \code{idx} (integer matrix of neighbor indices) and \code{dists} (numeric matrix of distances).
 }
 \description{
 Compute K-nearest neighbours under supported metrics

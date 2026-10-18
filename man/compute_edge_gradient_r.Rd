@@ -15,6 +15,11 @@ compute_edge_gradient_r(S, networks)
 Gradient matrix
 }
 \description{
-Compute Gradient of Edge Consistency Regularizer (R implementation)
+Sparse-product evaluation of the edge-length consistency term used by
+\code{compute_edge_gradient_cpp()}: for undirected edges \eqn{i<j} of
+network 1 and \eqn{a<b} of network 2 with squared feature distances
+\eqn{d^1_{ij}}, \eqn{d^2_{ab}}, each edge pair adds
+\eqn{2 (d^1_{ij} - d^2_{ab}) S_{jb}} to \eqn{G_{ia}} and
+\eqn{2 (d^1_{ij} - d^2_{ab}) S_{ia}} to \eqn{G_{jb}}.
 }
 \keyword{internal}

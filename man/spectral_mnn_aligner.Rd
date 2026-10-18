@@ -7,11 +7,13 @@
 spectral_mnn_aligner()
 }
 \value{
-An object of class `c("spectral_mnn_aligner", "aligner")` representing
-  a spectral MNN alignment algorithm descriptor.
+An object of class \code{c("spectral_mnn_aligner", "aligner")} representing
+a spectral MNN alignment algorithm descriptor.
 }
 \description{
-Spectral MNN aligner (native multi-view)
+Spectral MNN alignment embeds the joint graph spectrally and is
+transductive: the capability record declares no feature encoder and no
+validated out-of-sample prediction.
 }
 \examples{
 algo <- spectral_mnn_aligner()

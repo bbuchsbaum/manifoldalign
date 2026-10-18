@@ -19,67 +19,69 @@ assign_pseudolabels(
 )
 }
 \arguments{
-\item{sim_matrix}{Sparse similarity matrix (dgCMatrix or similar). Should 
-be symmetric with values between 0 and 1, where higher values indicate 
+\item{sim_matrix}{Sparse similarity matrix (dgCMatrix or similar). Should
+be symmetric with values between 0 and 1, where higher values indicate
 greater similarity.}
 
 \item{min_clusters}{Minimum number of clusters to find (default: 10)}
 
 \item{max_clusters}{Maximum number of clusters to find (default: 100)}
 
-\item{sim_threshold}{Minimum similarity threshold for cluster membership. 
-If NULL, will be adaptively determined from the distribution of non-zero 
+\item{sim_threshold}{Minimum similarity threshold for cluster membership.
+If NULL, will be adaptively determined from the distribution of non-zero
 similarities.}
 
-\item{min_cluster_size}{Minimum number of samples required to form a 
+\item{min_cluster_size}{Minimum number of samples required to form a
 cluster (default: 2)}
 
-\item{max_cluster_size}{Maximum number of samples allowed in a cluster 
+\item{max_cluster_size}{Maximum number of samples allowed in a cluster
 (default: Inf)}
 
-\item{diversity_weight}{Weight for promoting diversity among cluster 
-representatives [0,1]. Controls the trade-off between diversity and 
-cluster confidence: 0 = select largest/most confident clusters, 
-1 = maximize diversity (minimize pairwise similarities), 
+\item{diversity_weight}{Weight for promoting diversity among cluster
+representatives \verb{[0, 1]}. Controls the trade-off between diversity and
+cluster confidence: 0 = select largest/most confident clusters,
+1 = maximize diversity (minimize pairwise similarities),
 0.5 = balanced approach (default: 0.3)}
 
-\item{adaptive_threshold_quantile}{Quantile of non-zero similarities to 
+\item{adaptive_threshold_quantile}{Quantile of non-zero similarities to
 use as adaptive threshold (default: 0.8)}
 
-\item{seed}{Random seed for reproducibility}
+\item{seed}{Optional seed for the randomised representative selection;
+applied locally, so the caller's RNG stream is left unchanged. \code{NULL}
+uses the session RNG.}
 
-\item{use_advanced_diversity}{Whether to use advanced farthest-first 
+\item{use_advanced_diversity}{Whether to use advanced farthest-first
 traversal for diversity selection on large candidate sets (default: TRUE)}
 
 \item{verbose}{Whether to print progress information (default: FALSE)}
 }
 \value{
 A list containing:
-  \item{labels}{Factor vector of pseudolabels, with NA for unassigned 
-    samples}
-  \item{representatives}{Integer vector of row indices serving as cluster 
-    representatives}
-  \item{cluster_info}{Data frame with cluster statistics including cluster 
-    ID, representative index, size, and average similarity}
-  \item{threshold_used}{The similarity threshold that was applied}
-  \item{n_clusters}{Number of clusters found}
+\item{labels}{Factor vector of pseudolabels, with NA for unassigned
+samples}
+\item{representatives}{Integer vector of row indices serving as cluster
+representatives}
+\item{cluster_info}{Data frame with cluster statistics including cluster
+ID, representative index, size, and average similarity}
+\item{threshold_used}{The similarity threshold that was applied}
+\item{n_clusters}{Number of clusters found}
 }
 \description{
-Takes a sparse similarity matrix and identifies clusters of highly similar 
+Takes a sparse similarity matrix and identifies clusters of highly similar
 samples. Focuses on finding diverse, high-confidence cluster representatives.
 }
 \details{
 The algorithm works in several steps:
 \enumerate{
-  \item Determine similarity threshold (adaptive or user-specified)
-  \item Build a graph of high-similarity connections
-  \item Find connected components as initial clusters
-  \item Select diverse representatives from clusters
-  \item Optionally merge small clusters or split large ones
+\item Determine similarity threshold (adaptive or user-specified)
+\item Build a graph of high-similarity connections
+\item Find connected components as initial clusters
+\item Select diverse representatives from clusters
+\item Optionally merge small clusters or split large ones
 }
 
-The diversity constraint helps ensure that cluster representatives are 
-spread across the similarity space, making them better anchors for domain 
+The diversity constraint helps ensure that cluster representatives are
+spread across the similarity space, making them better anchors for domain
 alignment.
 }
 \examples{
@@ -87,7 +89,7 @@ alignment.
 # Create example sparse similarity matrix
 library(Matrix)
 n <- 1000
-# Generate random sparse matrix with values in [0,1]
+# Generate random sparse matrix with values in [0, 1]
 sim_matrix <- Matrix::rsparsematrix(n, n, density = 0.05, rand.x = runif)
 sim_matrix <- (sim_matrix + Matrix::t(sim_matrix)) / 2  # Make symmetric
 Matrix::diag(sim_matrix) <- 1  # Self-similarity = 1

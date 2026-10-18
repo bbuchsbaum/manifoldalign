@@ -21,7 +21,7 @@ compute_parrot_cost(
 
 \item{anchor_info}{List with anchor information for both networks}
 
-\item{alpha}{Weight for RWR vs attribute cost (default: 0.5)}
+\item{alpha}{Weight of the attribute cost; the RWR cost gets \code{1 - alpha}}
 
 \item{sigma}{RWR restart probability (beta in paper)}
 

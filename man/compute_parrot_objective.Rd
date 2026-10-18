@@ -33,7 +33,14 @@ compute_parrot_objective(
 Objective function value
 }
 \description{
-Computes the full objective:
-\eqn{<C_rwr, S> + lambda_e * L_e(S) + lambda_n * L_n(S) + lambda_p * L_p(S)}.
+Evaluates the PARROT objective
+\deqn{F(S) = \langle C_{rwr}, S\rangle + \lambda_e L_e(S) +
+  \lambda_n KL(S \| \hat S_\delta(S)) + \lambda_p KL(S \| H),}
+with \eqn{L_e(S) = \sum_{ij} (a_i + b_j) S_{ij} - 2 \langle C_1 S C_2^T, S\rangle}
+(cosine feature distances on graph edges), \eqn{\hat S(S) = W_1^T S W_2}
+mixed with the product plan, \eqn{\hat S_\delta = (1-\delta)\hat S +
+\delta/(n_1 n_2)} with \eqn{\delta = 10^{-8}}, and \eqn{H} the anchor
+prior (1 on declared anchor pairs, \eqn{10^{-6}} elsewhere, normalised to
+sum 1; uniform when there are no anchors).
 }
 \keyword{internal}

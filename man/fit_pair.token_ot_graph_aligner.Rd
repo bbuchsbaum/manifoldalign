@@ -32,7 +32,11 @@ list(v1, v2), where shared values indicate anchors and NAs denote unknowns.}
 }
 \value{
 An object of class token_ot_graph_pair_fit with fields transport
-  (sparse coupling), assignment, objective, and dimensions.
+(sparse coupling), assignment, objective, and dimensions. \code{objective} (also
+returned by \code{\link[=pair_loss]{pair_loss()}}) is the transport cost \code{sum(W * C)} on the
+original, unscaled candidate costs, so it is comparable across the edges
+of \code{\link[=align_many]{align_many()}}; the solver-internal median-scaled value is kept in
+\code{diagnostics$objective_scaled}.
 }
 \description{
 Fit Token-OT Graph alignment on a pair of domains

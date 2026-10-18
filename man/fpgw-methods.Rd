@@ -7,8 +7,9 @@
 NULL (documentation page only).
 }
 \description{
-These methods integrate FPGW results with the multiblock_biprojector
-framework from the multivarious package.
+S3 methods for \code{fpgw} results (transport, coefficients, summaries and
+plots). An \code{fpgw} object holds transport plans, not a projector, so it
+does not inherit from multivarious' \code{multiblock_biprojector}.
 }
 \examples{
 \donttest{

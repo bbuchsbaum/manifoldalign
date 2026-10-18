@@ -15,25 +15,25 @@ compute_diffusion_coordinates(
 )
 }
 \arguments{
-\item{basis}{Optional basis list with fields `values` and `vectors`.}
+\item{basis}{Optional basis list with fields \code{values} and \code{vectors}.}
 
-\item{values}{Optional numeric vector of eigenvalues (overrides `basis$values`).}
+\item{values}{Optional numeric vector of eigenvalues (overrides \code{basis$values}).}
 
 \item{vectors}{Optional matrix (or sparse Matrix) of eigenvectors (overrides
-`basis$vectors`).}
+\code{basis$vectors}).}
 
 \item{time}{Positive numeric scalar or vector of times.}
 
 \item{k}{Optional integer number of coordinates to keep (defaults to all).}
 
-\item{eigen_tol}{Positive threshold; eigenpairs with `value <= eigen_tol` are
+\item{eigen_tol}{Positive threshold; eigenpairs with \code{value <= eigen_tol} are
 dropped.}
 
-\item{normalize}{Optional normalization: `"none"` (default) or `"row"`.}
+\item{normalize}{Optional normalization: \code{"none"} (default) or \code{"row"}.}
 }
 \value{
-If `time` is length-1, a numeric matrix N x k. If `time` has length
-  > 1, a list of matrices (one per time).
+If \code{time} has length one, a numeric matrix N x k; otherwise a list of
+matrices, one per time.
 }
 \description{
 Diffusion coordinates at time \eqn{t} are given by

@@ -20,10 +20,19 @@
 )
 }
 \value{
-List with components W (optimized weight matrix), trace (objective values),
-  convergence (status code), message (convergence message), and iterations (count)
+List with components W (optimized weight matrix), trace (objective
+at the initial weights and after each update), convergence (status code),
+message (convergence message), and iterations (number of ADAM updates
+applied)
 }
 \description{
-Enhanced ADAM optimizer with alpha scheduling
+The full-data objective is evaluated after every update, independently of
+\code{verbose}, so logging never changes the stopping decision or the returned
+weights. Stopping criteria (checked only once any alpha_p schedule has
+finished): absolute change of the full-data objective below \code{tol} for five
+consecutive updates (\code{"SUCCESS"}), or norm of the (batch) gradient below
+\code{10 * tol} (\code{"GRADIENT_CONVERGED"}). Exhausting \code{maxit} updates returns
+convergence code 1 (\code{"MAXITER_REACHED"}) with a warning; a non-finite
+objective returns code 3 (\code{"NONFINITE_OBJECTIVE"}) with a warning.
 }
 \keyword{internal}

@@ -30,46 +30,46 @@ sumcor_control(
 }
 \arguments{
 \item{beta}{Nonnegative weight of the event-feature metric relative to exact
-event correspondence. `beta = 0` gives the correspondence-only model
+event correspondence. \code{beta = 0} gives the correspondence-only model
 exactly; supplied event features are then not used.}
 
 \item{kernel_weights}{Optional named nonnegative weights over event-feature
-families (`theta_m`), normalised to sum to one over the families
-supplied. `NULL` gives equal weights.}
+families (\code{theta_m}), normalised to sum to one over the families
+supplied. \code{NULL} gives equal weights.}
 
 \item{kernel_ridge}{Positive ridge for each event-feature kernel, relative
 to the mean squared singular value of the preprocessed feature block:
-`eta = kernel_ridge * mean(sigma^2)`.}
+\code{eta = kernel_ridge * mean(sigma^2)}.}
 
 \item{kernel_rank}{Optional maximum number of singular components kept per
-kernel block. `NULL` keeps every component with nonnegligible weight.}
+kernel block. \code{NULL} keeps every component with nonnegligible weight.}
 
 \item{kernel_scale}{Logical; scale event-feature columns to unit variance
 after centring (constant columns are dropped).}
 
-\item{kernel_normalization}{`"max_eigenvalue"` rescales each family kernel so
-its largest eigenvalue is one; `"none"` keeps `K_m` as defined.}
+\item{kernel_normalization}{\code{"max_eigenvalue"} rescales each family kernel so
+its largest eigenvalue is one; \code{"none"} keeps \code{K_m} as defined.}
 
 \item{kernel_blocks}{Optional name of an event attribute. When given, each
 kernel is block diagonal by that attribute, so event features never
-relate events with different attribute values. `NULL` uses one block.}
+relate events with different attribute values. \code{NULL} uses one block.}
 
-\item{covariance_shrinkage}{Shrinkage `rho` in `[0, 1]` of each domain's
+\item{covariance_shrinkage}{Shrinkage \code{rho} in \verb{[0, 1]} of each domain's
 repeat-level covariance toward a scaled identity.}
 
-\item{basis}{Linear per-domain representation: `"pca"` (weighted PCA over
-all columns), `"grouped_pca"` (PCA within supplied column groups), or
-`"identity"` (centring and optional scaling only).}
+\item{basis}{Linear per-domain representation: \code{"pca"} (weighted PCA over
+all columns), \code{"grouped_pca"} (PCA within supplied column groups), or
+\code{"identity"} (centring and optional scaling only).}
 
-\item{basis_rank}{Maximum number of components per domain for `"pca"`.}
+\item{basis_rank}{Maximum number of components per domain for \code{"pca"}.}
 
 \item{group_rank}{Maximum number of components per column group for
-`"grouped_pca"`.}
+\code{"grouped_pca"}.}
 
 \item{basis_scale}{Logical; scale columns to unit (event-weighted) variance
 before the basis is fitted.}
 
-\item{event_weights}{Event weighting: `"uniform"`, the name of an event
+\item{event_weights}{Event weighting: \code{"uniform"}, the name of an event
 attribute (each attribute value then receives equal total weight, split
 uniformly among its events), or a named nonnegative numeric vector over
 event identifiers.}
@@ -88,7 +88,7 @@ convergence.}
 direction is treated as unsupported and completed deterministically.}
 
 \item{identity_max_dim}{Largest column count allowed with
-`basis = "identity"`.}
+\code{basis = "identity"}.}
 
 \item{store_basis}{Logical; keep each domain's fitted basis matrix in the
 result. Prediction does not need it.}
@@ -97,7 +97,7 @@ result. Prediction does not need it.}
 computation.}
 }
 \value{
-An object of class `sumcor_control`.
+An object of class \code{sumcor_control}.
 }
 \description{
 Control settings for event-keyed SUMCOR alignment

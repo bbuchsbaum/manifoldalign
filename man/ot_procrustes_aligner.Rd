@@ -7,7 +7,7 @@
 ot_procrustes_aligner()
 }
 \value{
-An object of class `c("ot_procrustes_aligner", "aligner")`.
+An object of class \code{c("ot_procrustes_aligner", "aligner")}.
 }
 \description{
 Provides a pairwise interface implementing the orthogonal-invariant OT

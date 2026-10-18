@@ -2,14 +2,16 @@
 % Please edit documentation in R/fpgw.R
 \name{sinkhorn_fgw_warmstart}
 \alias{sinkhorn_fgw_warmstart}
-\title{Warm-start with entropic FGW}
+\title{Warm-start with entropic OT on the feature cost}
 \usage{
 sinkhorn_fgw_warmstart(Cfeat, Cx, Cy, p, q, omega1, eps, iters)
 }
 \value{
-A numeric matrix representing the warm-start transport plan.
+A numeric matrix in \eqn{\Pi(p, q)}.
 }
 \description{
-Warm-start with entropic FGW
+Log-domain Sinkhorn on \code{omega1 * Cfeat} with regularisation \code{eps},
+followed by rounding onto \eqn{\Pi(p, q)} so that the result is a feasible
+Frank-Wolfe starting point.
 }
 \keyword{internal}

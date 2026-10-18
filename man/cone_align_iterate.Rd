@@ -4,7 +4,15 @@
 \alias{cone_align_iterate}
 \title{Iterative CONE-Align Algorithm}
 \usage{
-cone_align_iterate(embeddings, solver, max_iter, tol, lambda, anchors = NULL)
+cone_align_iterate(
+  embeddings,
+  solver,
+  max_iter,
+  tol,
+  lambda,
+  anchors = NULL,
+  verbose = FALSE
+)
 }
 \arguments{
 \item{embeddings}{List of embedding matrices}
@@ -16,9 +24,12 @@ cone_align_iterate(embeddings, solver, max_iter, tol, lambda, anchors = NULL)
 \item{tol}{Convergence tolerance}
 
 \item{lambda}{Regularization parameter}
+
+\item{verbose}{Logical; report convergence via message()}
 }
 \value{
-List with final rotation, permutation, and iteration count
+List with final rotation, permutation, iteration count and
+convergence flag
 }
 \description{
 Iterative CONE-Align Algorithm

@@ -4,17 +4,22 @@
 \alias{resolve_hyperdesign}
 \title{Resolve a hyperdesign object into a normalized domain list}
 \usage{
-resolve_hyperdesign(data)
+resolve_hyperdesign(data, keep_sparse = FALSE)
 }
 \arguments{
 \item{data}{Hyperdesign object produced by multidesign::hyperdesign() or a
 compatible structure used in tests.}
+
+\item{keep_sparse}{Logical; when \code{TRUE}, \code{Matrix} data blocks (for example
+sparse \code{dgCMatrix}) are returned unchanged. The default \code{FALSE} coerces
+every block to a base matrix for callers whose downstream code requires
+dense input.}
 }
 \value{
-List with `domains`, `domain_names`, and `n_domains`.
+List with \code{domains}, \code{domain_names}, and \code{n_domains}.
 }
 \description{
-Guarantees a consistent list-of-lists with entries `x` and `design` while
+Guarantees a consistent list-of-lists with entries \code{x} and \code{design} while
 preserving original names for downstream use.
 }
 \keyword{internal}

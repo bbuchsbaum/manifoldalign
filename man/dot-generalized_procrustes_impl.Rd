@@ -17,13 +17,13 @@
 )
 }
 \arguments{
-\item{A_list}{A list of length \eqn{n}, where each element \eqn{A_i} is a 
-\eqn{d x li} numeric matrix representing the observed data for subject 
+\item{A_list}{A list of length \eqn{n}, where each element \eqn{A_i} is a
+\eqn{d x li} numeric matrix representing the observed data for subject
 \eqn{i}. Each subject might have different \eqn{li < L}.}
 
-\item{task_labels_list}{A list of length \eqn{n}, where 
-\eqn{task_labels_list[[i]]} is an integer (or numeric) vector of length 
-\eqn{li}, specifying which global tasks each column of \eqn{A_i} 
+\item{task_labels_list}{A list of length \eqn{n}, where
+\eqn{task_labels_list[[i]]} is an integer (or numeric) vector of length
+\eqn{li}, specifying which global tasks each column of \eqn{A_i}
 corresponds to (in \eqn{1..L}).}
 
 \item{L}{Integer. The total number of distinct tasks across all subjects.}
@@ -32,80 +32,105 @@ corresponds to (in \eqn{1..L}).}
 
 \item{tol}{Numeric tolerance for convergence. Default \code{1e-6}.}
 
-\item{tol_type}{Character. Type of tolerance ("relative" or "absolute"). 
-Note: The relative tolerance is calculated as `sqrt(diff_sq) / norm0`, 
-where `norm0` is the Frobenius norm of the initial `O_mats` (plus epsilon 
-for stability). The absolute tolerance uses `sqrt(diff_sq) / (sqrt(n*d) + 1)`.
+\item{tol_type}{Character. Type of tolerance ("relative" or "absolute").
+Note: The relative tolerance is calculated as \code{sqrt(diff_sq) / norm0},
+where \code{norm0} is the Frobenius norm of the initial \code{O_mats} (plus epsilon
+for stability). The absolute tolerance uses \code{sqrt(diff_sq) / (sqrt(n*d) + 1)}.
 Default "relative".}
 
-\item{verbose}{Logical. If \code{TRUE}, prints iteration info. Default 
+\item{verbose}{Logical. If \code{TRUE}, prints iteration info. Default
 \code{FALSE}.}
 
-\item{svd_method}{Backend for the initial SVD (one of \code{"irlba"}, 
-\code{"base"}). \code{"irlba"} is recommended and used by default, with 
-fallback to random initialization if needed. \code{"base"} forces the use 
+\item{svd_method}{Backend for the initial SVD (one of \code{"irlba"},
+\code{"base"}). \code{"irlba"} is recommended and used by default, with
+fallback to random initialization if needed. \code{"base"} forces the use
 of dense SVD, which can be slow/memory-intensive. Default \code{"irlba"}.}
 
-\item{svd_opts}{List of extra arguments passed to \code{irlba::irlba} or 
+\item{svd_opts}{List of extra arguments passed to \code{irlba::irlba} or
 \code{base::svd}.}
 }
 \value{
 A list with:
 \item{O_mats}{List of \eqn{n} orthogonal \eqn{d \times d} matrices.}
-\item{A_est}{A \eqn{d \times L} consensus matrix. Columns corresponding to 
-  tasks observed by no subjects will contain \code{NA}.}
+\item{A_est}{A \eqn{d \times L} consensus matrix. Columns corresponding to
+tasks observed by no subjects will contain \code{NA}.}
 \item{iterations}{Number of iterations performed.}
 \item{converged}{Logical indicating whether the GPM converged.}
-\item{final_diff}{The final difference value (`sqrt(diff_sq)`) used for the 
-  convergence check.}
+\item{final_diff}{The Frobenius norm of the change in the rotations at the
+last iteration (\code{sqrt(diff_sq)}), i.e. the value used for the final
+convergence check.}
+\item{certificate}{A list with \code{status} (\code{"computed"},
+\code{"stationarity_only"}, \code{"skipped"} or \code{"failed"}),
+\code{stationarity_residual} (relative asymmetry of the
+\eqn{\Lambda_i}), \code{min_eigenvalue} and
+\code{relative_min_eigenvalue} of \eqn{\Lambda - C} (relative to
+\eqn{\lambda_{max}(C)}), \code{tol}, and \code{certified} (\code{TRUE}
+when both quantities are within \code{tol}; \code{NA} when the
+eigenvalue test was not run).}
 }
 \description{
-Extends Generalized Orthogonal Procrustes to handle partial task 
-observations. Uses efficient sparse matrix operations and robust 
+Extends Generalized Orthogonal Procrustes to handle partial task
+observations. Uses efficient sparse matrix operations and robust
 initialization.
 }
 \details{
 \strong{Sparse Construction of D}:
-We form a large sparse matrix \eqn{D \in R^{(n d) \times L}} using 
-\code{Matrix::sparseMatrix}. Triplet indices (row, column, value) are 
+We form a large sparse matrix \eqn{D \in R^{(n d) \times L}} using
+\code{Matrix::sparseMatrix}. Triplet indices (row, column, value) are
 collected efficiently.
 
 \strong{Robust Initialization}:
-Initialization uses the top \eqn{d} left singular vectors of \eqn{D}, typically 
-computed via \code{irlba::irlba}. If \code{irlba} fails or returns a rank 
-deficient result (less than \eqn{d} vectors), it falls back to initializing 
+Initialization uses the top \eqn{d} left singular vectors of \eqn{D}, typically
+computed via \code{irlba::irlba}. If \code{irlba} fails or returns a rank
+deficient result (less than \eqn{d} vectors), it falls back to initializing
 with random orthogonal matrices to ensure robustness.
 
 \strong{Vectorized GPM Iteration}:
-The core iteration avoids \eqn{O(n^2)} complexity by computing the update 
+The core iteration avoids \eqn{O(n^2)} complexity by computing the update
 term \eqn{CO} using two efficient sparse matrix multiplications:
 \enumerate{
-  \item \eqn{Y <- D^T * stack(O_{old})}
-  \item \eqn{CO_{stack} <- D * Y}
+\item \eqn{Y <- D^T * stack(O_{old})}
+\item \eqn{CO_{stack} <- D * Y}
 }
-where \eqn{stack(O)} reshapes the \eqn{d \times d \times n} array of 
-rotation matrices into an \eqn{(nd) \times d} matrix. The resulting 
-\eqn{(nd) \times d} matrix \eqn{CO_{stack}} is then unstacked back into 
+where \eqn{stack(O)} reshapes the \eqn{d \times d \times n} array of
+rotation matrices into an \eqn{(nd) \times d} matrix. The resulting
+\eqn{(nd) \times d} matrix \eqn{CO_{stack}} is then unstacked back into
 a \eqn{d \times d \times n} array.
 
 \strong{Efficient Projection}:
-Each \eqn{d \times d} slice of the unstacked update is projected onto the 
-orthogonal group O(d). An efficient projection method (\code{.projO}) is used, 
-switching between an eigenvalue-based method for small \eqn{d} and an 
+Each \eqn{d \times d} slice of the unstacked update is projected onto the
+orthogonal group O(d). An efficient projection method (\code{.projO}) is used,
+switching between an eigenvalue-based method for small \eqn{d} and an
 SVD-based method for larger \eqn{d}.
 
 \strong{Convergence Check}:
-Convergence is assessed by comparing the Frobenius norm of the difference 
-between consecutive projected iterates \eqn{O_{new}} and 
-\eqn{O_{old}}. For relative tolerance, this difference is scaled by the 
+Convergence is assessed by comparing the Frobenius norm of the difference
+between consecutive projected iterates \eqn{O_{new}} and
+\eqn{O_{old}}. For relative tolerance, this difference is scaled by the
 Frobenius norm of the initial \eqn{O} matrices (calculated once).
 
+\strong{Optimality Certificate}:
+The iteration maximises \eqn{tr(O^T C O)} with \eqn{C = D D^T}. At the
+returned rotations, \eqn{\Lambda_i = (C O)_i O_i^T} must be symmetric
+(first-order stationarity), and \eqn{\Lambda - C \succeq 0} with
+\eqn{\Lambda = blkdiag(\Lambda_i)} certifies global optimality (Ling, 2024).
+The smallest eigenvalue of \eqn{\Lambda - C} is computed densely when
+\eqn{n d \le 1000}; larger problems report stationarity only.
+
+\strong{Translations}:
+The model is rotation-only: \eqn{A_i \approx O_i A_{est}[, tasks_i]}. Inputs
+must therefore share a common origin. In particular, centring each subject
+over a different subset of tasks introduces subject-specific offsets that
+the rotations cannot absorb and biases the consensus; centre all subjects
+on a common set of tasks instead (the hyperdesign method does this by
+default, see \code{translation}).
+
 \strong{Final Consensus A_est}:
-After convergence, the consensus matrix \eqn{A_{est}} is computed. 
-For each task \eqn{j}, we average the transformed data 
-\eqn{O_i^T A_i(*, j_i)} only over subjects \eqn{i} in \eqn{S_j} that observed 
-task \eqn{j}. Task counts (number of subjects observing each task \eqn{j}) are 
-computed by directly iterating over \code{task_labels_list}, ensuring correctness 
+After convergence, the consensus matrix \eqn{A_{est}} is computed.
+For each task \eqn{j}, we average the transformed data
+\eqn{O_i^T A_i(*, j_i)} only over subjects \eqn{i} in \eqn{S_j} that observed
+task \eqn{j}. Task counts (number of subjects observing each task \eqn{j}) are
+computed by directly iterating over \code{task_labels_list}, ensuring correctness
 even if input matrices contain explicit zeros.
 }
 \examples{

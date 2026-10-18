@@ -2,13 +2,77 @@
 % Please edit documentation in R/adapters_rapid_ma.R
 \name{rapid_ma_aligner}
 \alias{rapid_ma_aligner}
-\title{Construct a RAPID-MA aligner descriptor}
+\alias{fit_many.rapid_ma_aligner}
+\alias{fit_pair.rapid_ma_aligner}
+\title{RAPID-MA Adapter for Pairwise and Multi-Domain Alignment}
 \usage{
 rapid_ma_aligner()
+
+\method{fit_many}{rapid_ma_aligner}(algo, domains, k = NULL, ncomp = NULL, ...)
+
+\method{fit_pair}{rapid_ma_aligner}(
+  algo,
+  X_i,
+  X_j,
+  links = NULL,
+  labels = NULL,
+  relations = NULL,
+  positions = NULL,
+  attributes = NULL,
+  ncomp = 16L,
+  control = rapid_ma_control(),
+  fine_match = TRUE,
+  match_control = list(),
+  ...
+)
+}
+\arguments{
+\item{algo}{A \code{rapid_ma_aligner} descriptor.}
+
+\item{domains}{A list of matrices or a \code{hyperdesign}.}
+
+\item{k}{Optional shared dimension supplied by \code{align_many()}; used as
+\code{ncomp} when \code{ncomp} is \code{NULL}.}
+
+\item{ncomp}{Shared embedding dimension. For \code{fit_many()}, \code{NULL} uses \code{k},
+or 16 when both are \code{NULL}.}
+
+\item{...}{For \code{fit_many()}, arguments forwarded to \code{\link[=rapid_ma]{rapid_ma()}}. For
+\code{fit_pair()}, ignored; it absorbs framework arguments such as the edge
+indices \code{i} and \code{j} passed by \code{align_many()}.}
+
+\item{X_i, X_j}{Numeric domain matrices (dense or sparse \code{Matrix}).}
+
+\item{links}{Optional one-to-one anchor pairs or paired anchor-ID vectors,
+used as fixed anchors of the fine match (see Details).}
+
+\item{labels, relations, positions, attributes}{Optional two-domain inputs,
+as lists of length two (optionally named \code{i} and \code{j}).}
+
+\item{control}{Settings returned by \code{\link[=rapid_ma_control]{rapid_ma_control()}}.}
+
+\item{fine_match}{Whether to compute bounded node-level matches.}
+
+\item{match_control}{Named arguments forwarded to \code{\link[=rapid_ma_match]{rapid_ma_match()}}.}
 }
 \value{
-An object of class `c("rapid_ma_aligner", "aligner")`.
+\code{rapid_ma_aligner()} returns an aligner descriptor of class
+\code{c("rapid_ma_aligner", "aligner")}. The pairwise method returns a
+\code{rapid_ma_pair_fit} containing the shared core fit and the fine match; the
+multi-domain method returns a \code{rapid_ma} fit.
 }
 \description{
-Construct a RAPID-MA aligner descriptor
+Connects RAPID-MA to the package alignment-adapter interface while
+preserving the same native multi-domain core semantics. \code{fit_many()} runs
+the native multi-domain \code{\link[=rapid_ma]{rapid_ma()}} core; \code{fit_pair()} runs the same core on
+two domains named \code{"i"} and \code{"j"} and, by default, adds a bounded node-level
+fine match from \code{\link[=rapid_ma_match]{rapid_ma_match()}}.
+}
+\details{
+Pairwise \code{links} are used only as fixed one-to-one anchors of the bounded
+fine match; the core fit has no node-pair anchor term. Supplying \code{links}
+with \code{fine_match = FALSE} is therefore an error. The permutation operators
+returned by \code{relative_transform()} for a pair fit are row-normalized in both
+directions, so many-to-one retrieval matches average rather than sum source
+rows.
 }

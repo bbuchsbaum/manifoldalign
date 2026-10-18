@@ -735,7 +735,8 @@ multiscale_manifold_align <- function(data, ...) {
 #' @rdname multiscale_manifold_align
 #' @method multiscale_manifold_align hyperdesign
 #' @param y Optional unquoted label column used to build cross-domain correspondences.
-#' @param correspondences Optional data.frame with columns domain_i,index_i,domain_j,index_j[,weight].
+#' @param correspondences Optional data.frame with columns `domain_i`, `index_i`,
+#'   `domain_j`, `index_j` and optionally `weight`.
 #' @param preproc Optional preprocessing function/preprocessor applied per domain.
 #' @param ncomp Number of target embedding components.
 #' @param control Control settings from [multiscale_manifold_align_control()].

@@ -16,7 +16,7 @@ mma_align_multiple(data, ...)
 }
 \value{
 A list containing aligned embeddings, rotation matrices, and
-  convergence information for all domains.
+convergence information for all domains.
 }
 \description{
 Align 3+ domains via spectral embeddings and EM-based probabilistic registration

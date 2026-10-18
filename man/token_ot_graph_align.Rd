@@ -20,31 +20,40 @@ token_ot_graph_align(data, ...)
 \method{token_ot_graph_align}{list}(data, ...)
 }
 \arguments{
-\item{data}{A `hyperdesign` object (2 domains) or a list of two matrices.}
+\item{data}{A \code{hyperdesign} object (2 domains) or a list of two matrices.}
 
 \item{...}{Additional arguments (reserved for future extensions).}
 
 \item{anchors}{Optional unquoted column name in each domain's design table
 providing anchor identifiers (shared values indicate known correspondences).
-Use `NULL` for unsupervised alignment.}
+Use \code{NULL} for unsupervised alignment.}
 
-\item{preproc}{Optional preprocessing (default: `multivarious::center()`).}
+\item{preproc}{Optional preprocessing (default: \code{multivarious::center()}).}
 
-\item{ncomp}{Integer number of components stored in `s` (scores) and `v`
-(loadings). Used for the baseline embedding view when available.}
+\item{ncomp}{Integer number of components stored in \code{s} and \code{v}. Used for
+the baseline embedding view when available.}
 
-\item{control}{Control settings from [token_ot_graph_align_control()].}
+\item{control}{Control settings from \code{\link[=token_ot_graph_align_control]{token_ot_graph_align_control()}}.}
 }
 \value{
-A `multiblock_biprojector` with subclass `token_ot_graph_align`.
-  Extras include `transport_plan` (sparse coupling), `assignment` (greedy or
-  Hungarian), and `diagnostics`.
+A \code{multiblock_biprojector} with subclass \code{token_ot_graph_align}.
+The alignment itself is carried by the extras \code{transport_plan} (sparse
+coupling), \code{assignment} (greedy or Hungarian) and \code{diagnostics}
+(\code{objective} is the unscaled transport cost; \code{objective_scaled} the
+solver-internal median-scaled value). \code{s} holds each domain's own baseline
+embedding (the per-domain Laplacian eigenmap, or the first view), stacked
+domain 1 then domain 2. These coordinates are computed independently per
+domain and are \emph{not} aligned to a common frame, so rows of \code{s} from
+different domains must not be compared directly; \code{v} holds the matching
+descriptive loadings \eqn{X_i^T s_i}.
 }
 \description{
-Align two graphs (node sets) by representing each node as a **bag of context
-tokens** and aligning nodes via:
-1) multi-view node embeddings (late-fusion similarity), and
-2) token-level entropic optimal transport (Sinkhorn) between node bags.
+Align two graphs (node sets) by representing each node as a \strong{bag of context
+tokens} and aligning nodes via:
+\enumerate{
+\item multi-view node embeddings (late-fusion similarity), and
+\item token-level entropic optimal transport (Sinkhorn) between node bags.
+}
 }
 \details{
 This implementation is designed to stay sparse and efficient by generating

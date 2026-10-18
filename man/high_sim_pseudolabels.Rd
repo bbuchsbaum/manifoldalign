@@ -14,8 +14,8 @@ high_sim_pseudolabels(
 )
 }
 \arguments{
-\item{strata}{List produced by multidesign::hyperdesign. Each element 
-should have $x (samples x features matrix) and $design (metadata 
+\item{strata}{List produced by multidesign::hyperdesign. Each element
+should have $x (samples x features matrix) and $design (metadata
 data.frame)}
 
 \item{k}{Number of cross-domain neighbors to examine (default: 5)}
@@ -29,22 +29,22 @@ data.frame)}
 \item{verbose}{Whether to print progress information (default: FALSE)}
 }
 \value{
-Factor vector of pseudolabels with length equal to total number of 
-  samples across all domains. NA indicates samples with no confident match.
+Factor vector of pseudolabels with length equal to total number of
+samples across all domains. NA indicates samples with no confident match.
 }
 \description{
-Generates pseudolabels based on high cosine similarity across different 
+Generates pseudolabels based on high cosine similarity across different
 domains. Specialized version for multi-domain case.
 }
 \details{
-This function implements the approach described in the pseudolabel 
+This function implements the approach described in the pseudolabel
 documentation:
 \enumerate{
-  \item Pool and L2-normalize all samples across domains
-  \item Build approximate nearest neighbor index using angular distance
-  \item Find high-similarity cross-domain pairs
-  \item Use connected components to form clusters
-  \item Filter clusters by minimum size
+\item Pool and L2-normalize all samples across domains
+\item Build approximate nearest neighbor index using angular distance
+\item Find high-similarity cross-domain pairs
+\item Use connected components to form clusters
+\item Filter clusters by minimum size
 }
 }
 \examples{

@@ -19,8 +19,8 @@ fit_pair(algo, X_i, X_j, links = NULL, ...)
 }
 \value{
 A pairwise fit object whose class depends on the method (e.g.,
-  grasp_pair_fit, parrot_pair_fit). Contains alignment results including
-  transform parameters and loss.
+grasp_pair_fit, parrot_pair_fit). Contains alignment results including
+transform parameters and loss.
 }
 \description{
 Fit a pairwise alignment model

@@ -36,7 +36,7 @@ uot_fit_pair(
 \arguments{
 \item{X}{Source coordinates (n x q), with any number of columns q.}
 
-\item{Y}{Template coordinates (m x q), with the same columns as `X`.}
+\item{Y}{Template coordinates (m x q), with the same columns as \code{X}.}
 
 \item{alpha}{Source masses (length n, nonnegative, not all zero).}
 
@@ -47,39 +47,39 @@ uot_fit_pair(
 \item{G}{Optional template features (m x D).}
 
 \item{lambda_coord}{Weight for the squared distance between coordinates
-(`X` versus `Y`).}
+(\code{X} versus \code{Y}).}
 
 \item{lambda_feat}{Weight for feature squared distance.}
 
 \item{prior_map}{Optional integer vector (length n) giving a preferred target
-index (1..m) for each source node. Passed to [uot_build_cost()].}
+index (1..m) for each source node. Passed to \code{\link[=uot_build_cost]{uot_build_cost()}}.}
 
 \item{lambda_prior}{Nonnegative weight for the soft prior term.}
 
 \item{prior_sigma}{Optional positive scale for the prior term.}
 
-\item{neighbor_mode}{Neighborhood mode passed to [uot_build_cost()].}
+\item{neighbor_mode}{Neighborhood mode passed to \code{\link[=uot_build_cost]{uot_build_cost()}}.}
 
-\item{k_neighbors}{Integer k for kNN neighborhoods (used by `"knn"` and
-`"hybrid"`).}
+\item{k_neighbors}{Integer k for kNN neighborhoods (used by \code{"knn"} and
+\code{"hybrid"}).}
 
-\item{radius}{Positive scalar radius for `"radius"` / `"hybrid"` modes.}
+\item{radius}{Positive scalar radius for \code{"radius"} / \code{"hybrid"} modes.}
 
-\item{maxk}{Maximum number of candidate neighbors requested in `"radius"` /
-`"hybrid"` mode (prevents quadratic blowups).}
+\item{maxk}{Maximum number of candidate neighbors requested in \code{"radius"} /
+\code{"hybrid"} mode (prevents quadratic blowups).}
 
 \item{min_neighbors}{Minimum number of within-radius neighbors required per
-row in `"hybrid"` mode before falling back to kNN.}
+row in \code{"hybrid"} mode before falling back to kNN.}
 
 \item{group_X}{Optional vector (length n) of hard constraint group labels for
-source nodes. When provided with `group_Y`, neighborhoods are computed
+source nodes. When provided with \code{group_Y}, neighborhoods are computed
 within matching groups only.}
 
 \item{group_Y}{Optional vector (length m) of hard constraint group labels for
 template nodes.}
 
 \item{dense_max_bytes}{Maximum dense cost size (in bytes) allowed when
-`neighbor_mode="auto"`.}
+\code{neighbor_mode="auto"}.}
 
 \item{ensure_cols}{Logical; if TRUE, adds reverse 1NN edges to ensure every
 template column has at least one incoming edge (kNN/hybrid modes only).}
@@ -94,16 +94,16 @@ template column has at least one incoming edge (kNN/hybrid modes only).}
 
 \item{tol}{TI-Sinkhorn tolerance.}
 
-\item{lambda_anat}{Deprecated alias of `lambda_coord`; supplying it warns.}
+\item{lambda_anat}{Deprecated alias of \code{lambda_coord}; supplying it warns.}
 }
 \value{
-An object of class `uot_pair_fit` with fields `cost`, `sol`, `alpha`,
-  `beta`, `epsilon`, `rho1`, `rho2`.
+An object of class \code{uot_pair_fit} with fields \code{cost}, \code{sol}, \code{alpha},
+\code{beta}, \code{epsilon}, \code{rho1}, \code{rho2}.
 }
 \description{
-Convenience wrapper that builds a dense/sparse cost graph via [uot_build_cost()]
-and then solves entropic KL-UOT via [uot_ti_sinkhorn_kl()].
+Convenience wrapper that builds a dense/sparse cost graph via \code{\link[=uot_build_cost]{uot_build_cost()}}
+and then solves entropic KL-UOT via \code{\link[=uot_ti_sinkhorn_kl]{uot_ti_sinkhorn_kl()}}.
 
-This is the recommended entry point for **pairwise** workflows; it bundles the
+This is the recommended entry point for \strong{pairwise} workflows; it bundles the
 pieces you need for mapping and coupling extraction into a single object.
 }

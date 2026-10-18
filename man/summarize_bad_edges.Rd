@@ -7,7 +7,7 @@
 summarize_bad_edges(diagnostics, top = 10)
 }
 \arguments{
-\item{diagnostics}{List returned by align_many(...)[["diagnostics"]]}
+\item{diagnostics}{The \code{diagnostics} element of an \code{\link[=align_many]{align_many()}} result}
 
 \item{top}{Number of worst edges to return}
 }

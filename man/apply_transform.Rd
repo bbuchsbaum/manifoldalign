@@ -15,8 +15,12 @@ or new_align_transform)}
 \item{...}{Additional arguments passed to methods}
 }
 \value{
-A transformed data matrix. For orthogonal/linear groups, returns X %*% op.
-  For permutation group, returns op %*% X.
+A transformed data matrix. For orthogonal/linear groups, returns
+\code{X \%*\% op} (action on the feature axis); for the permutation group,
+returns \code{op \%*\% X} (action on the sample axis). See the transform
+contract in \code{\link[=new_align_transform]{new_align_transform()}}. A \code{Matrix} input (for example a
+sparse \code{dgCMatrix}) yields a \code{Matrix} result; base matrices yield base
+matrices.
 }
 \description{
 Apply a transform to data

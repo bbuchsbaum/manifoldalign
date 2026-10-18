@@ -17,7 +17,7 @@ grad_Js(X, W, T, M, sigma, sum_M_batch)
 
 \item{sigma}{Scaling parameter (sigma_P)}
 
-\item{sum_M_batch}{The sum of the *batch* mask matrix M (for consistent normalization)}
+\item{sum_M_batch}{The sum of the \emph{batch} mask matrix M (for consistent normalization)}
 }
 \value{
 Gradient matrix (d x m)

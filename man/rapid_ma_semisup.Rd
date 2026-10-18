@@ -2,7 +2,7 @@
 % Please edit documentation in R/rapid_ma_semisup.R
 \name{rapid_ma_semisup}
 \alias{rapid_ma_semisup}
-\title{Refine a RAPID-MA fit with guarded class-balanced pseudo-labels}
+\title{Refine a RAPID-MA Fit with Guarded Class-Balanced Pseudo-Labels}
 \usage{
 rapid_ma_semisup(
   fit,
@@ -15,28 +15,55 @@ rapid_ma_semisup(
 )
 }
 \arguments{
-\item{fit}{A fitted `rapid_ma` object.}
+\item{fit}{A fitted \code{rapid_ma} object.}
 
 \item{labels}{Optional training-label vectors. In inductive mode, labels
-outside `train_mask` are discarded before any statistic is computed.}
+outside \code{train_mask} are discarded before any statistic is computed.}
 
 \item{train_mask}{Optional logical vectors identifying training rows.}
 
-\item{mode}{`"transductive"` or `"inductive"`.}
+\item{mode}{Either \code{"transductive"} or \code{"inductive"}.}
 
 \item{initial_probabilities}{Optional named-class probability matrices, one
-per domain. This permits a supervised downstream classifier to seed the
-sparse relation teacher without exposing any additional labels.}
+per domain. A supervised downstream classifier can seed the sparse relation
+teacher without providing additional labels.}
 
-\item{validation_probabilities}{Optional out-of-fold probability matrices
-used only when `control$relation_validation = TRUE`. Values at observed
-label rows must be produced without training on those rows.}
+\item{validation_probabilities}{Optional out-of-fold probabilities, used
+only when relation validation is enabled
+(\code{control$relation_validation = TRUE}). One entry per domain: either a
+list of folds, each \verb{list(rows = <row indices>, probabilities = <matrix>)}
+whose full probability matrix was computed without the labels of its
+\code{rows}, or a single probability matrix, which must then be out-of-fold for
+every observed label row and all of its relation neighbours (see
+Details).}
 
-\item{control}{Settings from [rapid_ma_semisup_control()].}
+\item{control}{Settings returned by \code{\link[=rapid_ma_semisup_control]{rapid_ma_semisup_control()}}.}
 }
 \value{
-The updated `rapid_ma` object with a `semisup` provenance record.
+The updated \code{rapid_ma} object with refined probabilities and a
+\code{semisup} provenance record.
 }
 \description{
-Refine a RAPID-MA fit with guarded class-balanced pseudo-labels
+Combines learned sparse relation propagation with class-balanced confidence,
+margin, uncertainty, and neighbour-agreement guards. Accepted pseudo-labels
+update sparse node-to-prototype transport; any score increase is rolled
+back.
+}
+\details{
+Observed labels are fixed throughout refinement. In inductive mode, held-out
+label values are removed before thresholds, selection, or diagnostics are
+computed, and pseudo-labels are restricted to training rows.
+
+With \code{control$relation_validation = TRUE}, every candidate relation subset
+(none, all, each single relation, and each pair of the highest-weight
+relations) is scored by propagating \code{validation_probabilities} and measuring
+class-balanced accuracy on the observed labels. The full relation set is
+replaced only when a subset improves on it by at least
+\code{control$relation_validation_margin}. Because propagation mixes each row with
+its relation neighbours, replacing only a labelled row's own probability by a
+leave-one-out value is not out-of-fold: its neighbours' probabilities would
+still have used its label. Folds avoid this: each fold's whole matrix is
+propagated and only that fold's rows are scored, so per-row (leave-one-out)
+or grouped refits give genuinely out-of-fold scores. Rows outside every fold
+are not scored.
 }

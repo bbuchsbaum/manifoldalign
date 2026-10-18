@@ -25,7 +25,7 @@ uot_apply_map_sparse_vec_cpp(
 
 \item{col_idx}{Integer vector of length nnz giving 1-based column indices.}
 
-\item{cost}{Numeric vector of length nnz aligned with `col_idx`.}
+\item{cost}{Numeric vector of length nnz aligned with \code{col_idx}.}
 
 \item{n_rows}{Number of source nodes.}
 

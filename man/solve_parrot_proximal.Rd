@@ -2,7 +2,7 @@
 % Please edit documentation in R/parrot_proximal.R
 \name{solve_parrot_proximal}
 \alias{solve_parrot_proximal}
-\title{Solve PARROT with Proper Proximal Point Method}
+\title{Solve PARROT with a Bregman Proximal Gradient Method}
 \usage{
 solve_parrot_proximal(
   networks,
@@ -46,9 +46,26 @@ solve_parrot_proximal(
 \item{tol}{Convergence tolerance}
 }
 \value{
-List with transport plan and convergence info
+List with \code{transport_plan}, \code{cost_matrix} (the
+position-aware cost), \code{objective_history} (objective at the initial
+product plan followed by the objective after each accepted step),
+\code{outer_iterations}, \code{final_objective}, \code{converged},
+\code{status} (\code{"converged"}, \code{"max_outer"} or
+\code{"no_descent"}), \code{backtracks}, and \code{sinkhorn} (convergence
+diagnostics of the inner solve that produced the returned plan).
 }
 \description{
-Implements Algorithm 2 from the paper with monotonicity checks
+Minimises the PARROT objective (see \code{compute_parrot_objective()}) over
+transport plans with uniform marginals. Each outer step linearises the
+smooth part of the objective at the current plan \eqn{S_t}, keeps the
+entropic parts of the two KL terms exact, and adds the proximal term
+\eqn{\tau_t KL(S \| S_t)}; the step is an entropic OT problem with cost
+\eqn{\nabla f(S_t) - \tau_t \log S_t} and regularisation
+\eqn{\tau_t + \lambda_n + \lambda_p}, solved by log-domain Sinkhorn. A
+step is accepted only if the objective does not increase; otherwise
+\eqn{\tau_t} is doubled (up to 30 times) and the step retried. The loop
+starts from the product plan and stops when the largest entrywise plan
+change falls below \code{tol}, when \code{max_outer} steps were taken, or
+when no descent step can be found.
 }
 \keyword{internal}

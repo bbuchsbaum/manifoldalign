@@ -9,7 +9,7 @@ new_align_transform(group, op, from, to, k = NULL, dim = NULL)
 \arguments{
 \item{group}{Group identifier: "O", "GL", or "perm" (or "kernel" surrogate)}
 
-\item{op}{The underlying operator (e.g., kxk matrix, or assignment matrix)}
+\item{op}{The underlying operator (see section 'Transform contract').}
 
 \item{from}{Source index/label}
 
@@ -20,11 +20,40 @@ new_align_transform(group, op, from, to, k = NULL, dim = NULL)
 \item{dim}{Optional problem dimensions metadata}
 }
 \value{
-An object of class c("align_transform_<group>", "align_transform")
+An object of class c("align_transform_\if{html}{\out{<group>}}", "align_transform")
 }
 \description{
 Construct an alignment transform object
 }
+\section{Transform contract}{
+
+Every relative and per-domain transform in the package follows one
+contract, from which \code{\link[=apply_transform]{apply_transform()}}, \code{\link[=compose_transform]{compose_transform()}},
+\code{\link[=invert_transform]{invert_transform()}}, the synchronisation backends of \code{\link[=align_many]{align_many()}} and
+its diagnostics are all derived. A transform \code{T} from \code{from = a} to
+\code{to = b} maps observations of domain \code{a} onto observations of domain \code{b}:
+\describe{
+\item{\code{"O"}, \code{"GL"} (action on columns)}{\code{op} is a \verb{p_a x p_b} matrix
+acting on the feature axis from the right: \code{apply_transform(T, X_a) = X_a \%*\% op ~ X_b}, row by row.}
+\item{\code{"perm"} (action on rows)}{\code{op} is an \verb{n_b x n_a} (soft)
+assignment acting on the sample axis from the left:
+\code{apply_transform(T, X_a) = op \%*\% X_a ~ X_b}.}
+}
+Composition applies the first transform first:
+\code{apply_transform(compose_transform(T_ab, T_bc), X_a) = apply_transform(T_bc, apply_transform(T_ab, X_a))}, so the composed operator
+is \code{op_ab \%*\% op_bc} for \code{"O"}/\code{"GL"} and \code{op_bc \%*\% op_ab} for \code{"perm"}.
+
+In \code{\link[=align_many]{align_many()}} a pairwise edge transform \code{g_ij} goes from domain \code{i} to
+domain \code{j} (\verb{X_i g_ij ~ X_j}), and each per-domain transform \code{T_i} goes from
+domain \code{i} to the shared consensus space (\code{Z ~ apply_transform(T_i, X_i)}
+for every \code{i}). Consistency of an edge with the consensus therefore reads
+\code{compose_transform(g_ij, T_j) = T_i}, that is \code{T_i = g_ij \%*\% T_j} for
+\code{"O"}/\code{"GL"} and \code{T_i = T_j \%*\% g_ij} for \code{"perm"}. Synchronisation solves
+these relations in the least-squares sense, and the reported edge residual
+is the root-mean-square entry of their difference. A triangle \verb{(i, j, k)} is
+cycle-consistent when \code{compose_transform(g_ij, g_jk) = g_ik}.
+}
+
 \examples{
 # Create a simple orthogonal transform
 R <- diag(3)

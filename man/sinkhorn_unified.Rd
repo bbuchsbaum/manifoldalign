@@ -25,13 +25,20 @@ sinkhorn_unified(
 
 \item{max_iter}{Maximum iterations}
 
-\item{tol}{Convergence tolerance}
+\item{tol}{Convergence tolerance on the marginal residual}
 
-\item{stabilized}{Use log-domain stabilization for numerical stability}
+\item{stabilized}{Use log-domain iterations}
 }
 \value{
 Transport plan matrix
 }
 \description{
-Unified Sinkhorn algorithm with optional log-domain stabilization
+Solves balanced entropic OT with Gibbs kernel \code{exp(-cost / epsilon)}
+on the raw cost. With \code{stabilized = TRUE} the iterations run in the
+log domain for every \code{epsilon}; with \code{stabilized = FALSE} they
+use plain kernel scaling, which underflows when \code{cost / epsilon} is
+large. Iterations stop when the marginal residual is below \code{tol}. The
+plan is returned as computed (no post-hoc rebalancing); use
+\code{sinkhorn_unified_potentials()} to obtain the convergence flag and
+marginal residual.
 }

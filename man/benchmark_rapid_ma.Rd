@@ -2,8 +2,18 @@
 % Please edit documentation in R/rapid_ma_benchmark.R
 \name{benchmark_rapid_ma}
 \alias{benchmark_rapid_ma}
-\title{Compare RAPID-MA with related package methods on identical splits}
+\alias{rapid_ma_benchmark_fixture}
+\title{Reproducible RAPID-MA Accuracy and Package Comparison}
 \usage{
+rapid_ma_benchmark_fixture(
+  n_common = 120L,
+  extra_target = 24L,
+  source_features = 24L,
+  target_features = 10L,
+  labels_per_class = 4L,
+  seed = 1L
+)
+
 benchmark_rapid_ma(
   fixture = rapid_ma_benchmark_fixture(),
   methods = c("target_centroid", "rapid_ma", "rapid_ma_native", "rapid_ma_semisup",
@@ -15,28 +25,79 @@ benchmark_rapid_ma(
 )
 }
 \arguments{
-\item{fixture}{A list from [rapid_ma_benchmark_fixture()], or a compatible
-list containing `data`, `truth`, `labels`, optional `positions` and
-`attributes`, and optional source-to-target `correspondence`.}
+\item{n_common}{Number of corresponding nodes shared by the two domains.}
 
-\item{methods}{Methods to run. Supported values are `target_centroid`,
-`rapid_ma`, `rapid_ma_native`, `rapid_ma_semisup`, `lema`, `ssma`,
-`kema`, `multiscale`, `spectral_mnn`, and `token_ot`. Embedding methods
-use one shared nearest-centroid head; explicitly named RAPID native and
-semi-supervised rows retain their own prediction heads.}
+\item{extra_target}{Number of additional target-only nodes.}
+
+\item{source_features, target_features}{Modality-specific feature widths.}
+
+\item{labels_per_class}{Paired observed labels retained per class.}
+
+\item{seed}{Deterministic fixture or method seed. Package functions restore
+the caller's random-number stream on exit.}
+
+\item{fixture}{A fixture from \code{rapid_ma_benchmark_fixture()}, or a
+compatible two-domain list containing \code{data}, \code{truth}, \code{labels}, optional
+\code{positions} and \code{attributes}, and optional source-to-target
+\code{correspondence}.}
+
+\item{methods}{Character vector of supported comparison methods:
+\code{target_centroid}, \code{rapid_ma}, \code{rapid_ma_native}, \code{rapid_ma_semisup},
+\code{lema}, \code{ssma}, \code{kema}, \code{multiscale}, \code{spectral_mnn}, and \code{token_ot}.
+Embedding methods use one shared nearest-centroid head; explicitly named
+RAPID native and semi-supervised rows retain their own prediction heads.}
 
 \item{ncomp}{Shared requested embedding width.}
 
-\item{seed}{Deterministic method seed.}
-
 \item{controls}{Optional named per-method control lists.}
 
-\item{keep_fits}{Retain fitted objects in the result.}
+\item{keep_fits}{Whether to retain fitted objects.}
 }
 \value{
-A `rapid_ma_benchmark` list containing a same-split results table,
-  failures, split/provenance metadata, and optionally fits.
+\code{rapid_ma_benchmark_fixture()} returns generated data, held-out
+truth, observed labels, positions, attributes, correspondences, and
+provenance. \code{benchmark_rapid_ma()} returns a \code{rapid_ma_benchmark} list with
+same-split accuracy, calibration, matching, runtime, memory lower bounds,
+failures, split provenance, and optionally fits.
 }
 \description{
-Compare RAPID-MA with related package methods on identical splits
+Builds a deterministic imbalanced cross-modality land-cover fixture and
+compares RAPID-MA with LeMA and related package methods on identical
+splits. Embedding methods use the same nearest-centroid prediction head.
+Native UOT and sparse relation teacher rows are named explicitly so their
+accuracy is not conflated with embedding quality.
+}
+\details{
+Held-out truth is used only after fitting, for scoring. The class set given
+to every prediction head is the set of classes with at least one observed
+(training) label; held-out truth never defines it. The rare class reported
+by \code{rare_recall} is the evaluated class with the smallest held-out support
+(ties broken alphabetically) and is computed only at scoring time.
+
+Macro-F1 and mIoU follow one class-universe rule, shared with the
+blocked-inductive evidence runner: they average over every class present in
+the held-out truth or in the held-out predictions. Predictions outside the
+truth classes, including open-set \code{".unknown"} predictions and labelled
+classes absent from the held-out rows, therefore count as false positives
+of a class whose F1 and IoU are zero, as well as misses for the true class.
+Overall accuracy and expected calibration error (ten equal-width bins) use
+all held-out rows.
+
+The \code{target_centroid} comparator and the domain-local part of the RAPID-MA
+teacher seed both use a principal-component projection of the standardized
+domain features (at most \code{ncomp} components, computed without labels); all
+feature columns contribute.
+
+The \code{rapid_ma_semisup} row's relation-safety gate scores relation subsets on
+genuinely out-of-fold teacher probabilities: for each observed label row,
+the whole probability matrix of its domain is recomputed without that label
+before propagation, so neighbours never carry the held-out label. Rows whose
+removal would leave a class without any label are not scored.
+
+The bundled LeMA implementation is an independent dense equation-level
+benchmark oracle and is not available as a production backend. Reported
+endpoint RSS is a lower bound rather than a sampled peak; evidence scripts
+should measure process peak RSS separately. Hits@1 uses exact
+nearest-neighbour retrieval. MRR is a bounded MRR@100 lower bound; true
+matches outside the first 100 candidates contribute zero.
 }

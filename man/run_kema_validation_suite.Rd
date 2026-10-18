@@ -10,8 +10,8 @@ run_kema_validation_suite(verbose = TRUE)
 \item{verbose}{Whether to print a concise report.}
 }
 \value{
-A list containing `fidelity_validation`, `backend_agreement`,
-  `withdrawn_validations`, and `overall_success`.
+A list containing \code{fidelity_validation}, \code{backend_agreement},
+\code{withdrawn_validations}, and \code{overall_success}.
 }
 \description{
 Fits deterministic KEMA fixtures and records the same numerical contracts
@@ -22,7 +22,7 @@ operator backends up to subspace indeterminacy.
 \details{
 Withdrawn paper-eigenvalue, regression-solver, and fabricated reconstruction
 checks are reported for auditability but do not contribute to
-`overall_success`.
+\code{overall_success}.
 }
 \examples{
 \donttest{

@@ -7,11 +7,11 @@
 \format{
 A list with the following components:
 \describe{
-  \item{domains}{List of three elements named `domain1`, `domain2`, and
-  `domain3`. Each element contains a centered numeric matrix `x` (samples
-  x features) and a `design` data frame with `id`, `condition`, and
-  `domain` columns.}
-  \item{labels}{Factor of length 80 giving the latent class for each sample.}
+\item{domains}{List of three elements named \code{domain1}, \code{domain2}, and
+\code{domain3}. Each element contains a centered numeric matrix \code{x} (samples
+x features) and a \code{design} data frame with \code{id}, \code{condition}, and
+\code{domain} columns.}
+\item{labels}{Factor of length 80 giving the latent class for each sample.}
 }
 }
 \usage{
@@ -23,6 +23,11 @@ tests. It contains three domains that share two latent classes but exhibit
 different linear transformations and noise levels. The object stores the raw
 matrices/design frames and the class labels so alignment methods can generate
 comparable hyperdesigns on demand.
+}
+\details{
+\code{alignment_benchmark} is an exported object built when the package is
+installed, not a \verb{data/} dataset, so use it directly after loading the
+package; \code{data(alignment_benchmark)} does not apply.
 }
 \examples{
 data <- alignment_benchmark

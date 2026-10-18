@@ -17,8 +17,8 @@ uot_ti_sinkhorn_kl(
 }
 \arguments{
 \item{cost}{A dense numeric matrix (n x m) or a sparse cost list. Sparse
-costs must include CSR fields `row_ptr`, `col_idx`, `cost`, `n_rows`,
-`n_cols`. If CSC fields `col_ptr`, `row_idx`, `cost_csc` are present they
+costs must include CSR fields \code{row_ptr}, \code{col_idx}, \code{cost}, \code{n_rows},
+\code{n_cols}. If CSC fields \code{col_ptr}, \code{row_idx}, \code{cost_csc} are present they
 are used for faster updates.}
 
 \item{alpha}{Source masses (length n, nonnegative).}
@@ -36,9 +36,9 @@ are used for faster updates.}
 \item{tol}{Stopping tolerance on iterate change.}
 }
 \value{
-A list with translation-invariant potentials `fbar`, `gbar`, translated dual
-potentials `f`, `g`, translation `lambda`, `iterations`, `converged`, and
-`residual`.
+A list with translation-invariant potentials \code{fbar}, \code{gbar}, translated dual
+potentials \code{f}, \code{g}, translation \code{lambda}, \code{iterations}, \code{converged}, and
+\code{residual}.
 }
 \description{
 Solve entropic unbalanced OT with KL marginal penalties using the

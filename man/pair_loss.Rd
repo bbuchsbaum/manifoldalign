@@ -34,7 +34,7 @@ pair_loss(fit, X_i = NULL, X_j = NULL, ...)
 }
 \value{
 A single numeric value representing the pairwise alignment loss, or
-  NA_real_ if not available.
+NA_real_ if not available.
 }
 \description{
 Pairwise loss (for weighting/diagnostics)

@@ -34,29 +34,47 @@ ssma_align(data, ...)
 \method{ssma_align}{default}(data, ...)
 }
 \arguments{
-\item{data}{A `hyperdesign` object or list of matrices.}
+\item{data}{A \code{hyperdesign} object or list of matrices.}
 
 \item{...}{Additional arguments passed to methods.}
 
 \item{y}{Optional unquoted label column used for label-based correspondences
-when explicit `correspondences` are not provided.}
+when explicit \code{correspondences} are not provided.}
 
 \item{correspondences}{Optional data.frame with columns
-`domain_i,index_i,domain_j,index_j[,weight]`.}
+\verb{domain_i,index_i,domain_j,index_j[,weight]}.}
 
 \item{serial_index}{Optional serial/time index specification used for
 within-domain graph decontamination. Can be:
-1) `NULL`, 2) a single design-column name, or 3) a list with one numeric
-index vector per domain.}
+\enumerate{
+\item \code{NULL}, 2) a single design-column name, or 3) a list with one numeric
+index vector per domain.
+}}
 
 \item{preproc}{Optional preprocessing function/preprocessor applied per
-domain. Default: `multivarious::center()`.}
+domain. Default: \code{multivarious::center()}.}
 
 \item{ncomp}{Number of aligned components.}
 
-\item{control}{Control settings from [ssma_align_control()].}
+\item{control}{Control settings from \code{\link[=ssma_align_control]{ssma_align_control()}}.}
 }
 \description{
 Baseline SSMA implementation based on Wang et al. feature-level manifold
-alignment (`Z^T L Z f = λ Z^T D Z f`) solved in a reduced-rank space.
+alignment (\verb{Z^T L Z f = λ Z^T D Z f}) solved in a reduced-rank space.
+}
+\details{
+Estimand: \code{L} is the Laplacian of the joint graph whose edges are the
+within-domain kNN edges plus the cross-domain correspondence edges
+(weight \code{corr_edge_weight}), while \code{D} is the block-diagonal
+\emph{within-domain} degree matrix, i.e. the constraint is
+\verb{f' Z' D_w Z f = 1} with \code{D_w = diag(D_1, ..., D_m)} from each domain's
+own kNN graph. Correspondence edges therefore enter only the objective;
+this differs from the formulation of Wang & Mahadevan, whose \code{D} is the
+degree matrix of the joint graph (it would add each row's incident
+correspondence weight to its degree). The result records this choice as
+\code{degree_matrix = "within_domain"}. The \code{ncomp} smallest generalized eigenpairs above
+\code{eig_tol} are returned; trivial (null-space) pairs are never substituted.
+If fewer than \code{ncomp} non-trivial pairs exist a warning is issued and the
+result records \code{ncomp_requested} and \code{ncomp_returned}; if none exist the
+fit errors.
 }

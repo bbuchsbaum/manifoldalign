@@ -19,21 +19,21 @@ hks_time_grid(
 
 \item{q}{Integer number of time points.}
 
-\item{mode}{Either `"auto"` (derive a time range from the spectrum) or
-`"fixed"` (use `time_range`).}
+\item{mode}{Either \code{"auto"} (derive a time range from the spectrum) or
+\code{"fixed"} (use \code{time_range}).}
 
 \item{time_range}{Length-2 positive numeric vector giving min/max times when
-`mode="fixed"`.}
+\code{mode="fixed"}.}
 
-\item{spacing}{Either `"log"` (default; typical for HKS) or `"linear"`.}
+\item{spacing}{Either \code{"log"} (default; typical for HKS) or \code{"linear"}.}
 
 \item{time_scale}{Positive scalar multiplier applied to the resulting times.}
 
-\item{eigen_tol}{Positive threshold; eigenvalues `<= eigen_tol` are ignored
-when `mode="auto"`.}
+\item{eigen_tol}{Positive threshold; eigenvalues \verb{<= eigen_tol} are ignored
+when \code{mode="auto"}.}
 }
 \value{
-Numeric vector of length `q`.
+Numeric vector of length \code{q}.
 }
 \description{
 Construct a diffusion-time grid for HKS/diffusion descriptors

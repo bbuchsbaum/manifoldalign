@@ -34,25 +34,26 @@ multiscale_manifold_align(data, ...)
 \method{multiscale_manifold_align}{default}(data, ...)
 }
 \arguments{
-\item{data}{A `hyperdesign` object or list of matrices.}
+\item{data}{A \code{hyperdesign} object or list of matrices.}
 
 \item{...}{Additional arguments passed to methods.}
 
 \item{y}{Optional unquoted label column used to build cross-domain correspondences.}
 
-\item{correspondences}{Optional data.frame with columns domain_i,index_i,domain_j,index_j[,weight].}
+\item{correspondences}{Optional data.frame with columns \code{domain_i}, \code{index_i},
+\code{domain_j}, \code{index_j} and optionally \code{weight}.}
 
 \item{preproc}{Optional preprocessing function/preprocessor applied per domain.}
 
 \item{ncomp}{Number of target embedding components.}
 
-\item{control}{Control settings from [multiscale_manifold_align_control()].}
+\item{control}{Control settings from \code{\link[=multiscale_manifold_align_control]{multiscale_manifold_align_control()}}.}
 
 \item{verbose}{Logical progress toggle.}
 }
 \value{
-A `multiblock_biprojector`-compatible object with subclass
-  `multiscale_manifold_align`.
+A \code{multiblock_biprojector}-compatible object with subclass
+\code{multiscale_manifold_align}.
 }
 \description{
 Experimental multiset manifold alignment with a QR-free spectral hierarchy.

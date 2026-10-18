@@ -564,8 +564,8 @@ compute_hks_descriptors <- function(basis = NULL,
 #'   dropped.
 #' @param normalize Optional normalization: `"none"` (default) or `"row"`.
 #'
-#' @return If `time` is length-1, a numeric matrix N x k. If `time` has length
-#'   > 1, a list of matrices (one per time).
+#' @return If `time` has length one, a numeric matrix N x k; otherwise a list of
+#'   matrices, one per time.
 #' @export
 compute_diffusion_coordinates <- function(basis = NULL,
                                          values = NULL,

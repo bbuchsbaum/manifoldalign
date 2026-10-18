@@ -20,10 +20,11 @@ grasp_multiset(data, ...)
   lambda = 0.1,
   use_laplacian = TRUE,
   anchor = 1L,
-  solver = c("linear", "auction"),
+  solver = "linear",
   assignment_alpha = 0.9,
   max_iter = 100,
   tol = 1e-06,
+  verbose = FALSE,
   ...
 )
 
@@ -36,7 +37,9 @@ grasp_multiset(data, ...)
 
 \item{...}{Additional arguments passed to hyperdesign method}
 
-\item{preproc}{Preprocessing step applied via multivarious::init_transform}
+\item{preproc}{A multivarious pre-processor (default \code{center()}), a
+list with one per domain, a plain function, or \code{NULL}; fitted and
+applied to each domain separately before graph construction.}
 
 \item{ncomp}{Number of spectral components (default: 30)}
 
@@ -50,19 +53,32 @@ grasp_multiset(data, ...)
 
 \item{anchor}{Index of reference graph (1-based) or "mean" (default: 1)}
 
-\item{solver}{Assignment solver: "auction" or "linear" (default: "auction")}
+\item{solver}{Assignment solver. Only \code{"linear"} (the exact Hungarian
+solver from \code{clue::solve_LSAP()}) is available; \code{"auction"} is
+rejected.}
 
 \item{assignment_alpha}{Weight for cosine vs. Euclidean assignment cost (0-1)}
 
 \item{max_iter}{Maximum iterations for joint optimization (default: 100)}
 
 \item{tol}{Convergence tolerance (default: 1e-6)}
+
+\item{verbose}{Logical; report progress and convergence via message()
+(default: FALSE).}
 }
 \value{
 A \code{grasp_multiset} object containing alignment results
-  for all graphs
+for all graphs
 
-A grasp_multiset object
+A grasp_multiset object. \code{permutations[[s]][i]} is the row of
+domain \code{s} matched to row \code{i} of the anchor domain, or
+\code{NA} when that anchor row is unmatched (domain \code{s} has fewer
+rows). \code{embeddings[[s]]} lists domain \code{s} in anchor row order,
+with \code{NA} rows for unmatched anchor rows; \code{embeddings_raw}
+keeps the input row order. \code{converged} and \code{iterations} describe
+the joint basis alignment; when it does not converge the rotations come
+from pairwise base alignment (see grasp()) to the anchor and
+\code{rotation_source} is \code{"pairwise_fallback"}.
 }
 \description{
 Performs GRASP alignment on three or more graph domains simultaneously. Extends
@@ -81,6 +97,6 @@ str(result$embeddings)
 }
 }
 \seealso{
-\code{\link{grasp}} for pairwise alignment, 
-  \code{\link{grasp_multiset.hyperdesign}} for detailed documentation
+\code{\link{grasp}} for pairwise alignment,
+\code{\link{grasp_multiset.hyperdesign}} for detailed documentation
 }

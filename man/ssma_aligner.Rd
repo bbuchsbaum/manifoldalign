@@ -7,11 +7,13 @@
 ssma_aligner()
 }
 \value{
-An object of class `c("ssma_aligner", "aligner")` representing
-  a semi-supervised manifold alignment (SSMA) algorithm descriptor.
+An object of class \code{c("ssma_aligner", "aligner")} representing
+a semi-supervised manifold alignment (SSMA) algorithm descriptor.
 }
 \description{
-SSMA aligner (native multi-view)
+The capability record declares per-domain linear projections (scores are
+\verb{X_i F_i}) with out-of-sample projection of new rows, no new-domain
+calibration and no inverse map.
 }
 \examples{
 algo <- ssma_aligner()

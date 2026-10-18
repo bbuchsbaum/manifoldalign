@@ -2,18 +2,18 @@
 % Please edit documentation in R/adapters_multi.R
 \name{kema_aligner}
 \alias{kema_aligner}
-\title{Multi-view aligner adapters (native delegates)}
+\title{KEMA aligner (native multi-view)}
 \usage{
 kema_aligner()
 }
 \value{
-An object of class `c("kema_aligner", "aligner")` representing a
-  KEMA alignment algorithm descriptor.
+An object of class \code{c("kema_aligner", "aligner")} representing a
+KEMA alignment algorithm descriptor.
 }
 \description{
-These adapters declare native multi-domain support and delegate
-to existing multi-view functions in this package.
-KEMA aligner (native multi-view)
+The capability record declares a nonlinear (kernel) encoder whose
+out-of-sample projection is evaluated from the fitted object alone, with no
+new-domain calibration and no inverse map.
 }
 \examples{
 algo <- kema_aligner()

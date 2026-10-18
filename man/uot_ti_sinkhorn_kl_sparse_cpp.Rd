@@ -26,7 +26,7 @@ uot_ti_sinkhorn_kl_sparse_cpp(
 \item{col_idx}{Integer vector of length nnz giving 1-based column indices.}
 
 \item{cost}{Numeric vector of length nnz giving cost values aligned with
-`col_idx`.}
+\code{col_idx}.}
 
 \item{n_rows}{Number of source nodes (n).}
 
@@ -47,9 +47,9 @@ uot_ti_sinkhorn_kl_sparse_cpp(
 \item{tol}{Stopping tolerance on the infinity-norm iterate difference.}
 }
 \value{
-A list with translation-invariant potentials `fbar`, `gbar`,
-  translated dual potentials `f`, `g`, translation `lambda`, iteration
-  count, convergence flag, and last residual.
+A list with translation-invariant potentials \code{fbar}, \code{gbar},
+translated dual potentials \code{f}, \code{g}, translation \code{lambda}, iteration
+count, convergence flag, and last residual.
 }
 \description{
 Sparse CPU implementation using a CSR-like row pointer representation.

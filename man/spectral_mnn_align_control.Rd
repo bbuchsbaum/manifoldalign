@@ -2,7 +2,7 @@
 % Please edit documentation in R/spectral_mnn_align.R
 \name{spectral_mnn_align_control}
 \alias{spectral_mnn_align_control}
-\title{Control settings for `spectral_mnn_align()`}
+\title{Control settings for \code{spectral_mnn_align()}}
 \usage{
 spectral_mnn_align_control(
   knn = 15L,
@@ -23,6 +23,7 @@ spectral_mnn_align_control(
   force_SO = TRUE,
   store_basis = FALSE,
   store_descriptors = FALSE,
+  bridge_ridge = 1e-06,
   seed = 1L,
   verbose = TRUE
 )
@@ -30,22 +31,22 @@ spectral_mnn_align_control(
 \arguments{
 \item{knn}{Integer k for within-domain kNN graph construction.}
 
-\item{sigma}{Numeric bandwidth for heat-kernel affinities. Use `NULL` to
-auto-tune per domain via [choose_sigma()].}
+\item{sigma}{Numeric bandwidth for heat-kernel affinities. Use \code{NULL} to
+auto-tune per domain via \code{\link[=choose_sigma]{choose_sigma()}}.}
 
 \item{use_laplacian}{Logical; if TRUE (default) use the normalized Laplacian.}
 
 \item{k_embed}{Optional integer number of eigenpairs used to build heat
-kernel signatures. If `NULL`, defaults to `max(3*ncomp, ncomp + 10)` inside
+kernel signatures. If \code{NULL}, defaults to \code{max(3*ncomp, ncomp + 10)} inside
 the solver.}
 
 \item{q_descriptors}{Integer number of heat kernel signature time steps.}
 
-\item{time_mode}{Either `"auto"` (derive a log-spaced time range from the
-retained eigenvalues) or `"fixed"` (use `time_range`).}
+\item{time_mode}{Either \code{"auto"} (derive a log-spaced time range from the
+retained eigenvalues) or \code{"fixed"} (use \code{time_range}).}
 
 \item{time_range}{Length-2 numeric vector giving min/max times when
-`time_mode="fixed"`.}
+\code{time_mode="fixed"}.}
 
 \item{time_scale}{Positive scalar multiplier applied to the time grid.}
 
@@ -53,23 +54,23 @@ retained eigenvalues) or `"fixed"` (use `time_range`).}
 descriptor space.}
 
 \item{ratio}{Ratio test threshold in (0,1]. Used to discard ambiguous
-nearest neighbors when `mnn_k >= 2`.}
+nearest neighbors when \code{mnn_k >= 2}.}
 
 \item{max_anchors}{Maximum number of anchor pairs used per domain alignment.}
 
 \item{min_anchors}{Minimum number of anchors required to estimate a stable
-Procrustes rotation. If `NULL`, defaults to `max(10, 3*ncomp)` inside the
+Procrustes rotation. If \code{NULL}, defaults to \code{max(10, 3*ncomp)} inside the
 solver.}
 
 \item{max_pairs_per_label}{Maximum correspondences sampled per shared label
-when `y` is provided and explicit `correspondences` are absent.}
+when \code{y} is provided and explicit \code{correspondences} are absent.}
 
 \item{dist_quantile}{Quantile of (directed) NN distances kept as candidates
 prior to enforcing mutuality and one-to-one pairing. Lower values are more
 selective.}
 
 \item{refine_rounds}{Integer number of ICP-style refinement rounds. Each
-round updates anchors in the *aligned* embedding space and recomputes the
+round updates anchors in the \emph{aligned} embedding space and recomputes the
 Procrustes rotation.}
 
 \item{force_SO}{Logical; if TRUE (default), enforce det(R)=+1.}
@@ -78,15 +79,22 @@ Procrustes rotation.}
 
 \item{store_descriptors}{Logical; if TRUE, store HKS descriptors in the result.}
 
-\item{seed}{Integer seed for sampling label-based correspondences.}
+\item{bridge_ridge}{Non-negative relative ridge penalty of the linear
+out-of-sample bridge (see \code{\link[=spectral_mnn_align]{spectral_mnn_align()}}). The absolute penalty is
+\code{bridge_ridge * sum(X^2) / ncol(X)} for each domain's preprocessed data
+\code{X}; \code{0} gives the minimum-norm least-squares fit.}
+
+\item{seed}{Integer seed for the deterministic eigensolver start and
+automatic bandwidth selection. It is applied locally; the caller's RNG
+stream is not changed.}
 
 \item{verbose}{Logical toggle for progress messages.}
 }
 \value{
-A list of class `spectral_mnn_align_control`.
+A list of class \code{spectral_mnn_align_control}.
 }
 \description{
-Control settings for `spectral_mnn_align()`
+Control settings for \code{spectral_mnn_align()}
 }
 \examples{
 ctrl <- spectral_mnn_align_control(knn = 10, k_embed = 20)

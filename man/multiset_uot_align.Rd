@@ -40,12 +40,12 @@ multiset_uot_align(
 }
 \arguments{
 \item{datasets}{A list of datasets. Each element must be a list with fields
-`X` (n x q coordinates, with q shared by all datasets and the template),
-`alpha` (length n masses), and optional `F`
+\code{X} (n x q coordinates, with q shared by all datasets and the template),
+\code{alpha} (length n masses), and optional \code{F}
 (n x D features).}
 
-\item{template}{A list with fields `Y` (m x q coordinates), `beta` (length m
-masses), and optional `G` (m x D features).}
+\item{template}{A list with fields \code{Y} (m x q coordinates), \code{beta} (length m
+masses), and optional \code{G} (m x D features).}
 
 \item{omega}{Optional nonnegative weights over datasets (length K). If NULL,
 uses uniform weights.}
@@ -57,41 +57,41 @@ uses uniform weights.}
 \item{rho2}{KL penalty on the second marginal (> 0).}
 
 \item{lambda_coord}{Weight for the squared distance between coordinates
-(`X` versus `Y`).}
+(\code{X} versus \code{Y}).}
 
 \item{lambda_feat}{Weight for feature squared distance.}
 
-\item{neighbor_mode}{Neighborhood mode passed to [uot_build_cost()].}
+\item{neighbor_mode}{Neighborhood mode passed to \code{\link[=uot_build_cost]{uot_build_cost()}}.}
 
-\item{k_neighbors}{Integer k for kNN neighborhoods (used by `"knn"` and
-`"hybrid"` modes).}
+\item{k_neighbors}{Integer k for kNN neighborhoods (used by \code{"knn"} and
+\code{"hybrid"} modes).}
 
-\item{radius}{Positive scalar radius for `"radius"` / `"hybrid"` modes.}
+\item{radius}{Positive scalar radius for \code{"radius"} / \code{"hybrid"} modes.}
 
-\item{maxk}{Maximum number of candidate neighbors requested in `"radius"` /
-`"hybrid"` mode (prevents quadratic blowups).}
+\item{maxk}{Maximum number of candidate neighbors requested in \code{"radius"} /
+\code{"hybrid"} mode (prevents quadratic blowups).}
 
 \item{min_neighbors}{Minimum number of within-radius neighbors required per
-row in `"hybrid"` mode before falling back to kNN.}
+row in \code{"hybrid"} mode before falling back to kNN.}
 
 \item{constraint_fields}{Optional character vector of field names present on
-each dataset and the template that define **hard transport constraints**.
+each dataset and the template that define \strong{hard transport constraints}.
 Edges are only allowed when all fields match (implemented via grouped
-neighbor search). For example `c("group")` or `c("group", "subgroup")`.}
+neighbor search). For example \code{c("group")} or \code{c("group", "subgroup")}.}
 
 \item{prior_fields}{Optional character vector of field names present on each
-dataset and the template that define a **soft identity prior**. When
-provided together with `lambda_prior > 0`, each dataset builds a
-`prior_map` by matching these fields to the template and adds a soft bias
-term via [uot_build_cost()].}
+dataset and the template that define a \strong{soft identity prior}. When
+provided together with \code{lambda_prior > 0}, each dataset builds a
+\code{prior_map} by matching these fields to the template and adds a soft bias
+term via \code{\link[=uot_build_cost]{uot_build_cost()}}.}
 
 \item{lambda_prior}{Nonnegative weight for the soft prior term.}
 
 \item{prior_sigma}{Optional positive scale for the prior term (in the units
-of `template$Y`).}
+of \code{template$Y}).}
 
 \item{dense_max_bytes}{Maximum dense cost size (in bytes) allowed when
-`neighbor_mode="auto"`.}
+\code{neighbor_mode="auto"}.}
 
 \item{ensure_cols}{Logical; if TRUE, adds reverse 1NN edges to ensure every
 template column has at least one incoming edge (kNN/hybrid modes only).}
@@ -105,25 +105,25 @@ template column has at least one incoming edge (kNN/hybrid modes only).}
 \item{tol_outer}{Template weight tolerance.}
 
 \item{rescale_pi2}{How to scale each dataset's transported mass before
-aggregating (`"alpha"` or `"unit"`).}
+aggregating (\code{"alpha"} or \code{"unit"}).}
 
-\item{target_mass}{Target total mass for template weights. If `"mean_alpha"`,
-uses mean dataset mass; if `"none"`, no rescaling; if numeric, uses that.}
+\item{target_mass}{Target total mass for template weights. If \code{"mean_alpha"},
+uses mean dataset mass; if \code{"none"}, no rescaling; if numeric, uses that.}
 
-\item{learn_template_features}{Logical; update template features `G`.}
+\item{learn_template_features}{Logical; update template features \code{G}.}
 
 \item{delta}{Small stabilizer for feature update denominators.}
 
-\item{parallel}{Logical; if TRUE, uses `parallel::mclapply` on Unix.}
+\item{parallel}{Logical; if TRUE, uses \code{parallel::mclapply} on Unix.}
 
 \item{ncores}{Number of cores for parallel dataset solves.}
 
 \item{verbose}{Logical; print outer-loop progress.}
 
-\item{lambda_anat}{Deprecated alias of `lambda_coord`; supplying it warns.}
+\item{lambda_anat}{Deprecated alias of \code{lambda_coord}; supplying it warns.}
 }
 \value{
-A list with updated `template` and per-dataset `fits`.
+A list with updated \code{template} and per-dataset \code{fits}.
 }
 \description{
 Iteratively aligns multiple dataset measures to a fixed-support template by

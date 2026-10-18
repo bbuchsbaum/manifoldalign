@@ -7,7 +7,7 @@
 plot_edge_residuals_heatmap(diagnostics, N = NULL, na_color = "#f0f0f0")
 }
 \arguments{
-\item{diagnostics}{List returned by align_many(...)[["diagnostics"]]}
+\item{diagnostics}{The \code{diagnostics} element of an \code{\link[=align_many]{align_many()}} result}
 
 \item{N}{Optional number of domains; inferred when NULL}
 

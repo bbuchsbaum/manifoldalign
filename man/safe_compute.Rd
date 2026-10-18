@@ -24,23 +24,23 @@ This file contains shared utility functions used across multiple modules.
 
 The \code{safe_compute} function should be used for operations that:
 \itemize{
-  \item May fail due to external dependencies or numerical issues
-  \item Should stop execution with a clear error message (not provide fallbacks)
-  \item Benefit from consistent error reporting across the package
+\item May fail due to external dependencies or numerical issues
+\item Should stop execution with a clear error message (not provide fallbacks)
+\item Benefit from consistent error reporting across the package
 }
 
 Do NOT use \code{safe_compute} for:
 \itemize{
-  \item Operations that need custom fallback behavior
-  \item Cases where you want to continue execution after an error
-  \item Simple parameter validation (use chk:: functions instead)
+\item Operations that need custom fallback behavior
+\item Cases where you want to continue execution after an error
+\item Simple parameter validation (use chk:: functions instead)
 }
 
 Examples of good candidates:
 \itemize{
-  \item Eigenvalue computations: \code{safe_compute(PRIMME::eigs_sym(...), "Eigenvalue computation failed")}
-  \item Graph construction: \code{safe_compute(adjoin::graph_weights(...), "Graph construction failed")}
-  \item Matrix operations: \code{safe_compute(solve(A), "Matrix solve failed")}
+\item Eigenvalue computations: \code{safe_compute(RSpectra::eigs_sym(...), "Eigenvalue computation failed")}
+\item Graph construction: \code{safe_compute(adjoin::graph_weights(...), "Graph construction failed")}
+\item Matrix operations: \code{safe_compute(solve(A), "Matrix solve failed")}
 }
 Safe computation wrapper with enhanced error handling
 

@@ -34,7 +34,7 @@ relative_transform(fit, from = c("i", "j"), to = c("j", "i"), ...)
 }
 \value{
 An align_transform object (see new_align_transform) containing the
-  transformation operator, group type, and source/target indices.
+transformation operator, group type, and source/target indices.
 }
 \description{
 Extract a relative transform from a pairwise fit

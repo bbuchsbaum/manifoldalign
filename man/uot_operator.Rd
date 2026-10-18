@@ -2,7 +2,7 @@
 % Please edit documentation in R/uot_multiset_align.R
 \name{uot_operator}
 \alias{uot_operator}
-\title{Extract a reusable map/coupling operator from a `uot_pair_fit`}
+\title{Extract a reusable map/coupling operator from a \code{uot_pair_fit}}
 \usage{
 uot_operator(
   fit,
@@ -13,19 +13,19 @@ uot_operator(
 )
 }
 \arguments{
-\item{fit}{An object returned by [uot_fit_pair()].}
+\item{fit}{An object returned by \code{\link[=uot_fit_pair]{uot_fit_pair()}}.}
 
-\item{weights}{Passed to [uot_extract_coupling()].}
+\item{weights}{Passed to \code{\link[=uot_extract_coupling]{uot_extract_coupling()}}.}
 
-\item{delta}{Stabilizer for `"map"` weights.}
+\item{delta}{Stabilizer for \code{"map"} weights.}
 
 \item{prune_topk_col}{Optional top-k pruning per template column.}
 
 \item{prune_threshold}{Optional threshold pruning.}
 }
 \value{
-A `dgCMatrix` of dimension `n x m`.
+A \code{dgCMatrix} of dimension \verb{n x m}.
 }
 \description{
-Extract a reusable map/coupling operator from a `uot_pair_fit`
+Extract a reusable map/coupling operator from a \code{uot_pair_fit}
 }

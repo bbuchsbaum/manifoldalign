@@ -19,7 +19,8 @@
   alpha = 0.2,
   gamma = 0.1,
   solver = c("sinkhorn"),
-  max_iter = 100,
+  max_iter = 1000,
+  max_outer = 10,
   tol = 1e-06,
   use_cpp = FALSE,
   anchors_policy = c("warn", "off", "error"),
@@ -47,23 +48,27 @@ vectors or NA for unmatched samples}
 
 \item{lambda}{Overall regularization weight}
 
-\item{lambda_e}{Edge/attribute cost weight (defaults to lambda * 0.5)}
+\item{lambda_e}{Edge consistency weight (defaults to lambda * 0.5)}
 
-\item{lambda_n}{Network/Laplacian regularization (defaults to lambda * 0.5)}
+\item{lambda_n}{Neighborhood consistency (KL) weight (defaults to lambda * 0.5)}
 
 \item{lambda_p}{Anchor prior weight (defaults to lambda)}
 
-\item{tau}{Entropic regularization parameter for Sinkhorn}
+\item{tau}{Proximal (KL) step weight of the outer loop; see \code{\link[=parrot]{parrot()}}}
 
-\item{alpha}{Mixing parameter for cost matrix}
+\item{alpha}{Weight of the attribute cost in the node cost (RWR cost gets
+\code{1 - alpha})}
 
-\item{gamma}{Network structure penalty weight}
+\item{gamma}{Cross-graph discount factor of the Sylvester iteration}
 
-\item{solver}{Transport solver method ("sinkhorn")}
+\item{solver}{Transport solver method (only "sinkhorn")}
 
-\item{max_iter}{Maximum iterations for RWR and Sinkhorn}
+\item{max_iter}{Maximum iterations for RWR and each Sinkhorn solve}
 
-\item{tol}{Convergence tolerance}
+\item{max_outer}{Maximum number of outer proximal steps}
+
+\item{tol}{Convergence tolerance (RWR, Sinkhorn marginal residual, plan
+change between outer steps)}
 
 \item{use_cpp}{Logical; use C++ implementation if available}
 
@@ -84,8 +89,9 @@ vectors or NA for unmatched samples}
 }
 \value{
 An object of class parrot_pair_fit containing transport (n1 x n2
-  matrix), objective (final cost), n1 (samples in domain i), and n2
-  (samples in domain j).
+matrix), objective (final PARROT objective), objective_history,
+convergence diagnostics, n1 (samples in domain i), and n2 (samples in
+domain j).
 }
 \description{
 PARROT-specific method for pairwise alignment using optimal transport with

@@ -11,20 +11,21 @@ validate_kema_eigenvalues(
 )
 }
 \arguments{
-\item{expected_eigenvals}{Deprecated and ignored.}
+\item{expected_eigenvals}{Defunct and ignored.}
 
-\item{tolerance}{Deprecated and ignored.}
+\item{tolerance}{Defunct and ignored.}
 
-\item{n_per_domain}{Deprecated and ignored.}
+\item{n_per_domain}{Defunct and ignored.}
 }
 \value{
-This function emits a deprecation warning and then errors.
+This function is defunct: it always signals a \code{defunctError}.
+Use \code{\link[=run_kema_validation_suite]{run_kema_validation_suite()}}.
 }
 \description{
 This compatibility shim is retained so historical callers receive an
 explicit failure. The former routine did not reproduce a documented paper
 fixture and solved a different generalized problem whose right-hand side was
-only `lambda * I`; its claimed comparison with paper eigenvalues was therefore
+only \code{lambda * I}; its claimed comparison with paper eigenvalues was therefore
 not valid accuracy evidence.
 }
 \examples{
@@ -33,5 +34,5 @@ validate_kema_eigenvalues()
 }
 }
 \seealso{
-[run_kema_validation_suite()]
+\code{\link[=run_kema_validation_suite]{run_kema_validation_suite()}}
 }

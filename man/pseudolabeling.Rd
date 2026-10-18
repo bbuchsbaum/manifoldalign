@@ -11,21 +11,21 @@ Provides pseudolabeling system for unsupervised domain adaptation with
 KEMA. Identifies high-confidence anchor samples to guide domain alignment.
 }
 \details{
-The pseudolabeling system addresses unsupervised domain adaptation by 
-identifying reliable correspondences between samples from different domains. 
-The approach uses similarity-based clustering, diversity-aware selection, 
+The pseudolabeling system addresses unsupervised domain adaptation by
+identifying reliable correspondences between samples from different domains.
+The approach uses similarity-based clustering, diversity-aware selection,
 adaptive thresholding, and quality control filtering.
 
 Main functions:
 \itemize{
-  \item \code{assign_pseudolabels()}: General-purpose pseudolabeling from 
-    sparse similarity matrices
-  \item \code{high_sim_pseudolabels()}: Specialized function for 
-    multi-domain data using cosine similarity
-  \item \code{create_synthetic_similarity_matrix()}: Generate synthetic 
-    data for testing
-  \item \code{evaluate_pseudolabeling()}: Evaluate pseudolabeling 
-    performance against ground truth
+\item \code{assign_pseudolabels()}: General-purpose pseudolabeling from
+sparse similarity matrices
+\item \code{high_sim_pseudolabels()}: Specialized function for
+multi-domain data using cosine similarity
+\item \code{create_synthetic_similarity_matrix()}: Generate synthetic
+data for testing
+\item \code{evaluate_pseudolabeling()}: Evaluate pseudolabeling
+performance against ground truth
 }
 
 Integration with KEMA:
@@ -33,27 +33,25 @@ Integration with KEMA:
 # Generate pseudolabels
 plabs <- assign_pseudolabels(similarity_matrix, min_clusters = 20)
 
-# Use with KEMA
-fit <- kema.hyperdesign(
-  data = strata,
-  y = plabs$labels,
-  u = 0.8,           # Trust geometry over pseudolabels
-  dweight = 0.2,     # Mild class separation
-  simfun = function(lab) binary_label_matrix(lab, type = "s"),
-  disfun = function(lab) binary_label_matrix(lab, type = "d")
-)
+# Store them as a design column of each domain, then fit KEMA on it
+offsets <- c(0, cumsum(sapply(strata, function(s) nrow(s$x))))
+for (i in seq_along(strata)) {
+  rows <- (offsets[i] + 1):offsets[i + 1]
+  strata[[i]]$design$pseudo <- plabs$labels[rows]
+}
+fit <- kema(strata, y = pseudo, u = 0.8)  # trust geometry over pseudolabels
 }
 
 Key parameters:
 \itemize{
-  \item \strong{sim_threshold}: Controls which similarities are considered 
-    "high". Can be adaptive.
-  \item \strong{diversity_weight}: Balances cluster coherence vs. 
-    representative diversity
-  \item \strong{min_clusters/max_clusters}: Controls the number of anchor 
-    points
-  \item \strong{min_cluster_size}: Ensures clusters are large enough to be 
-    reliable
+\item \strong{sim_threshold}: Controls which similarities are considered
+"high". Can be adaptive.
+\item \strong{diversity_weight}: Balances cluster coherence vs.
+representative diversity
+\item \strong{min_clusters/max_clusters}: Controls the number of anchor
+points
+\item \strong{min_cluster_size}: Ensures clusters are large enough to be
+reliable
 }
 }
 \examples{

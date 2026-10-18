@@ -17,6 +17,8 @@ grasp(data, ...)
   lambda = 0.1,
   use_laplacian = TRUE,
   solver = "linear",
+  max_iter = 200,
+  tol = 1e-08,
   ...
 )
 
@@ -35,61 +37,78 @@ grasp(data, ...)
 
 \item{sigma}{Diffusion parameter for descriptor computation (default: 0.73)}
 
-\item{lambda}{Regularization parameter for base alignment (default: 0.1)}
+\item{lambda}{Weight of the descriptor term in the base-alignment
+objective \eqn{\mathrm{off}(M^\top \Lambda_2 M) + \lambda
+  \|F^\top \Phi_1 - G^\top \Phi_2 M\|_F^2} (default: 0.1).}
 
 \item{use_laplacian}{Whether to use Laplacian normalization (default: TRUE)}
 
-\item{solver}{Assignment method: "linear" for exact assignment (default)}
+\item{solver}{Assignment method: "linear" (default) or its synonym
+"hungarian", both the exact Hungarian solver. "auction" is not available.}
+
+\item{max_iter}{Maximum Riemannian gradient iterations of the base
+alignment (default: 200).}
+
+\item{tol}{Relative-decrease tolerance of the base alignment
+(default: 1e-8).}
 }
 \value{
 A \code{multiblock_biprojector} object containing:
 \itemize{
-  \item \code{s}: Aligned spectral embeddings for all nodes
-  \item \code{v}: Primal vectors for out-of-sample projection
-  \item \code{assignment}: Node-to-node correspondence vector
-  \item \code{rotation}: Orthogonal rotation matrix between spectral bases
-  \item \code{mapping_matrix}: Diagonal functional correspondence matrix
-  \item Additional metadata for reconstruction and validation
+\item \code{s}: Aligned spectral embeddings for all nodes
+\item \code{v}: Primal vectors for out-of-sample projection
+\item \code{assignment}: Node-to-node correspondence vector
+\item \code{rotation}: Orthogonal rotation matrix between spectral bases
+\item \code{mapping_matrix}: Diagonal functional correspondence matrix
+\item Additional metadata for reconstruction and validation
 }
 
-A multiblock_biprojector object containing the GRASP alignment
+A multiblock_biprojector object containing the GRASP alignment.
+Score rows follow each domain's input row order: block 1 is the spectral
+basis of domain 1 and block 2 the basis of domain 2 mapped into it by the
+base alignment and the diagonal functional map. \code{assignment[i]} is
+the domain-2 row matched to domain-1 row \code{i} (\code{NA} when
+unmatched because domain 2 has fewer rows). \code{v} holds least-squares
+loadings from each domain's preprocessed features to its scores (exact
+only for full-row-rank features; otherwise the best linear
+approximation). \code{base_alignment} reports the base-alignment
+iterations, convergence and objective.
 }
 \description{
-Performs GRASP alignment on graph data structures. GRASP tackles the "unrestricted" 
-graph alignment problem where only graph structures are given, finding optimal 
+Performs GRASP alignment on graph data structures. GRASP tackles the "unrestricted"
+graph alignment problem where only graph structures are given, finding optimal
 node-to-node correspondences between graphs by matching functions defined on nodes.
 
-Performs GRASP alignment on hyperdesign data structures. 
+Performs GRASP alignment on hyperdesign data structures.
 Projects graph data from multiple domains into aligned spectral spaces.
 }
 \details{
-The core idea of GRASP is to transfer functional maps from 3D shape analysis to 
-graph alignment. Instead of directly matching nodes (which is hard), it matches 
-functions defined on the nodes. By finding a robust mapping between basis functions 
+The core idea of GRASP is to transfer functional maps from 3D shape analysis to
+graph alignment. Instead of directly matching nodes (which is hard), it matches
+functions defined on the nodes. By finding a robust mapping between basis functions
 on each graph, GRASP deduces the underlying node-to-node alignment as a by-product.
-
 
 GRASP operates through five conceptual blocks:
 \itemize{
-  \item \strong{Block A}: Spectral basis construction using eigendecomposition 
-    of graph Laplacians
-  \item \strong{Block B}: Multi-scale node descriptors using heat kernel or 
-    Personalized PageRank
-  \item \strong{Block C}: Base alignment using Stiefel manifold optimization
-  \item \strong{Block D}: Functional correspondence mapping
-  \item \strong{Block E}: Final node-to-node assignment via linear assignment
+\item \strong{Block A}: Spectral basis construction using eigendecomposition
+of graph Laplacians
+\item \strong{Block B}: Multi-scale node descriptors using heat kernel or
+Personalized PageRank
+\item \strong{Block C}: Base alignment using Stiefel manifold optimization
+\item \strong{Block D}: Functional correspondence mapping
+\item \strong{Block E}: Final node-to-node assignment via linear assignment
 }
 
-The algorithm provides a global, multi-scale view of graph structure that is 
-robust to noise and structural perturbations. For the pairwise case, complexity 
+The algorithm provides a global, multi-scale view of graph structure that is
+robust to noise and structural perturbations. For the pairwise case, complexity
 is dominated by the final assignment step (typically O(n³)).
 
 Key parameters:
 \itemize{
-  \item \code{ncomp}: Number of eigenvectors used (dimension of spectral basis)
-  \item \code{q_descriptors}: Number of descriptor functions for multi-scale analysis
-  \item \code{sigma}: Diffusion parameter controlling descriptor time scales
-  \item \code{lambda}: Regularization balancing eigen-structure vs descriptor alignment
+\item \code{ncomp}: Number of eigenvectors used (dimension of spectral basis)
+\item \code{q_descriptors}: Number of descriptor functions for multi-scale analysis
+\item \code{sigma}: Diffusion parameter controlling descriptor time scales
+\item \code{lambda}: Regularization balancing eigen-structure vs descriptor alignment
 }
 }
 \examples{
@@ -148,12 +167,12 @@ result <- grasp(hd, ncomp = 20, q_descriptors = 50)
 
 }
 \references{
-Bogo, F., Romero, J., Loper, M., & Black, M. J. (2016). FAUST: Dataset and 
-evaluation for 3D mesh registration. In Proceedings of the IEEE Conference 
+Bogo, F., Romero, J., Loper, M., & Black, M. J. (2016). FAUST: Dataset and
+evaluation for 3D mesh registration. In Proceedings of the IEEE Conference
 on Computer Vision and Pattern Recognition (pp. 3794-3801).
 
-Ovsjanikov, M., Ben-Chen, M., Solomon, J., Butscher, A., & Guibas, L. (2012). 
-Functional maps: a flexible representation of maps between shapes. ACM 
+Ovsjanikov, M., Ben-Chen, M., Solomon, J., Butscher, A., & Guibas, L. (2012).
+Functional maps: a flexible representation of maps between shapes. ACM
 Transactions on Graphics, 31(4), 1-11.
 }
 \seealso{

@@ -13,7 +13,7 @@ invert_transform(transform, ...)
 }
 \value{
 An align_transform object representing the inverse transform, with
-  from and to swapped.
+from and to swapped.
 }
 \description{
 Invert a transform

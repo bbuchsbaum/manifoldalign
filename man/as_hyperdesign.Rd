@@ -24,8 +24,8 @@ as_hyperdesign(
 An object of class 'hyperdesign' suitable for kema()/generalized_procrustes()
 }
 \description{
-Builds a minimal 'hyperdesign' object (list of domains with fields `x` and
-`design`) from a list of matrices and optional label vectors. This avoids
+Builds a minimal 'hyperdesign' object (list of domains with fields \code{x} and
+\code{design}) from a list of matrices and optional label vectors. This avoids
 requiring the multidesign package for simple use cases.
 }
 \examples{

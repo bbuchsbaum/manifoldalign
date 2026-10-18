@@ -17,7 +17,7 @@ oos_predict(fit_or_transform, newX, side, ...)
 }
 \value{
 A matrix of predicted/projected coordinates for the new data in the
-  aligned space.
+aligned space.
 }
 \description{
 Out-of-sample projection/prediction

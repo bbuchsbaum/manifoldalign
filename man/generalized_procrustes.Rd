@@ -17,6 +17,7 @@ generalized_procrustes(data, ...)
   verbose = FALSE,
   svd_method = c("irlba", "base"),
   svd_opts = list(),
+  translation = c("shared_tasks", "none"),
   ...
 )
 }
@@ -27,8 +28,11 @@ generalized_procrustes(data, ...)
 
 \item{y}{Name of the task/label variable to use for alignment}
 
-\item{preproc}{Preprocessing function to apply to the data (default: 
-\code{center()})}
+\item{preproc}{Preprocessing applied per domain (default:
+\code{center()}): a single preprocessor broadcast to all domains, a list
+with one entry per domain, or \code{NULL} for none. The fitted
+preprocessors are returned in \code{preproc} (one entry per domain,
+\code{NULL} where none was applied).}
 
 \item{max_iter}{Maximum number of iterations (default: 100)}
 
@@ -41,54 +45,63 @@ generalized_procrustes(data, ...)
 \item{svd_method}{SVD method to use (default: "irlba")}
 
 \item{svd_opts}{Options for SVD method (default: empty list)}
+
+\item{translation}{How per-domain translations are handled after
+preprocessing. \code{"shared_tasks"} (default) subtracts from every domain
+the mean of its rows on the tasks observed by \emph{all} domains, so that
+domains observing different task subsets share a common origin (per-domain
+centring over different subsets would otherwise bias the consensus). With
+complete designs and \code{center()} preprocessing this is a no-op. If no
+task is shared by all domains, a warning is issued and no translation is
+applied. \code{"none"} uses the preprocessed data as is (rotation-only
+model). The subtracted vectors are returned in \code{translations}.}
 }
 \value{
 The return value depends on the specific method:
 \itemize{
-  \item For hyperdesign objects: A list containing orthogonal transformation 
-    matrices, consensus matrix, convergence information, and domain metadata
-  \item For direct matrix input: A list with transformation matrices and 
-    alignment results
+\item For hyperdesign objects: A list containing orthogonal transformation
+matrices, consensus matrix, convergence information, and domain metadata
+\item For direct matrix input: A list with transformation matrices and
+alignment results
 }
 }
 \description{
-Performs Generalized Orthogonal Procrustes alignment to find orthogonal 
-transformations. Aligns data from multiple domains by minimizing squared 
+Performs Generalized Orthogonal Procrustes alignment to find orthogonal
+transformations. Aligns data from multiple domains by minimizing squared
 differences between corresponding task observations.
 }
 \details{
-This method extends classical Procrustes analysis to handle partial task 
-observations, where each domain may observe only a subset of a global set of 
-tasks. The algorithm uses an efficient Generalized Power Method (GPM) with 
-sparse matrix operations and robust initialization to find optimal orthogonal 
+This method extends classical Procrustes analysis to handle partial task
+observations, where each domain may observe only a subset of a global set of
+tasks. The algorithm uses an efficient Generalized Power Method (GPM) with
+sparse matrix operations and robust initialization to find optimal orthogonal
 transformations.
 
-
-The Generalized Procrustes problem seeks to find orthogonal matrices 
+The Generalized Procrustes problem seeks to find orthogonal matrices
 \eqn{O_i} for each domain \eqn{i} that minimize:
 \deqn{\sum_{i,j} \sum_{k \in T_{ij}} ||O_i^T A_i(:,k) - O_j^T A_j(:,k)||^2}
 
-where \eqn{T_{ij}} represents the set of tasks observed by both domains 
+where \eqn{T_{ij}} represents the set of tasks observed by both domains
 \eqn{i} and \eqn{j}.
 
 The algorithm handles several key challenges:
 \itemize{
-  \item \strong{Partial observations}: Each domain may observe different 
-    subsets of tasks
-  \item \strong{Sparse structure}: Uses efficient sparse matrix operations 
-    for scalability
-  \item \strong{Robust initialization}: SVD-based initialization with 
-    fallback to random orthogonal matrices
-  \item \strong{Convergence guarantees}: Monotonic improvement with 
-    configurable tolerance
+\item \strong{Partial observations}: Each domain may observe different
+subsets of tasks
+\item \strong{Sparse structure}: Uses efficient sparse matrix operations
+for scalability
+\item \strong{Robust initialization}: SVD-based initialization with
+fallback to random orthogonal matrices
+\item \strong{Convergence guarantees}: Monotonic improvement with
+configurable tolerance
 }
 
 Key features:
 \itemize{
-  \item Vectorized operations using sparse matrix algebra
-  \item Efficient projection onto the orthogonal group O(d)
-  \item Optional tightness certificate for global optimality validation
-  \item Flexible preprocessing and multiple input formats
+\item Vectorized operations using sparse matrix algebra
+\item Efficient projection onto the orthogonal group O(d)
+\item Optional tightness certificate for global optimality validation
+\item Flexible preprocessing and multiple input formats
 }
 }
 \examples{
@@ -142,10 +155,10 @@ print(dim(result$A_est))  # 10 features x 6 total tasks
 }
 }
 \references{
-Gower, J. C. (1975). Generalized procrustes analysis. Psychometrika, 40(1), 
+Gower, J. C. (1975). Generalized procrustes analysis. Psychometrika, 40(1),
 33-51.
 
-Ten Berge, J. M. F. (1977). Orthogonal procrustes rotation for two or more 
+Ten Berge, J. M. F. (1977). Orthogonal procrustes rotation for two or more
 matrices. Psychometrika, 42(2), 267-276.
 }
 \seealso{

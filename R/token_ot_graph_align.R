@@ -61,7 +61,7 @@ token_ot_graph_align <- function(data, ...) {
 #' @param k_embed Optional integer number of eigenpairs used for eigenmap/HKS.
 #'   If `NULL`, defaults to `max(3*ncomp, ncomp + 10)` inside the solver.
 #' @param hks_q Integer number of HKS time steps.
-#' @param lambda_view Mix weight in [0,1] for view-distance vs token-OT cost.
+#' @param lambda_view Mix weight in `[0, 1]` for view-distance vs token-OT cost.
 #' @param candidate_k Integer number of ANN candidates per source node.
 #' @param ann_backend Nearest-neighbor backend for candidate generation:
 #'   `"auto"` (default), `"rann"`, or `"annoy"` (requires RcppAnnoy).

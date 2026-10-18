@@ -41,12 +41,12 @@ sumcor_align(data, ...)
 }
 \arguments{
 \item{data}{A list of numeric observation-by-column matrices (one per
-domain) or a `hyperdesign`.}
+domain) or a \code{hyperdesign}.}
 
 \item{...}{Method arguments. Unknown arguments are rejected.}
 
 \item{design}{For list input, a list of data frames (one per domain, rows
-matching `data`) holding the identifier columns.}
+matching \code{data}) holding the identifier columns.}
 
 \item{event_id}{Name of the design column with event identifiers.}
 
@@ -58,35 +58,35 @@ identifiers. Defaults to row names or row positions.}
 
 \item{event_attributes}{Optional design columns holding event-level
 attributes (one consistent value per event across all domains). They can
-be named by `event_weights` and `kernel_blocks` in [sumcor_control()].}
+be named by \code{event_weights} and \code{kernel_blocks} in \code{\link[=sumcor_control]{sumcor_control()}}.}
 
 \item{observation_attributes}{Optional design columns copied into each
 domain's observation table (stored only).}
 
-\item{events}{Optional data frame with an `event_id` column and further
+\item{events}{Optional data frame with an \code{event_id} column and further
 event-attribute columns.}
 
 \item{event_features}{Optional named list of event-by-feature matrices
 (row names are event identifiers).}
 
-\item{feature_groups}{For `basis = "grouped_pca"`, a list with one group
-label vector per domain (one entry per column; `NA` excludes a column).}
+\item{feature_groups}{For \code{basis = "grouped_pca"}, a list with one group
+label vector per domain (one entry per column; \code{NA} excludes a column).}
 
 \item{ncomp}{Latent dimension.}
 
-\item{control}{Settings from [sumcor_control()] or a named list of its
+\item{control}{Settings from \code{\link[=sumcor_control]{sumcor_control()}} or a named list of its
 arguments.}
 }
 \value{
-A `sumcor_align` object with per-domain `scores` (all observations,
-  original order, rows named by observation identifier), `event_scores`,
-  frozen `reference_scores`, `encoders`, identity tables, kernel
-  diagnostics, `convergence` (objective history, stationarity, constraint
-  error, supported rank), and `component_agreement`.
+A \code{sumcor_align} object with per-domain \code{scores} (all observations,
+original order, rows named by observation identifier), \code{event_scores},
+frozen \code{reference_scores}, \code{encoders}, identity tables, kernel
+diagnostics, \code{convergence} (objective history, stationarity, constraint
+error, supported rank), and \code{component_agreement}.
 }
 \description{
 Learns one linear encoder per domain that maps observations into a shared
-latent space. Domains are linked only through shared *events*: keyed items,
+latent space. Domains are linked only through shared \emph{events}: keyed items,
 conditions or time points that several domains observed, possibly more than
 once. The encoders maximise reproducible cross-domain agreement of
 event-level means. Repeated observations of an event are averaged in the
@@ -97,18 +97,18 @@ similar descriptors also contribute to agreement.
 }
 \section{Model}{
 
-For domain `s`, a fitted linear basis gives `u = phi_s(x)`. With event
-weights `w` (summing to one), event means `ubar_s`, repeat-level covariance
-`C_s` (shrunk toward a scaled identity), and event metric
-`H = I + beta * sum_m theta_m K_m` with
-`K_m = F_m (F_m' F_m + eta_m I)^{-1} F_m'`, the encoders solve
+For domain \code{s}, a fitted linear basis gives \code{u = phi_s(x)}. With event
+weights \code{w} (summing to one), event means \code{ubar_s}, repeat-level covariance
+\code{C_s} (shrunk toward a scaled identity), and event metric
+\verb{H = I + beta * sum_m theta_m K_m} with
+\verb{K_m = F_m (F_m' F_m + eta_m I)^\{-1\} F_m'}, the encoders solve
 \deqn{\max \sum_{s<t} \mathrm{tr}(A_s^\top B_{st} A_t)
   \quad \mathrm{s.t.} \quad A_s^\top C_s A_s = I,}
-with `B_st = ubar_s' W^{1/2} H W^{1/2} ubar_t / m_st`, where `m_st` is the
+with \verb{B_st = ubar_s' W^\{1/2\} H W^\{1/2\} ubar_t / m_st}, where \code{m_st} is the
 event weight both domains observed. Unobserved events are masked by key.
 The problem is solved by sequential polar updates, which never decrease the
 objective; joint global optimality is not guaranteed for more than two
-domains. The encoder `f_s(x) = phi_s(x) A_s` is stored explicitly, and the
+domains. The encoder \verb{f_s(x) = phi_s(x) A_s} is stored explicitly, and the
 training scores are produced by that same function.
 }
 
@@ -117,17 +117,17 @@ training scores are produced by that same function.
 Correspondence between domains is carried only by event identifiers. Row
 order and row counts are never used to infer it. Observation and repeat
 identifiers, and any requested observation attributes, are kept in the
-result. Rows whose event is `NA` are excluded from fitting but still
+result. Rows whose event is \code{NA} are excluded from fitting but still
 receive scores.
 }
 
 \section{Event features}{
 
-Each element of `event_features` is a matrix with one row per event and
+Each element of \code{event_features} is a matrix with one row per event and
 row names equal to event identifiers. Rows for events no domain observed
 are dropped; events without a row in a family take no part in that
 family's kernel. Feature preprocessing is fitted on the events supplied.
-With `kernel_blocks` set, each kernel is block diagonal by that event
+With \code{kernel_blocks} set, each kernel is block diagonal by that event
 attribute. A kernel close to a multiple of the identity changes nothing and
 triggers a warning.
 }
@@ -156,6 +156,6 @@ fit <- sumcor_align(
 fit$component_agreement
 }
 \seealso{
-[calibrate_domain()] to add a domain against the frozen reference,
-  [oos_predict()] to encode new observations.
+\code{\link[=calibrate_domain]{calibrate_domain()}} to add a domain against the frozen reference,
+\code{\link[=oos_predict]{oos_predict()}} to encode new observations.
 }

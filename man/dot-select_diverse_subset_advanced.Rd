@@ -21,7 +21,7 @@
 
 \item{target_size}{Target number of representatives}
 
-\item{diversity_weight}{Weight for diversity vs confidence [0,1]}
+\item{diversity_weight}{Weight for diversity vs confidence \verb{[0, 1]}}
 
 \item{cluster_assignments}{Vector of cluster assignments (for confidence scores)}
 
@@ -34,7 +34,7 @@ Vector of selected representative indices
 }
 \description{
 OPTIMIZED: Implements efficient farthest-first traversal (FFS) for diversity
-selection with improved O(k^2) complexity through early termination and 
+selection with improved O(k^2) complexity through early termination and
 sparse matrix optimizations.
 }
 \keyword{internal}
