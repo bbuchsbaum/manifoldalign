@@ -4,6 +4,22 @@
 
 ### Major Changes
 
+* Added `stimulus_sumcor_align()`, a native multi-subject alignment for
+  repeated naturalistic data. It learns explicit per-subject linear encoders
+  that maximise reproducible cross-subject agreement of event-locked activity,
+  normalised by presentation-level covariance, with an optional
+  stimulus-feature metric (`beta = 0` is the exact correspondence-only model).
+  Correspondence is carried only by keyed event identifiers. Training scores
+  are produced by the stored encoder, so `oos_predict()` reproduces them
+  exactly. New generic `calibrate_domain()` adds a subject against the frozen
+  reference without changing existing encoders. `stimulus_sumcor_aligner()`
+  plugs the method into `fit_many()` and `align_many()`.
+* `aligner_capabilities()` now also reports encoder type, prediction and
+  calibration support, auxiliary-input needs, and invertibility for aligners
+  that declare them; the two-field result is unchanged for other aligners.
+* Added `rapid_ma_feature_scores()`, feature-side (dual) coordinates for
+  RAPID-MA fits.
+
 * Implemented Fused-Partial Gromov-Wasserstein (FPGW) distance for heterogeneous domain adaptation
 * Added support for mass-constrained partial optimal transport with `rho` parameter
 

@@ -719,6 +719,7 @@ rapid_ma.hyperdesign <- function(
   )
 }
 
+#' @method print rapid_ma
 #' @export
 print.rapid_ma <- function(x, ...) {
   cat("RAPID-MA structure-aware alignment\n")

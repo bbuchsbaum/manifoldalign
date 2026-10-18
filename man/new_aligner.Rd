@@ -10,7 +10,8 @@ new_aligner(name, group, supports_multi = FALSE, ...)
 \item{name}{Character name of the algorithm}
 
 \item{group}{One of "O" (orthogonal), "GL" (linear), "perm" (assignment),
-or "kernel" (embedding-only)}
+"kernel" (embedding-only), or "encoder" (a native multi-domain method that
+learns per-domain encoders and is never synchronised pairwise)}
 
 \item{supports_multi}{Logical; if TRUE, adapter should also implement
 a native multi-domain entry point via fit_many()}

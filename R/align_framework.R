@@ -9,7 +9,8 @@
 #'
 #' @param name Character name of the algorithm
 #' @param group One of "O" (orthogonal), "GL" (linear), "perm" (assignment),
-#'   or "kernel" (embedding-only)
+#'   "kernel" (embedding-only), or "encoder" (a native multi-domain method that
+#'   learns per-domain encoders and is never synchronised pairwise)
 #' @param supports_multi Logical; if TRUE, adapter should also implement
 #'   a native multi-domain entry point via fit_many()
 #' @param ... Additional fields stored on the object
@@ -27,7 +28,12 @@ new_aligner <- function(name, group, supports_multi = FALSE, ...) {
 #' Capabilities for an aligner
 #'
 #' @param algo An aligner object created by new_aligner or an aligner constructor
-#' @return A list with elements group (character) and supports_multi (logical)
+#' @return A list with elements group (character) and supports_multi (logical).
+#'   Aligners that declare a fuller contract also report, in this order,
+#'   `encoder` (`"linear"`, `"nonlinear"`, or `"none"` for row transports),
+#'   `supports_predict`, `supports_calibration`,
+#'   `requires_auxiliary_at_predict`, and `invertible`. Fields an aligner does
+#'   not declare are omitted rather than guessed.
 #' @examples
 #' algo <- new_aligner("test", group = "O")
 #' caps <- aligner_capabilities(algo)
@@ -36,7 +42,13 @@ aligner_capabilities <- function(algo) UseMethod("aligner_capabilities")
 
 #' @export
 aligner_capabilities.aligner <- function(algo) {
-  list(group = algo$group, supports_multi = isTRUE(algo$supports_multi))
+  caps <- list(group = algo$group, supports_multi = isTRUE(algo$supports_multi))
+  contract <- c("encoder", "supports_predict", "supports_calibration",
+                "requires_auxiliary_at_predict", "invertible")
+  for (field in contract) {
+    if (!is.null(algo[[field]])) caps[[field]] <- algo[[field]]
+  }
+  caps
 }
 
 # -- Adapter generics -------------------------------------------------------

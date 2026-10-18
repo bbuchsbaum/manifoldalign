@@ -241,6 +241,7 @@ rapid_ma_feature_scores <- function(
   )
 }
 
+#' @method print rapid_ma_feature_scores
 #' @export
 print.rapid_ma_feature_scores <- function(x, ...) {
   cat("RAPID-MA feature-side coordinates\n")

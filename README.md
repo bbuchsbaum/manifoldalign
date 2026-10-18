@@ -25,6 +25,7 @@
 | **Spectral MNN** | `spectral_mnn_align()` | Mutual nearest neighbor spectral alignment |
 | **Token-OT Graph** | `token_ot_graph_align()` | Token-level OT with graph structure |
 | **SSMA** | `ssma_align()` | Semi-Supervised Manifold Alignment |
+| **Stimulus SUMCOR** | `stimulus_sumcor_align()`, `calibrate_domain()` | Stimulus-weighted multi-subject SUMCOR for repeated naturalistic data: explicit per-subject encoders, keyed event correspondence, frozen-reference calibration of new subjects |
 | **RAPID-MA** | `rapid_ma()`, `rapid_ma_feature_scores()` | Scalable structure-aware alignment of many unmatched domains with custom sparse relations; feature-side (dual) coordinates via barycentres |
 
 ## Installation
@@ -59,6 +60,32 @@ result <- kema(hd, ncomp = 5)
 
 # Or align with Generalized Procrustes
 result <- generalized_procrustes(hd, ncomp = 5)
+```
+
+## Repeated naturalistic data: stimulus-weighted SUMCOR
+
+`stimulus_sumcor_align()` learns one linear encoder per subject from repeated
+presentations of shared stimuli. Correspondence is carried only by keyed
+`event_id` values, so subjects may have different voxel counts, missing
+events, or different row orders. Repetitions are averaged in the agreement
+term but enter each subject's normalisation individually. Optional stimulus
+features add a metric over events; `beta = 0` is the exact correspondence-only
+model, which makes the feature ablation direct.
+
+```r
+fit <- stimulus_sumcor_align(
+  X_list, design = design_list,
+  event_id = "event_id", repeat_id = "repeat_id", modality = "modality",
+  stimulus_features = list(acoustic = F_acoustic, visual = F_visual),
+  ncomp = 32,
+  control = stimulus_sumcor_control(beta = 0.5, covariance_shrinkage = 0.1)
+)
+
+# Encode new observations (for example a working-memory task) per subject
+Z_wm <- oos_predict(fit, X_wm_subject3, side = "subject3")
+
+# Add a held-out subject against the frozen reference
+fit2 <- calibrate_domain(fit, X_new, design = design_new, domain_name = "s17")
 ```
 
 ## Dual (feature-side) coordinates

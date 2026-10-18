@@ -10,7 +10,12 @@ aligner_capabilities(algo)
 \item{algo}{An aligner object created by new_aligner or an aligner constructor}
 }
 \value{
-A list with elements group (character) and supports_multi (logical)
+A list with elements group (character) and supports_multi (logical).
+  Aligners that declare a fuller contract also report, in this order,
+  `encoder` (`"linear"`, `"nonlinear"`, or `"none"` for row transports),
+  `supports_predict`, `supports_calibration`,
+  `requires_auxiliary_at_predict`, and `invertible`. Fields an aligner does
+  not declare are omitted rather than guessed.
 }
 \description{
 Capabilities for an aligner
