@@ -63,19 +63,10 @@
 }
 
 .rapid_resolve_prototype_control <- function(control = NULL) {
-  defaults <- unclass(.rapid_prototype_control())
-  if (is.null(control)) return(do.call(.rapid_prototype_control, defaults))
-  if (inherits(control, "rapid_ma_prototype_control")) return(control)
-  if (!is.list(control) || is.null(names(control)) || any(!nzchar(names(control)))) {
-    stop("`control` must be NULL, a named list, or rapid_ma_prototype_control.",
-         call. = FALSE)
-  }
-  unknown <- setdiff(names(control), names(defaults))
-  if (length(unknown)) {
-    stop("Unknown prototype control field(s): ", paste(unknown, collapse = ", "),
-         ".", call. = FALSE)
-  }
-  do.call(.rapid_prototype_control, utils::modifyList(defaults, control))
+  .rapid_resolve_settings(
+    control, .rapid_prototype_control, "rapid_ma_prototype_control", "prototype",
+    "`control` must be NULL, a named list, or rapid_ma_prototype_control."
+  )
 }
 
 .rapid_as_domain_matrices <- function(x, name, allow_null = FALSE,

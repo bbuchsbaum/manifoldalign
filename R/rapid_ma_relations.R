@@ -20,6 +20,11 @@
   if (!inherits(A, "Matrix")) {
     A <- Matrix::Matrix(A, sparse = TRUE)
   }
+  if (methods::is(A, "nMatrix")) {
+    # Pattern relations (for example `sparseMatrix(i, j, dims)` without `x`)
+    # carry unit weights on their stored entries.
+    A <- methods::as(A, "dMatrix")
+  }
   if (methods::is(A, "symmetricMatrix") ||
       methods::is(A, "triangularMatrix") ||
       methods::is(A, "diagonalMatrix")) {
@@ -70,11 +75,19 @@
   if (!is.null(n_rows) && nrow(X) != n_rows) {
     stop("`", name, "` must have ", n_rows, " rows.", call. = FALSE)
   }
-  vals <- if (inherits(X, "Matrix")) X@x else X
+  vals <- .rapid_matrix_values(X)
   if (!is.numeric(vals)) {
     stop("`", name, "` must be numeric.", call. = FALSE)
   }
   invisible(TRUE)
+}
+
+# Stored values of a dense or sparse matrix without densifying it. Pattern
+# matrices store no values (every stored entry is an implicit one).
+.rapid_matrix_values <- function(X) {
+  if (!inherits(X, "Matrix")) return(X)
+  if (methods::is(X, "nMatrix")) return(numeric(0))
+  X@x
 }
 
 .rapid_hash_int <- function(key, seed = 1L, modulo = 2147483629) {
@@ -123,7 +136,7 @@
 
 .rapid_feature_view <- function(X, max_dim = 32L, seed = 1L) {
   .rapid_validate_numeric_matrix(X, "X")
-  vals <- if (inherits(X, "Matrix")) X@x else X
+  vals <- .rapid_matrix_values(X)
   if (any(!is.finite(vals))) {
     stop("`X` must contain only finite values.", call. = FALSE)
   }
@@ -738,7 +751,7 @@
   seed = 1L
 ) {
   .rapid_validate_numeric_matrix(X, "X")
-  xvals <- if (inherits(X, "Matrix")) X@x else X
+  xvals <- .rapid_matrix_values(X)
   if (any(!is.finite(xvals))) {
     stop("`X` must contain only finite values.", call. = FALSE)
   }

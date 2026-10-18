@@ -7,14 +7,11 @@
   rep(levels, counts)
 }
 
-#' Generate a reproducible structure-aware alignment benchmark fixture
-#'
+#' @rdname benchmark_rapid_ma
 #' @param n_common Number of corresponding nodes shared by the two domains.
-#' @param extra_target Additional target-only nodes.
+#' @param extra_target Number of additional target-only nodes.
 #' @param source_features,target_features Modality-specific feature widths.
 #' @param labels_per_class Paired observed labels retained per class.
-#' @param seed Deterministic seed.
-#' @return A named fixture list accepted by [benchmark_rapid_ma()].
 #' @export
 rapid_ma_benchmark_fixture <- function(
   n_common = 120L,
@@ -430,22 +427,67 @@ rapid_ma_benchmark_fixture <- function(
   )
 }
 
-#' Compare RAPID-MA with related package methods on identical splits
+#' Reproducible RAPID-MA Accuracy and Package Comparison
 #'
-#' @param fixture A list from [rapid_ma_benchmark_fixture()], or a compatible
-#'   list containing `data`, `truth`, `labels`, optional `positions` and
-#'   `attributes`, and optional source-to-target `correspondence`.
-#' @param methods Methods to run. Supported values are `target_centroid`,
-#'   `rapid_ma`, `rapid_ma_native`, `rapid_ma_semisup`, `lema`, `ssma`,
-#'   `kema`, `multiscale`, `spectral_mnn`, and `token_ot`. Embedding methods
-#'   use one shared nearest-centroid head; explicitly named RAPID native and
-#'   semi-supervised rows retain their own prediction heads.
+#' Builds a deterministic imbalanced cross-modality land-cover fixture and
+#' compares RAPID-MA with LeMA and related package methods on identical
+#' splits. Embedding methods use the same nearest-centroid prediction head.
+#' Native UOT and sparse relation teacher rows are named explicitly so their
+#' accuracy is not conflated with embedding quality.
+#'
+#' @details
+#' Held-out truth is used only after fitting, for scoring. The class set given
+#' to every prediction head is the set of classes with at least one observed
+#' (training) label; held-out truth never defines it. The rare class reported
+#' by `rare_recall` is the evaluated class with the smallest held-out support
+#' (ties broken alphabetically) and is computed only at scoring time.
+#'
+#' Macro-F1 and mIoU follow one class-universe rule, shared with the
+#' blocked-inductive evidence runner: they average over every class present in
+#' the held-out truth or in the held-out predictions. Predictions outside the
+#' truth classes, including open-set `".unknown"` predictions and labelled
+#' classes absent from the held-out rows, therefore count as false positives
+#' of a class whose F1 and IoU are zero, as well as misses for the true class.
+#' Overall accuracy and expected calibration error (ten equal-width bins) use
+#' all held-out rows.
+#'
+#' The `target_centroid` comparator and the domain-local part of the RAPID-MA
+#' teacher seed both use a principal-component projection of the standardized
+#' domain features (at most `ncomp` components, computed without labels); all
+#' feature columns contribute.
+#'
+#' The `rapid_ma_semisup` row's relation-safety gate scores relation subsets on
+#' genuinely out-of-fold teacher probabilities: for each observed label row,
+#' the whole probability matrix of its domain is recomputed without that label
+#' before propagation, so neighbours never carry the held-out label. Rows whose
+#' removal would leave a class without any label are not scored.
+#'
+#' The bundled LeMA implementation is an independent dense equation-level
+#' benchmark oracle and is not available as a production backend. Reported
+#' endpoint RSS is a lower bound rather than a sampled peak; evidence scripts
+#' should measure process peak RSS separately. Hits@1 uses exact
+#' nearest-neighbour retrieval. MRR is a bounded MRR@100 lower bound; true
+#' matches outside the first 100 candidates contribute zero.
+#'
+#' @param fixture A fixture from `rapid_ma_benchmark_fixture()`, or a
+#'   compatible two-domain list containing `data`, `truth`, `labels`, optional
+#'   `positions` and `attributes`, and optional source-to-target
+#'   `correspondence`.
+#' @param methods Character vector of supported comparison methods:
+#'   `target_centroid`, `rapid_ma`, `rapid_ma_native`, `rapid_ma_semisup`,
+#'   `lema`, `ssma`, `kema`, `multiscale`, `spectral_mnn`, and `token_ot`.
+#'   Embedding methods use one shared nearest-centroid head; explicitly named
+#'   RAPID native and semi-supervised rows retain their own prediction heads.
 #' @param ncomp Shared requested embedding width.
-#' @param seed Deterministic method seed.
+#' @param seed Deterministic fixture or method seed. Package functions restore
+#'   the caller's random-number stream on exit.
 #' @param controls Optional named per-method control lists.
-#' @param keep_fits Retain fitted objects in the result.
-#' @return A `rapid_ma_benchmark` list containing a same-split results table,
-#'   failures, split/provenance metadata, and optionally fits.
+#' @param keep_fits Whether to retain fitted objects.
+#' @return `rapid_ma_benchmark_fixture()` returns generated data, held-out
+#'   truth, observed labels, positions, attributes, correspondences, and
+#'   provenance. `benchmark_rapid_ma()` returns a `rapid_ma_benchmark` list with
+#'   same-split accuracy, calibration, matching, runtime, memory lower bounds,
+#'   failures, split provenance, and optionally fits.
 #' @export
 benchmark_rapid_ma <- function(
   fixture = rapid_ma_benchmark_fixture(),

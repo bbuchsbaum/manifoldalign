@@ -93,19 +93,10 @@
 }
 
 .rapid_resolve_uot_control <- function(control = NULL) {
-  defaults <- unclass(.rapid_uot_control())
-  if (is.null(control)) return(do.call(.rapid_uot_control, defaults))
-  if (inherits(control, "rapid_ma_uot_control")) return(control)
-  if (!is.list(control) || is.null(names(control)) || any(!nzchar(names(control)))) {
-    stop("`control` must be NULL, a named list, or rapid_ma_uot_control.",
-         call. = FALSE)
-  }
-  unknown <- setdiff(names(control), names(defaults))
-  if (length(unknown)) {
-    stop("Unknown UOT control field(s): ", paste(unknown, collapse = ", "),
-         ".", call. = FALSE)
-  }
-  do.call(.rapid_uot_control, utils::modifyList(defaults, control))
+  .rapid_resolve_settings(
+    control, .rapid_uot_control, "rapid_ma_uot_control", "UOT",
+    "`control` must be NULL, a named list, or rapid_ma_uot_control."
+  )
 }
 
 .rapid_uot_numeric_view <- function(node_view, prototype_view, n, K, name,

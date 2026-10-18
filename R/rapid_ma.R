@@ -23,8 +23,15 @@
     tryCatch(
       {
         .rapid_validate_numeric_matrix(X, "features")
-        X <- as.matrix(X)
-        if (any(!is.finite(X))) {
+        # Sparse Matrix inputs stay sparse: every downstream consumer (the
+        # hashed feature sketch and the diffusion base) is sparse-aware, so
+        # only the stored values need a finiteness check.
+        if (inherits(X, "Matrix")) {
+          if (methods::is(X, "nMatrix")) X <- methods::as(X, "dMatrix")
+        } else {
+          X <- as.matrix(X)
+        }
+        if (any(!is.finite(.rapid_matrix_values(X)))) {
           stop("features contain non-finite values", call. = FALSE)
         }
         X
@@ -653,23 +660,62 @@
   )
 }
 
-#' Scalable structure-aware manifold alignment
+#' Scalable Structure-Aware Manifold Alignment
 #'
-#' @param data A list of numeric domain matrices or a `hyperdesign`.
+#' Fits a scalable multi-domain alignment using bounded sparse relation
+#' diffusion, class-aware shared prototypes, sparse unbalanced transport, and
+#' prototype-level relation matching.
+#'
+#' @details
+#' RAPID-MA is an embedding method rather than a linear feature projector. Its
+#' result therefore does not contain artificial feature loadings
+#' (`preprocessing$loadings_available` is `FALSE`). Out-of-sample application
+#' uses the fitted RAPID-MA adapter and retained preprocessing state; see
+#' [oos_predict.rapid_ma()].
+#'
+#' Domain matrices may be dense base matrices, data frames, or sparse `Matrix`
+#' objects. Sparse inputs stay sparse through the feature sketch; only the
+#' bounded-width hashed feature view is dense.
+#'
+#' The alternating solver accepts a candidate update only when the composite
+#' objective does not increase (within `control$objective_tolerance`), damping
+#' the map and prototype steps by `control$backtrack_factor` on each retry. With
+#' `control$map_type = "orthogonal"` every accepted map, including damped
+#' blends, is retracted back to an orthogonal matrix by a polar factor. If every
+#' retry of an iteration fails with an error, the fit stops with status
+#' `"stalled"`, records the message in `convergence$last_candidate_error`, and
+#' emits a warning.
+#'
+#' @param data A list of numeric domain matrices (rows are samples) or a
+#'   `hyperdesign`.
 #' @param ... Method-specific arguments.
-#' @return A `rapid_ma` embedding result with sparse couplings and diagnostics.
+#' @return A `rapid_ma` object containing per-domain scores (`scores`, and their
+#'   row-bound concatenation `s`), shared prototypes, sparse node-to-prototype
+#'   couplings, relation barycenters, predictions, prediction probabilities and
+#'   confidence, dropped transport mass, and objective/convergence diagnostics.
+#'   Couplings, scores, probabilities, predictions, and confidences keep the row
+#'   names of the corresponding input domain.
+#' @seealso [rapid_ma_control()], [rapid_ma_semisup()], [rapid_ma_match()],
+#'   [oos_predict.rapid_ma()], [rapid_ma_aligner()]
 #' @export
 rapid_ma <- function(data, ...) {
   UseMethod("rapid_ma")
 }
 
 #' @rdname rapid_ma
-#' @param labels Optional list of partially observed label vectors.
-#' @param relations Optional list of custom named sparse relations per domain.
-#' @param positions Optional list of spatial coordinate matrices per domain.
-#' @param attributes Optional list of mixed attribute data.frames per domain.
-#' @param ncomp Shared embedding dimension.
-#' @param control Settings from [rapid_ma_control()].
+#' @param labels Optional list of partially observed label vectors, one per
+#'   domain. Missing labels may be represented by `NA`.
+#' @param relations Optional list containing custom named sparse relations for
+#'   each domain. A relation may be a sparse `Matrix` (pattern matrices such as
+#'   `ngCMatrix` are treated as unit weights), a small dense matrix, or an edge
+#'   `data.frame` with `from`, `to`, and optional `weight` columns.
+#' @param positions Optional list of spatial coordinate matrices, one per
+#'   domain.
+#' @param attributes Optional list of mixed attribute data frames, one per
+#'   domain.
+#' @param ncomp Positive shared embedding dimension.
+#' @param control Settings returned by [rapid_ma_control()], or a named list of
+#'   its arguments (nested component lists are validated field by field).
 #' @export
 rapid_ma.list <- function(
   data,
@@ -696,7 +742,8 @@ rapid_ma.list <- function(
 }
 
 #' @rdname rapid_ma
-#' @param y Optional unquoted or string label column in each domain design.
+#' @param y For a `hyperdesign`, an unquoted or string label column present in
+#'   every domain design.
 #' @method rapid_ma hyperdesign
 #' @export
 rapid_ma.hyperdesign <- function(

@@ -228,3 +228,112 @@ test_that("RAPID-MA control validates nested and outer settings", {
     "Unknown RAPID-MA control"
   )
 })
+
+test_that("every control path revalidates nested fields (B3.26)", {
+  resolve <- manifoldalign:::.rapid_resolve_control
+  expect_error(
+    resolve(list(uot = list(q = 0, bogus = 1))),
+    "Unknown UOT control field\\(s\\): bogus"
+  )
+  expect_error(resolve(list(uot = list(q = 0))), "`q` must be an integer")
+  expect_error(
+    resolve(list(relation = list(feature_k = 0L))),
+    "`feature_k` must be an integer"
+  )
+  expect_error(
+    resolve(list(prototype = list(not_a_field = 1))),
+    "Unknown prototype control"
+  )
+
+  edited <- rapid_control()
+  edited$uot$q <- 0
+  expect_error(resolve(edited), "`q` must be an integer")
+  expect_error(rapid_control(uot = edited$uot), "`q` must be an integer")
+  edited <- rapid_control()
+  edited$diffusion$bogus <- TRUE
+  expect_error(resolve(edited), "Unknown diffusion control")
+  edited <- rapid_control()
+  edited$max_iter <- -1
+  expect_error(resolve(edited), "`max_iter`")
+
+  expect_equal(
+    resolve(list(uot = list(q = 5L), relation = list(feature_k = 9L))),
+    rapid_control(uot = list(q = 5L), relation = list(feature_k = 9L))
+  )
+  expect_equal(resolve(rapid_control(max_iter = 3L)), rapid_control(max_iter = 3L))
+  expect_equal(resolve(NULL), rapid_control())
+
+  d1 <- make_rapid_domain(20L, 4L, 1601L)
+  d2 <- make_rapid_domain(18L, 4L, 1602L)
+  expect_error(
+    rapid_ma_fit_list(list(d1$X, d2$X), control = list(uot = list(q = 0))),
+    "`q` must be an integer"
+  )
+  semisup_edited <- rapid_ma_semisup_control()
+  semisup_edited$rounds <- -2
+  expect_error(
+    manifoldalign:::.rapid_resolve_semisup_control(semisup_edited),
+    "`rounds`"
+  )
+})
+
+test_that("pattern relations are unit-weight relations", {
+  d1 <- make_rapid_domain(30L, 5L, 1603L)
+  d2 <- make_rapid_domain(26L, 5L, 1604L)
+  labels <- list(sparse_labels(d1$truth, 3L), sparse_labels(d2$truth, 3L))
+  i <- c(seq_len(29L), 5L)
+  j <- c(2:30, 17L)
+  pattern <- Matrix::sparseMatrix(i = i, j = j, dims = c(30L, 30L))
+  numeric <- Matrix::sparseMatrix(i = i, j = j, x = 1, dims = c(30L, 30L))
+  expect_s4_class(pattern, "ngCMatrix")
+
+  control <- list(max_iter = 2L, min_iter = 1L)
+  fit_pattern <- rapid_ma_fit_list(
+    list(a = d1$X, b = d2$X), labels = labels,
+    relations = list(list(topology = pattern), NULL),
+    ncomp = 4L, control = control
+  )
+  fit_numeric <- rapid_ma_fit_list(
+    list(a = d1$X, b = d2$X), labels = labels,
+    relations = list(list(topology = numeric), NULL),
+    ncomp = 4L, control = control
+  )
+  expect_equal(fit_pattern$s, fit_numeric$s, tolerance = 1e-12)
+  expect_equal(
+    fit_pattern$relations$a$relations$topology,
+    fit_numeric$relations$a$relations$topology
+  )
+  expect_s4_class(manifoldalign:::.rapid_force_dgC(pattern), "dgCMatrix")
+})
+
+test_that("sparse domain matrices stay sparse and match the dense fit", {
+  set.seed(1605)
+  S <- Matrix::rsparsematrix(40L, 30L, density = 0.25)
+  D <- make_rapid_domain(35L, 6L, 1606L)
+  validated <- manifoldalign:::.rapid_validate_domain_data(
+    list(S, D$X), c("sparse", "dense")
+  )
+  expect_s4_class(validated[[1L]], "sparseMatrix")
+  expect_true(is.matrix(validated[[2L]]))
+
+  truth <- rep(c("forest", "water", "urban"), length.out = 40L)
+  labels <- list(sparse_labels(truth, 3L), sparse_labels(D$truth, 3L))
+  control <- list(max_iter = 2L, min_iter = 1L)
+  sparse_fit <- rapid_ma_fit_list(
+    list(sparse = S, dense = D$X), labels = labels, ncomp = 4L,
+    control = control
+  )
+  dense_fit <- rapid_ma_fit_list(
+    list(sparse = as.matrix(S), dense = D$X), labels = labels, ncomp = 4L,
+    control = control
+  )
+  expect_equal(sparse_fit$s, dense_fit$s, tolerance = 1e-10)
+  expect_identical(sparse_fit$predictions, dense_fit$predictions)
+
+  bad <- S
+  bad@x[[3L]] <- NA_real_
+  expect_error(
+    rapid_ma_fit_list(list(bad = bad, dense = D$X)),
+    "Domain `bad`: features contain non-finite values"
+  )
+})

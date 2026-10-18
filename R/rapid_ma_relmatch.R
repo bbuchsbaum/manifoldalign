@@ -60,19 +60,10 @@
 }
 
 .rapid_resolve_relmatch_control <- function(control = NULL) {
-  defaults <- unclass(.rapid_relmatch_control())
-  if (is.null(control)) return(do.call(.rapid_relmatch_control, defaults))
-  if (inherits(control, "rapid_ma_relmatch_control")) return(control)
-  if (!is.list(control) || is.null(names(control)) || any(!nzchar(names(control)))) {
-    stop("`control` must be NULL, a named list, or rapid_ma_relmatch_control.",
-         call. = FALSE)
-  }
-  unknown <- setdiff(names(control), names(defaults))
-  if (length(unknown)) {
-    stop("Unknown relation-matching control field(s): ",
-         paste(unknown, collapse = ", "), ".", call. = FALSE)
-  }
-  do.call(.rapid_relmatch_control, utils::modifyList(defaults, control))
+  .rapid_resolve_settings(
+    control, .rapid_relmatch_control, "rapid_ma_relmatch_control", "relation-matching",
+    "`control` must be NULL, a named list, or rapid_ma_relmatch_control."
+  )
 }
 
 .rapid_relmatch_coupling <- function(coupling, n, control) {

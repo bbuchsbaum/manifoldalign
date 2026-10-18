@@ -1,8 +1,42 @@
 # RAPID-MA adapter, OOS interpolation, and bounded fine matching ------------
 
-#' Construct a RAPID-MA aligner descriptor
+#' RAPID-MA Adapter for Pairwise and Multi-Domain Alignment
 #'
-#' @return An object of class `c("rapid_ma_aligner", "aligner")`.
+#' Connects RAPID-MA to the package alignment-adapter interface while
+#' preserving the same native multi-domain core semantics. `fit_many()` runs
+#' the native multi-domain [rapid_ma()] core; `fit_pair()` runs the same core on
+#' two domains named `"i"` and `"j"` and, by default, adds a bounded node-level
+#' fine match from [rapid_ma_match()].
+#'
+#' @details
+#' Pairwise `links` are used only as fixed one-to-one anchors of the bounded
+#' fine match; the core fit has no node-pair anchor term. Supplying `links`
+#' with `fine_match = FALSE` is therefore an error. The permutation operators
+#' returned by `relative_transform()` for a pair fit are row-normalized in both
+#' directions, so many-to-one retrieval matches average rather than sum source
+#' rows.
+#'
+#' @param algo A `rapid_ma_aligner` descriptor.
+#' @param X_i,X_j Numeric domain matrices (dense or sparse `Matrix`).
+#' @param links Optional one-to-one anchor pairs or paired anchor-ID vectors,
+#'   used as fixed anchors of the fine match (see Details).
+#' @param labels,relations,positions,attributes Optional two-domain inputs,
+#'   as lists of length two (optionally named `i` and `j`).
+#' @param ncomp Shared embedding dimension. For `fit_many()`, `NULL` uses `k`,
+#'   or 16 when both are `NULL`.
+#' @param control Settings returned by [rapid_ma_control()].
+#' @param fine_match Whether to compute bounded node-level matches.
+#' @param match_control Named arguments forwarded to [rapid_ma_match()].
+#' @param domains A list of matrices or a `hyperdesign`.
+#' @param k Optional shared dimension supplied by `align_many()`; used as
+#'   `ncomp` when `ncomp` is `NULL`.
+#' @param ... For `fit_many()`, arguments forwarded to [rapid_ma()]. For
+#'   `fit_pair()`, ignored; it absorbs framework arguments such as the edge
+#'   indices `i` and `j` passed by `align_many()`.
+#' @return `rapid_ma_aligner()` returns an aligner descriptor of class
+#'   `c("rapid_ma_aligner", "aligner")`. The pairwise method returns a
+#'   `rapid_ma_pair_fit` containing the shared core fit and the fine match; the
+#'   multi-domain method returns a `rapid_ma` fit.
 #' @export
 rapid_ma_aligner <- function() {
   new_aligner("rapid_ma", group = "perm", supports_multi = TRUE)
@@ -37,24 +71,14 @@ rapid_ma_aligner <- function() {
   side
 }
 
+#' @rdname rapid_ma_aligner
 #' @export
 fit_many.rapid_ma_aligner <- function(algo, domains, k = NULL, ncomp = NULL, ...) {
   if (is.null(ncomp)) ncomp <- if (is.null(k)) 16L else k
   rapid_ma(domains, ncomp = ncomp, ...)
 }
 
-#' Fit RAPID-MA to a pair of domains
-#'
-#' @param algo A `rapid_ma_aligner` descriptor.
-#' @param X_i,X_j Numeric domain matrices.
-#' @param links Optional one-to-one anchor pairs or paired anchor-ID vectors.
-#' @param labels,relations,positions,attributes Optional two-domain inputs.
-#' @param ncomp Shared embedding dimension.
-#' @param control Settings from [rapid_ma_control()].
-#' @param fine_match Whether to compute bounded node-level matches.
-#' @param match_control Named arguments forwarded to [rapid_ma_match()].
-#' @param ... Unused.
-#' @return A `rapid_ma_pair_fit` containing the shared core fit and fine match.
+#' @rdname rapid_ma_aligner
 #' @export
 fit_pair.rapid_ma_aligner <- function(
   algo,
@@ -330,11 +354,27 @@ fit_pair.rapid_ma_aligner <- function(
   )
 }
 
-#' Out-of-sample RAPID-MA embedding and prediction
+#' Out-of-Sample RAPID-MA Embedding and Prediction
+#'
+#' Applies retained deterministic feature, position, and attribute encoders and
+#' interpolates fitted RAPID-MA scores and probabilities from bounded
+#' nearest-neighbour supports. Feature-only interpolation remains the default.
+#' Exact training-row reapplication reproduces the fitted values.
+#'
+#' @details
+#' Each active view contributes Gaussian-kernel interpolation weights over its
+#' `k` nearest retained training rows (bandwidth: the median neighbour distance
+#' of the query row); views are mixed with the normalized `view_weights`. When
+#' the feature view is active and a query row lies within `zero_tolerance` of a
+#' retained training row, the fitted values of that row (or the average of
+#' exact duplicates) are returned. The feature nearest-neighbour search runs
+#' only when the feature view has positive weight.
 #'
 #' @param fit_or_transform A fitted `rapid_ma` or `rapid_ma_pair_fit`.
 #' @param newX New rows in the original feature space of `side`.
-#' @param side Domain name, index, or pairwise alias `"i"`/`"j"`.
+#' @param side Domain name, index, or pairwise alias `"i"`/`"j"`. A fitted
+#'   domain whose name is literally `"i"` or `"j"` takes precedence over the
+#'   alias.
 #' @param type Return embedding coordinates, class probabilities, class labels,
 #'   or all diagnostics.
 #' @param k Number of bounded interpolation neighbours.
@@ -345,8 +385,11 @@ fit_pair.rapid_ma_aligner <- function(
 #'   interpolation.
 #' @param view_weights Named nonnegative weights over `feature`, `position`, and
 #'   `attribute`. The default is feature-only for backward compatibility.
-#' @param ... Unused.
-#' @return A matrix/vector, or a diagnostic list when `type = "all"`.
+#' @param ... Additional arguments forwarded by the pair-fit method; unused by
+#'   the `rapid_ma` method.
+#' @return A matrix or vector (with the row names of `newX`), or a list
+#'   containing embeddings, probabilities, classes, confidence, and
+#'   bounded-neighbour diagnostics when `type = "all"`.
 #' @export
 oos_predict.rapid_ma <- function(
   fit_or_transform,
@@ -487,6 +530,7 @@ oos_predict.rapid_ma <- function(
   )
 }
 
+#' @rdname oos_predict.rapid_ma
 #' @export
 oos_predict.rapid_ma_pair_fit <- function(
   fit_or_transform,
@@ -662,7 +706,15 @@ oos_predict.rapid_ma_pair_fit <- function(
   list(index = index, distance = distance, strength = strength)
 }
 
-#' Bounded multi-view matching for a RAPID-MA fit
+#' Bounded Multi-View Matching for a RAPID-MA Fit
+#'
+#' Generates candidates through sparse node-to-prototype supports and bounded
+#' nearest-neighbour indexes over retained comparable views. It reranks only
+#' the bounded candidate set with latent, structural, position, attribute, and
+#' prototype evidence and constructs either a one-to-one assignment or an
+#' independent retrieval result. It never materializes a dense cross-domain
+#' node-pair matrix; the returned `candidate_edges` and `candidate_density`
+#' report the size of the scored candidate set.
 #'
 #' @param fit A fitted `rapid_ma` object.
 #' @param from,to Source and target domains.
@@ -679,7 +731,8 @@ oos_predict.rapid_ma_pair_fit <- function(
 #' @param latent_weight,structure_weight,position_weight,attribute_weight,prototype_weight
 #'   Nonnegative reranking weights.
 #' @return A `rapid_ma_matching` object with a sparse assignment operator,
-#'   match table, coverage, confidence, and unmatched-node diagnostics.
+#'   match table, coverage, confidence, anchors, candidate-set size, and
+#'   unmatched-node diagnostics.
 #' @export
 rapid_ma_match <- function(
   fit,

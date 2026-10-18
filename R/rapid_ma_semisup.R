@@ -1,23 +1,32 @@
 # RAPID-MA class-balanced semi-supervised teacher refinement --------------
 
-#' Control RAPID-MA semi-supervised teacher refinement
+#' Control RAPID-MA Semi-Supervised Teacher Refinement
+#'
+#' Controls deterministic relation propagation, class-balanced guarded
+#' pseudo-label selection, EMA teacher updates, and rollback.
 #'
 #' @param rounds Maximum pseudo-label refresh rounds.
-#' @param ema_decay EMA teacher retention in `[0, 1)`.
+#' @param ema_decay Teacher retention in `[0, 1)` for the exponential moving
+#'   average (EMA) teacher.
 #' @param confidence_threshold Base class confidence threshold.
 #' @param minimum_threshold Lower bound for minority-class thresholds.
 #' @param balance_strength Amount by which rare classes receive lower thresholds.
-#' @param max_pseudo_fraction Maximum fraction of eligible nodes selected per round.
+#' @param max_pseudo_fraction Hard maximum fraction of eligible unlabelled
+#'   nodes per domain that can be pseudo-labelled in one round. The budget is
+#'   split evenly across classes (at least one candidate per class while budget
+#'   remains); when the per-class floor would exceed the total budget, the most
+#'   confident candidates are kept.
 #' @param min_margin Minimum top-one versus top-two probability margin.
 #' @param uncertainty_power Exponent applied to confidence-above-threshold weights.
 #' @param min_weight Minimum accepted pseudo-label weight.
-#' @param relation_consistency Require agreement with trusted relation neighbours.
-#' @param relation_validation Use explicitly supplied out-of-fold probabilities
-#'   to guard against misleading relation channels.
+#' @param relation_consistency Whether candidates must agree with trusted
+#'   relation neighbours.
+#' @param relation_validation Whether explicitly supplied out-of-fold
+#'   probabilities guard against misleading relation channels.
 #' @param relation_validation_margin Minimum balanced-accuracy improvement over
 #'   the full relation set before selecting a safer subset.
 #' @param relation_validation_max_relations Maximum highest-weight relations
-#'   considered when constructing bounded single and pair candidates.
+#'   used to construct bounded single and pair candidates.
 #' @param propagation_steps Fixed number of sparse relation-propagation steps.
 #' @param propagation_strength Convex weight assigned to relation neighbours.
 #' @param min_relation_agreement Minimum neighbour probability for the candidate class.
@@ -189,19 +198,10 @@ rapid_ma_semisup_control <- function(
 }
 
 .rapid_resolve_semisup_control <- function(control = NULL) {
-  defaults <- unclass(rapid_ma_semisup_control())
-  if (is.null(control)) return(do.call(rapid_ma_semisup_control, defaults))
-  if (inherits(control, "rapid_ma_semisup_control")) return(control)
-  if (!is.list(control) || is.null(names(control)) || any(!nzchar(names(control)))) {
-    stop("`control` must be NULL, a named list, or rapid_ma_semisup_control().",
-         call. = FALSE)
-  }
-  unknown <- setdiff(names(control), names(defaults))
-  if (length(unknown)) {
-    stop("Unknown semi-supervised control field(s): ",
-         paste(unknown, collapse = ", "), ".", call. = FALSE)
-  }
-  do.call(rapid_ma_semisup_control, utils::modifyList(defaults, control))
+  .rapid_resolve_settings(
+    control, rapid_ma_semisup_control, "rapid_ma_semisup_control", "semi-supervised",
+    "`control` must be NULL, a named list, or rapid_ma_semisup_control()."
+  )
 }
 
 .rapid_semisup_masks <- function(fit, labels, train_mask, mode) {
@@ -670,21 +670,43 @@ rapid_ma_semisup_control <- function(
   transport
 }
 
-#' Refine a RAPID-MA fit with guarded class-balanced pseudo-labels
+#' Refine a RAPID-MA Fit with Guarded Class-Balanced Pseudo-Labels
+#'
+#' Combines learned sparse relation propagation with class-balanced confidence,
+#' margin, uncertainty, and neighbour-agreement guards. Accepted pseudo-labels
+#' update sparse node-to-prototype transport; any score increase is rolled
+#' back.
+#'
+#' @details
+#' Observed labels are fixed throughout refinement. In inductive mode, held-out
+#' label values are removed before thresholds, selection, or diagnostics are
+#' computed, and pseudo-labels are restricted to training rows.
+#'
+#' With `control$relation_validation = TRUE`, every candidate relation subset
+#' (none, all, each single relation, and each pair of the highest-weight
+#' relations) is scored by propagating `validation_probabilities` and measuring
+#' class-balanced accuracy on the observed labels. The full relation set is
+#' replaced only when a subset improves on it by at least
+#' `control$relation_validation_margin`. Because propagation mixes each row with
+#' its relation neighbours, the validation probabilities of a labelled row's
+#' neighbours must also be computed without that row's label.
 #'
 #' @param fit A fitted `rapid_ma` object.
 #' @param labels Optional training-label vectors. In inductive mode, labels
 #'   outside `train_mask` are discarded before any statistic is computed.
 #' @param train_mask Optional logical vectors identifying training rows.
-#' @param mode `"transductive"` or `"inductive"`.
+#' @param mode Either `"transductive"` or `"inductive"`.
 #' @param initial_probabilities Optional named-class probability matrices, one
-#'   per domain. This permits a supervised downstream classifier to seed the
-#'   sparse relation teacher without exposing any additional labels.
+#'   per domain. A supervised downstream classifier can seed the sparse relation
+#'   teacher without providing additional labels.
 #' @param validation_probabilities Optional out-of-fold probability matrices
-#'   used only when `control$relation_validation = TRUE`. Values at observed
-#'   label rows must be produced without training on those rows.
-#' @param control Settings from [rapid_ma_semisup_control()].
-#' @return The updated `rapid_ma` object with a `semisup` provenance record.
+#'   used only when relation validation is enabled
+#'   (`control$relation_validation = TRUE`). Values at observed label rows, and
+#'   at the relation neighbours of those rows, must be produced without
+#'   training on those rows' labels (see Details).
+#' @param control Settings returned by [rapid_ma_semisup_control()].
+#' @return The updated `rapid_ma` object with refined probabilities and a
+#'   `semisup` provenance record.
 #' @export
 rapid_ma_semisup <- function(
   fit,
