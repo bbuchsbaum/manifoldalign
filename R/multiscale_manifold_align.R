@@ -130,43 +130,44 @@ multiscale_manifold_align <- function(data, ...) {
 }
 
 .msa_build_label_correspondences <- function(labels_list, max_pairs_per_label, weight, seed) {
-  set.seed(seed)
-  m <- length(labels_list)
-  rows <- vector("list", m * (m - 1L) / 2L)
-  ptr <- 0L
-  for (i in seq_len(m - 1L)) {
-    li <- labels_list[[i]]
-    for (j in (i + 1L):m) {
-      lj <- labels_list[[j]]
-      shared <- intersect(unique(li[!is.na(li)]), unique(lj[!is.na(lj)]))
-      if (!length(shared)) next
-      for (lab in shared) {
-        idx_i <- which(li == lab)
-        idx_j <- which(lj == lab)
-        n_take <- min(length(idx_i), length(idx_j), as.integer(max_pairs_per_label))
-        if (n_take < 1L) next
-        ii <- sample(idx_i, size = n_take, replace = FALSE)
-        jj <- sample(idx_j, size = n_take, replace = FALSE)
-        ptr <- ptr + 1L
-        rows[[ptr]] <- data.frame(
-          domain_i = i,
-          index_i = ii,
-          domain_j = j,
-          index_j = jj,
-          weight = rep(weight, n_take),
-          source = rep("label", n_take),
-          stringsAsFactors = FALSE
-        )
+  .with_local_seed(seed, {
+    m <- length(labels_list)
+    rows <- vector("list", m * (m - 1L) / 2L)
+    ptr <- 0L
+    for (i in seq_len(m - 1L)) {
+      li <- labels_list[[i]]
+      for (j in (i + 1L):m) {
+        lj <- labels_list[[j]]
+        shared <- intersect(unique(li[!is.na(li)]), unique(lj[!is.na(lj)]))
+        if (!length(shared)) next
+        for (lab in shared) {
+          idx_i <- which(li == lab)
+          idx_j <- which(lj == lab)
+          n_take <- min(length(idx_i), length(idx_j), as.integer(max_pairs_per_label))
+          if (n_take < 1L) next
+          ii <- sample(idx_i, size = n_take, replace = FALSE)
+          jj <- sample(idx_j, size = n_take, replace = FALSE)
+          ptr <- ptr + 1L
+          rows[[ptr]] <- data.frame(
+            domain_i = i,
+            index_i = ii,
+            domain_j = j,
+            index_j = jj,
+            weight = rep(weight, n_take),
+            source = rep("label", n_take),
+            stringsAsFactors = FALSE
+          )
+        }
       }
     }
-  }
-  if (ptr == 0L) {
-    return(data.frame(
-      domain_i = integer(0), index_i = integer(0), domain_j = integer(0), index_j = integer(0),
-      weight = numeric(0), source = character(0), stringsAsFactors = FALSE
-    ))
-  }
-  do.call(rbind, rows[seq_len(ptr)])
+    if (ptr == 0L) {
+      return(data.frame(
+        domain_i = integer(0), index_i = integer(0), domain_j = integer(0), index_j = integer(0),
+        weight = numeric(0), source = character(0), stringsAsFactors = FALSE
+      ))
+    }
+    do.call(rbind, rows[seq_len(ptr)])
+  })
 }
 
 .msa_build_mnn_correspondences <- function(domains, mnn_k, max_pairs_per_pair, weight) {
@@ -261,28 +262,6 @@ multiscale_manifold_align <- function(data, ...) {
   out[valid_idx, , drop = FALSE]
 }
 
-.msa_build_joint_laplacian <- function(within_graphs, correspondences, domain_sizes) {
-  n_total <- sum(domain_sizes)
-  L_within <- Matrix::bdiag(lapply(within_graphs, function(g) {
-    Matrix::Diagonal(x = g$degree) - g$A
-  }))
-
-  if (is.null(correspondences) || !nrow(correspondences)) {
-    return(methods::as(L_within, "dgCMatrix"))
-  }
-
-  offsets <- c(0L, cumsum(domain_sizes))
-  gi <- offsets[correspondences$domain_i] + correspondences$index_i
-  gj <- offsets[correspondences$domain_j] + correspondences$index_j
-  w <- correspondences$weight
-
-  i <- c(gi, gj, gi, gj)
-  j <- c(gi, gj, gj, gi)
-  x <- c(w, w, -w, -w)
-  L_cross <- Matrix::sparseMatrix(i = i, j = j, x = x, dims = c(n_total, n_total))
-  methods::as(L_within + L_cross, "dgCMatrix")
-}
-
 .msa_domain_svd <- function(X, degree, rank_per_domain, svd_tol) {
   X <- as.matrix(X)
   dhalf <- sqrt(pmax(as.numeric(degree), 1e-12))
@@ -313,158 +292,6 @@ multiscale_manifold_align <- function(data, ...) {
     target <- max(base_rank, min(as.integer(ctrl$eigen_k_max), max_rank))
   }
   min(target, as.integer(ctrl$eigen_k_max), max_rank)
-}
-
-.msa_smallest_eig_exact <- function(A, k) {
-  A <- as.matrix((A + Matrix::t(A)) / 2)
-  n <- nrow(A)
-  if (k < 1L) {
-    stop("Need at least one eigenpair.", call. = FALSE)
-  }
-
-  if (requireNamespace("RSpectra", quietly = TRUE) && k < (n - 1L)) {
-    eig <- safe_compute(
-      RSpectra::eigs_sym(A, k = k, which = "SA"),
-      "Spectral decomposition failed in multiscale_manifold_align()."
-    )
-    vals <- as.numeric(eig$values)
-    vecs <- as.matrix(eig$vectors)
-  } else {
-    eig <- eigen(as.matrix(A), symmetric = TRUE)
-    vals <- as.numeric(eig$values[seq_len(k)])
-    vecs <- as.matrix(eig$vectors[, seq_len(k), drop = FALSE])
-  }
-
-  ord <- order(vals, decreasing = FALSE)
-  list(values = vals[ord], vectors = vecs[, ord, drop = FALSE])
-}
-
-.msa_smallest_eig_randomized <- function(A, k, ctrl) {
-  A <- as.matrix((A + Matrix::t(A)) / 2)
-  n <- nrow(A)
-  if (k < 1L) {
-    stop("Need at least one eigenpair.", call. = FALSE)
-  }
-
-  ell <- min(n, k + as.integer(ctrl$randomized_oversample))
-  set.seed(as.integer(ctrl$seed))
-  Omega <- matrix(stats::rnorm(n * ell), n, ell)
-
-  shifted <- A + diag(as.numeric(ctrl$shift_invert_delta), n)
-  R <- chol(shifted)
-  solve_shift <- function(B) {
-    backsolve(R, forwardsolve(t(R), B))
-  }
-
-  Y <- solve_shift(Omega)
-  if (as.integer(ctrl$randomized_power_iters) > 0L) {
-    for (iter in seq_len(as.integer(ctrl$randomized_power_iters))) {
-      Y <- solve_shift(qr.Q(qr(Y)))
-    }
-  }
-
-  Q <- qr.Q(qr(Y))
-  B <- crossprod(Q, A %*% Q)
-  B <- (B + t(B)) / 2
-  eig <- eigen(B, symmetric = TRUE)
-  ord <- order(eig$values, decreasing = FALSE)
-  take <- seq_len(min(k, length(ord)))
-  vals <- as.numeric(eig$values[ord][take])
-  vecs <- Q %*% eig$vectors[, ord, drop = FALSE][, take, drop = FALSE]
-  list(values = vals, vectors = vecs)
-}
-
-.msa_build_filter_bank <- function(node_eig, eigvals, ctrl) {
-  n_nodes <- nrow(node_eig)
-  scaling_levels <- list()
-  wavelet_levels <- list()
-  scaling_weights <- list()
-  wavelet_weights <- list()
-  level_dims <- integer(0)
-  times <- numeric(0)
-
-  make_level <- function(weights) {
-    weights <- as.numeric(weights)
-    if (!length(weights) || !any(is.finite(weights) & weights > 0)) {
-      return(matrix(0, n_nodes, 0L))
-    }
-    wmax <- max(weights, na.rm = TRUE)
-    active <- which(is.finite(weights) & weights > ctrl$eps_rank * wmax & weights > 0)
-    if (!length(active)) {
-      return(matrix(0, n_nodes, 0L))
-    }
-    sweep(node_eig[, active, drop = FALSE], 2, sqrt(weights[active]), `*`)
-  }
-
-  for (j in seq_len(as.integer(ctrl$max_levels))) {
-    t_j <- 2^(j - 1L)
-    h_j <- 1 / (1 + t_j * eigvals)
-    h_next <- 1 / (1 + (2 * t_j) * eigvals)
-    g_j <- pmax(h_j - h_next, 0)
-
-    scaling_levels[[j]] <- make_level(h_j)
-    wavelet_levels[[j]] <- make_level(g_j)
-    scaling_weights[[j]] <- h_j
-    wavelet_weights[[j]] <- g_j
-    level_dims[j] <- ncol(scaling_levels[[j]])
-    times[j] <- t_j
-
-    if (ncol(scaling_levels[[j]]) <= 1L) {
-      break
-    }
-  }
-
-  if (!length(scaling_levels)) {
-    scaling_levels[[1L]] <- node_eig[, seq_len(min(1L, ncol(node_eig))), drop = FALSE]
-    wavelet_levels[[1L]] <- matrix(0, n_nodes, 0L)
-    scaling_weights[[1L]] <- rep(1, ncol(node_eig))
-    wavelet_weights[[1L]] <- rep(0, ncol(node_eig))
-    level_dims[1L] <- ncol(scaling_levels[[1L]])
-    times[1L] <- 1
-  }
-
-  scaling_levels <- scaling_levels[seq_along(level_dims)]
-  wavelet_levels <- wavelet_levels[seq_along(level_dims)]
-  scaling_weights <- scaling_weights[seq_along(level_dims)]
-  wavelet_weights <- wavelet_weights[seq_along(level_dims)]
-  times <- as.numeric(times)
-  level_dims <- as.integer(level_dims)
-
-  parts <- c(
-    Filter(function(x) ncol(x) > 0L, wavelet_levels),
-    list(scaling_levels[[length(scaling_levels)]])
-  )
-  features <- do.call(cbind, Filter(function(x) ncol(x) > 0L, parts))
-  if (is.null(features) || !ncol(features)) {
-    features <- node_eig[, seq_len(min(ncol(node_eig), 1L)), drop = FALSE]
-  }
-
-  list(
-    levels = scaling_levels,
-    wavelet_levels = wavelet_levels,
-    scaling_weights = scaling_weights,
-    wavelet_weights = wavelet_weights,
-    level_dims = level_dims,
-    times = times,
-    features = as.matrix(features)
-  )
-}
-
-.msa_compress_multiscale_features <- function(features, ncomp) {
-  features <- as.matrix(features)
-  k <- min(as.integer(ncomp), ncol(features), nrow(features))
-  if (k < 1L) {
-    stop("No non-empty multiscale features were constructed.", call. = FALSE)
-  }
-  if (ncol(features) == k) {
-    return(features[, seq_len(k), drop = FALSE])
-  }
-  if (requireNamespace("irlba", quietly = TRUE) && k < min(dim(features))) {
-    sv <- irlba::irlba(features, nv = k, nu = 0)
-    return(as.matrix(features %*% sv$v[, seq_len(k), drop = FALSE]))
-  }
-  sv <- svd(features, nu = 0, nv = k)
-  as.matrix(features %*% sv$v[, seq_len(k), drop = FALSE])
 }
 
 .msa_fit_loadings <- function(X, scores) {
@@ -559,25 +386,26 @@ multiscale_manifold_align <- function(data, ...) {
   }
 
   ell <- min(n, max(k, as.integer(ctrl$randomized_sketch_size)) + as.integer(ctrl$randomized_oversample))
-  set.seed(as.integer(ctrl$seed))
-  Omega <- matrix(stats::rnorm(n * ell), n, ell)
+  .with_local_seed(as.integer(ctrl$seed), {
+    Omega <- matrix(stats::rnorm(n * ell), n, ell)
 
-  Y <- A %*% Omega
-  if (as.integer(ctrl$randomized_power_iters) > 0L) {
-    for (iter in seq_len(as.integer(ctrl$randomized_power_iters))) {
-      Y <- A %*% qr.Q(qr(Y))
+    Y <- A %*% Omega
+    if (as.integer(ctrl$randomized_power_iters) > 0L) {
+      for (iter in seq_len(as.integer(ctrl$randomized_power_iters))) {
+        Y <- A %*% qr.Q(qr(Y))
+      }
     }
-  }
 
-  Q <- qr.Q(qr(Y))
-  B <- crossprod(Q, A %*% Q)
-  B <- (B + t(B)) / 2
-  eig <- eigen(B, symmetric = TRUE)
-  ord <- order(eig$values, decreasing = TRUE)
-  take <- seq_len(min(k, length(ord)))
-  vals <- as.numeric(eig$values[ord][take])
-  vecs <- Q %*% eig$vectors[, ord, drop = FALSE][, take, drop = FALSE]
-  list(values = vals, vectors = vecs)
+    Q <- qr.Q(qr(Y))
+    B <- crossprod(Q, A %*% Q)
+    B <- (B + t(B)) / 2
+    eig <- eigen(B, symmetric = TRUE)
+    ord <- order(eig$values, decreasing = TRUE)
+    take <- seq_len(min(k, length(ord)))
+    vals <- as.numeric(eig$values[ord][take])
+    vecs <- Q %*% eig$vectors[, ord, drop = FALSE][, take, drop = FALSE]
+    list(values = vals, vectors = vecs)
+  })
 }
 
 .msa_compress_scale_block <- function(block, ctrl) {

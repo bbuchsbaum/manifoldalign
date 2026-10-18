@@ -222,7 +222,11 @@ global_geo_align <- function(data, ...) {
 #'   }
 #'   `voxel_coords` is accepted as a deprecated alias of `coords` with a
 #'   warning.
-#' @param preproc Preprocessing function or list. Default: multivarious::center()
+#' @param preproc Preprocessing applied per domain (default
+#'   `multivarious::center()`): a single preprocessor broadcast to all domains,
+#'   a list with one entry per domain (`NULL` entries leave that domain
+#'   unchanged), or `NULL` for none. Fitted preprocessors are concatenated over
+#'   the feature blocks of the domains.
 #' @param ncomp Number of components to extract. Default: 20
 #' @param control Control settings from global_geo_align_control()
 #' @export
@@ -291,8 +295,10 @@ global_geo_align.hyperdesign <- function(
       proc_attr <- attr(Xi_tf, "preproc")
       proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
     } else {
+      # Keep one (NULL) entry per domain: `proclist[[i]] <- NULL` would delete
+      # the element and shift later domains onto the wrong blocks.
       pdata[[i]]$x <- Xi
-      proclist[[i]] <- NULL
+      proclist[i] <- list(NULL)
     }
   }
   names(pdata) <- domain_names
@@ -320,9 +326,12 @@ global_geo_align.hyperdesign <- function(
 
   proc <- NULL
   if (!all(vapply(proclist, is.null, logical(1)))) {
-    sample_idx <- compute_block_indices(pdata)
-    sample_idx_list <- split(sample_idx, row(sample_idx))
-    proc <- multivarious::concat_pre_processors(proclist, sample_idx_list)
+    # Preprocessors act on feature columns, so concatenate them over the
+    # feature blocks; unprocessed domains get an identity transform.
+    for (i in which(vapply(proclist, is.null, logical(1)))) {
+      proclist[i] <- list(.identity_preproc(pdata[[i]]$x))
+    }
+    proc <- multivarious::concat_pre_processors(proclist, feature_block_indices(pdata))
   }
 
   domain_sizes <- vapply(pdata_geom, function(d) nrow(d$x), integer(1))
@@ -677,72 +686,73 @@ global_geo_align.default <- function(data, ...) {
 }
 
 .build_label_correspondences <- function(pdata, y_name, max_pairs_per_label, seed) {
-  set.seed(seed)
-  m <- length(pdata)
-  rows <- vector("list", max(1L, m * (m - 1L) / 2L))
-  ptr <- 0L
+  .with_local_seed(seed, {
+    m <- length(pdata)
+    rows <- vector("list", max(1L, m * (m - 1L) / 2L))
+    ptr <- 0L
 
-  labels <- lapply(seq_len(m), function(i) {
-    dsg <- pdata[[i]]$design
-    if (is.null(dsg) || !is.data.frame(dsg) || !y_name %in% names(dsg)) {
-      stop("Label column `", y_name, "` missing in one or more domains.", call. = FALSE)
-    }
-    dsg[[y_name]]
-  })
+    labels <- lapply(seq_len(m), function(i) {
+      dsg <- pdata[[i]]$design
+      if (is.null(dsg) || !is.data.frame(dsg) || !y_name %in% names(dsg)) {
+        stop("Label column `", y_name, "` missing in one or more domains.", call. = FALSE)
+      }
+      dsg[[y_name]]
+    })
 
-  for (i in seq_len(m - 1L)) {
-    li <- labels[[i]]
-    for (j in (i + 1L):m) {
-      lj <- labels[[j]]
-      shared <- intersect(unique(li[!is.na(li)]), unique(lj[!is.na(lj)]))
-      if (!length(shared)) next
+    for (i in seq_len(m - 1L)) {
+      li <- labels[[i]]
+      for (j in (i + 1L):m) {
+        lj <- labels[[j]]
+        shared <- intersect(unique(li[!is.na(li)]), unique(lj[!is.na(lj)]))
+        if (!length(shared)) next
 
-      di <- vector("list", length(shared))
-      dj <- vector("list", length(shared))
-      cnt <- 0L
-      for (lab in shared) {
-        idx_i <- which(li == lab)
-        idx_j <- which(lj == lab)
-        if (!length(idx_i) || !length(idx_j)) next
-        k <- min(length(idx_i), length(idx_j), max_pairs_per_label)
-        if (k < 1L) next
-        if (length(idx_i) > k) idx_i <- sample(idx_i, k)
-        if (length(idx_j) > k) idx_j <- sample(idx_j, k)
-        if (length(idx_i) != length(idx_j)) {
-          k <- min(length(idx_i), length(idx_j))
-          idx_i <- idx_i[seq_len(k)]
-          idx_j <- idx_j[seq_len(k)]
+        di <- vector("list", length(shared))
+        dj <- vector("list", length(shared))
+        cnt <- 0L
+        for (lab in shared) {
+          idx_i <- which(li == lab)
+          idx_j <- which(lj == lab)
+          if (!length(idx_i) || !length(idx_j)) next
+          k <- min(length(idx_i), length(idx_j), max_pairs_per_label)
+          if (k < 1L) next
+          if (length(idx_i) > k) idx_i <- sample(idx_i, k)
+          if (length(idx_j) > k) idx_j <- sample(idx_j, k)
+          if (length(idx_i) != length(idx_j)) {
+            k <- min(length(idx_i), length(idx_j))
+            idx_i <- idx_i[seq_len(k)]
+            idx_j <- idx_j[seq_len(k)]
+          }
+          cnt <- cnt + 1L
+          di[[cnt]] <- idx_i
+          dj[[cnt]] <- idx_j
         }
-        cnt <- cnt + 1L
-        di[[cnt]] <- idx_i
-        dj[[cnt]] <- idx_j
-      }
-      if (cnt > 0L) {
-        ptr <- ptr + 1L
-        ii <- unlist(di[seq_len(cnt)], use.names = FALSE)
-        jj <- unlist(dj[seq_len(cnt)], use.names = FALSE)
-        rows[[ptr]] <- data.frame(
-          domain_i = i,
-          index_i = ii,
-          domain_j = j,
-          index_j = jj
-        )
+        if (cnt > 0L) {
+          ptr <- ptr + 1L
+          ii <- unlist(di[seq_len(cnt)], use.names = FALSE)
+          jj <- unlist(dj[seq_len(cnt)], use.names = FALSE)
+          rows[[ptr]] <- data.frame(
+            domain_i = i,
+            index_i = ii,
+            domain_j = j,
+            index_j = jj
+          )
+        }
       }
     }
-  }
 
-  if (ptr == 0L) {
-    return(data.frame(
-      domain_i = integer(0),
-      index_i = integer(0),
-      domain_j = integer(0),
-      index_j = integer(0)
-    ))
-  }
+    if (ptr == 0L) {
+      return(data.frame(
+        domain_i = integer(0),
+        index_i = integer(0),
+        domain_j = integer(0),
+        index_j = integer(0)
+      ))
+    }
 
-  out <- do.call(rbind, rows[seq_len(ptr)])
-  rownames(out) <- NULL
-  out
+    out <- do.call(rbind, rows[seq_len(ptr)])
+    rownames(out) <- NULL
+    out
+  })
 }
 
 .estimate_domain_scales <- function(pdata, corr_df, method, reg, anchor_max, seed) {
@@ -751,60 +761,61 @@ global_geo_align.default <- function(data, ...) {
     return(rep(1, m))
   }
 
-  set.seed(seed)
-  pair_keys <- unique(cbind(corr_df$domain_i, corr_df$domain_j))
-  ratios <- list()
-  for (k in seq_len(nrow(pair_keys))) {
-    s <- pair_keys[k, 1]
-    t <- pair_keys[k, 2]
-    block <- corr_df[corr_df$domain_i == s & corr_df$domain_j == t, , drop = FALSE]
-    if (nrow(block) < 2L) next
-    if (nrow(block) > anchor_max) {
-      block <- block[sample.int(nrow(block), anchor_max), , drop = FALSE]
+  .with_local_seed(seed, {
+    pair_keys <- unique(cbind(corr_df$domain_i, corr_df$domain_j))
+    ratios <- list()
+    for (k in seq_len(nrow(pair_keys))) {
+      s <- pair_keys[k, 1]
+      t <- pair_keys[k, 2]
+      block <- corr_df[corr_df$domain_i == s & corr_df$domain_j == t, , drop = FALSE]
+      if (nrow(block) < 2L) next
+      if (nrow(block) > anchor_max) {
+        block <- block[sample.int(nrow(block), anchor_max), , drop = FALSE]
+      }
+      Xs <- pdata[[s]]$x[block$index_i, , drop = FALSE]
+      Xt <- pdata[[t]]$x[block$index_j, , drop = FALSE]
+      Da <- as.matrix(stats::dist(Xs))
+      Db <- as.matrix(stats::dist(Xt))
+      if (!length(Da) || !length(Db)) next
+
+      if (method == "pairwise_eta") {
+        den <- sum(Db * Db)
+        if (den <= 0) next
+        r_st <- sum(Db * Da) / den
+      } else {
+        uu <- upper.tri(Da)
+        rv <- Da[uu] / pmax(Db[uu], 1e-12)
+        rv <- rv[is.finite(rv) & rv > 0]
+        if (!length(rv)) next
+        r_st <- stats::median(rv)
+      }
+      if (!is.finite(r_st) || r_st <= 0) next
+      ratios[[length(ratios) + 1L]] <- c(s, t, r_st)
     }
-    Xs <- pdata[[s]]$x[block$index_i, , drop = FALSE]
-    Xt <- pdata[[t]]$x[block$index_j, , drop = FALSE]
-    Da <- as.matrix(stats::dist(Xs))
-    Db <- as.matrix(stats::dist(Xt))
-    if (!length(Da) || !length(Db)) next
 
-    if (method == "pairwise_eta") {
-      den <- sum(Db * Db)
-      if (den <= 0) next
-      r_st <- sum(Db * Da) / den
-    } else {
-      uu <- upper.tri(Da)
-      rv <- Da[uu] / pmax(Db[uu], 1e-12)
-      rv <- rv[is.finite(rv) & rv > 0]
-      if (!length(rv)) next
-      r_st <- stats::median(rv)
+    if (!length(ratios) || m == 1L) {
+      return(rep(1, m))
     }
-    if (!is.finite(r_st) || r_st <= 0) next
-    ratios[[length(ratios) + 1L]] <- c(s, t, r_st)
-  }
 
-  if (!length(ratios) || m == 1L) {
-    return(rep(1, m))
-  }
+    ratio_mat <- do.call(rbind, ratios)
+    A <- matrix(0, nrow(ratio_mat), m - 1L)
+    b <- log(ratio_mat[, 3])
+    for (r in seq_len(nrow(ratio_mat))) {
+      s <- as.integer(ratio_mat[r, 1])
+      t <- as.integer(ratio_mat[r, 2])
+      if (s != 1L) A[r, s - 1L] <- A[r, s - 1L] + 1
+      if (t != 1L) A[r, t - 1L] <- A[r, t - 1L] - 1
+    }
 
-  ratio_mat <- do.call(rbind, ratios)
-  A <- matrix(0, nrow(ratio_mat), m - 1L)
-  b <- log(ratio_mat[, 3])
-  for (r in seq_len(nrow(ratio_mat))) {
-    s <- as.integer(ratio_mat[r, 1])
-    t <- as.integer(ratio_mat[r, 2])
-    if (s != 1L) A[r, s - 1L] <- A[r, s - 1L] + 1
-    if (t != 1L) A[r, t - 1L] <- A[r, t - 1L] - 1
-  }
-
-  lhs <- crossprod(A) + reg * diag(m - 1L)
-  rhs <- crossprod(A, b)
-  x <- tryCatch(
-    as.numeric(solve(lhs, rhs)),
-    error = function(e) rep(0, m - 1L)
-  )
-  scales <- exp(c(0, x))
-  scales / stats::median(scales)
+    lhs <- crossprod(A) + reg * diag(m - 1L)
+    rhs <- crossprod(A, b)
+    x <- tryCatch(
+      as.numeric(solve(lhs, rhs)),
+      error = function(e) rep(0, m - 1L)
+    )
+    scales <- exp(c(0, x))
+    scales / stats::median(scales)
+  })
 }
 
 .build_global_graph_edges <- function(
@@ -879,70 +890,71 @@ global_geo_align.default <- function(data, ...) {
   corr_frac,
   seed
 ) {
-  set.seed(seed)
-  total_n <- sum(domain_sizes)
-  r_total <- min(as.integer(n_landmarks_total), total_n)
-  if (r_total <= 0L) return(integer(0))
-  if (r_total >= total_n) return(seq_len(total_n))
+  .with_local_seed(seed, {
+    total_n <- sum(domain_sizes)
+    r_total <- min(as.integer(n_landmarks_total), total_n)
+    if (r_total <= 0L) return(integer(0))
+    if (r_total >= total_n) return(seq_len(total_n))
 
-  corr_nodes <- integer(0)
-  if (nrow(corr_df)) {
-    corr_nodes <- unique(c(
-      offsets[corr_df$domain_i] + corr_df$index_i,
-      offsets[corr_df$domain_j] + corr_df$index_j
-    ))
-  }
-
-  n_corr <- min(length(corr_nodes), floor(r_total * corr_frac))
-  landmarks <- integer(0)
-  if (n_corr > 0L) {
-    landmarks <- sample(corr_nodes, n_corr)
-  }
-
-  remaining <- r_total - length(landmarks)
-  if (remaining <= 0L) {
-    return(sort(unique(landmarks))[seq_len(r_total)])
-  }
-
-  m <- length(domain_sizes)
-  if (is.null(landmarks_per_dataset)) {
-    raw <- remaining * domain_sizes / sum(domain_sizes)
-    alloc <- floor(raw)
-    rem <- remaining - sum(alloc)
-    if (rem > 0L) {
-      ord <- order(raw - alloc, decreasing = TRUE)
-      alloc[ord[seq_len(rem)]] <- alloc[ord[seq_len(rem)]] + 1L
+    corr_nodes <- integer(0)
+    if (nrow(corr_df)) {
+      corr_nodes <- unique(c(
+        offsets[corr_df$domain_i] + corr_df$index_i,
+        offsets[corr_df$domain_j] + corr_df$index_j
+      ))
     }
-  } else {
-    alloc <- rep.int(min(landmarks_per_dataset, max(domain_sizes)), m)
-    if (sum(alloc) > remaining) {
-      raw <- alloc / sum(alloc) * remaining
+
+    n_corr <- min(length(corr_nodes), floor(r_total * corr_frac))
+    landmarks <- integer(0)
+    if (n_corr > 0L) {
+      landmarks <- sample(corr_nodes, n_corr)
+    }
+
+    remaining <- r_total - length(landmarks)
+    if (remaining <= 0L) {
+      return(sort(unique(landmarks))[seq_len(r_total)])
+    }
+
+    m <- length(domain_sizes)
+    if (is.null(landmarks_per_dataset)) {
+      raw <- remaining * domain_sizes / sum(domain_sizes)
       alloc <- floor(raw)
       rem <- remaining - sum(alloc)
       if (rem > 0L) {
         ord <- order(raw - alloc, decreasing = TRUE)
         alloc[ord[seq_len(rem)]] <- alloc[ord[seq_len(rem)]] + 1L
       }
+    } else {
+      alloc <- rep.int(min(landmarks_per_dataset, max(domain_sizes)), m)
+      if (sum(alloc) > remaining) {
+        raw <- alloc / sum(alloc) * remaining
+        alloc <- floor(raw)
+        rem <- remaining - sum(alloc)
+        if (rem > 0L) {
+          ord <- order(raw - alloc, decreasing = TRUE)
+          alloc[ord[seq_len(rem)]] <- alloc[ord[seq_len(rem)]] + 1L
+        }
+      }
     }
-  }
 
-  for (d in seq_len(m)) {
-    if (alloc[d] <= 0L) next
-    ids <- offsets[d] + seq_len(domain_sizes[d])
-    ids <- setdiff(ids, landmarks)
-    if (!length(ids)) next
-    k <- min(alloc[d], length(ids))
-    landmarks <- c(landmarks, sample(ids, k))
-  }
-
-  if (length(landmarks) < r_total) {
-    pool <- setdiff(seq_len(total_n), landmarks)
-    if (length(pool)) {
-      landmarks <- c(landmarks, sample(pool, min(length(pool), r_total - length(landmarks))))
+    for (d in seq_len(m)) {
+      if (alloc[d] <= 0L) next
+      ids <- offsets[d] + seq_len(domain_sizes[d])
+      ids <- setdiff(ids, landmarks)
+      if (!length(ids)) next
+      k <- min(alloc[d], length(ids))
+      landmarks <- c(landmarks, sample(ids, k))
     }
-  }
 
-  sort(unique(landmarks))[seq_len(min(r_total, length(unique(landmarks))))]
+    if (length(landmarks) < r_total) {
+      pool <- setdiff(seq_len(total_n), landmarks)
+      if (length(pool)) {
+        landmarks <- c(landmarks, sample(pool, min(length(pool), r_total - length(landmarks))))
+      }
+    }
+
+    sort(unique(landmarks))[seq_len(min(r_total, length(unique(landmarks))))]
+  })
 }
 
 .landmark_mds <- function(D_LL, k_embed, eig_tol) {
@@ -1368,28 +1380,29 @@ global_geo_align.default <- function(data, ...) {
     return(coords)
   }
 
-  set.seed(seed)
-  if (method == "grid") {
-    mins <- apply(coords, 2L, min)
-    maxs <- apply(coords, 2L, max)
-    q <- ncol(coords)
-    side <- max(2L, ceiling(n_anchors^(1 / q)))
-    if (side^q > 1e6) {
-      stop("`anchor_method = \"grid\"` would need ", format(side^q, big.mark = ","),
-           " grid points in ", q, " dimensions; use `anchor_method = \"kmeans\"`.",
-           call. = FALSE)
+  .with_local_seed(seed, {
+    if (method == "grid") {
+      mins <- apply(coords, 2L, min)
+      maxs <- apply(coords, 2L, max)
+      q <- ncol(coords)
+      side <- max(2L, ceiling(n_anchors^(1 / q)))
+      if (side^q > 1e6) {
+        stop("`anchor_method = \"grid\"` would need ", format(side^q, big.mark = ","),
+             " grid points in ", q, " dimensions; use `anchor_method = \"kmeans\"`.",
+             call. = FALSE)
+      }
+      axes <- lapply(seq_len(q), function(j) seq(mins[j], maxs[j], length.out = side))
+      grid <- as.matrix(expand.grid(axes))
+      dimnames(grid) <- NULL
+      if (nrow(grid) > n_anchors) {
+        grid <- grid[sample.int(nrow(grid), n_anchors), , drop = FALSE]
+      }
+      return(grid)
     }
-    axes <- lapply(seq_len(q), function(j) seq(mins[j], maxs[j], length.out = side))
-    grid <- as.matrix(expand.grid(axes))
-    dimnames(grid) <- NULL
-    if (nrow(grid) > n_anchors) {
-      grid <- grid[sample.int(nrow(grid), n_anchors), , drop = FALSE]
-    }
-    return(grid)
-  }
 
-  km <- stats::kmeans(coords, centers = n_anchors, iter.max = 50L, nstart = 3L)
-  km$centers
+    km <- stats::kmeans(coords, centers = n_anchors, iter.max = 50L, nstart = 3L)
+    km$centers
+  })
 }
 
 .estimate_anchor_sigma <- function(anchors) {
