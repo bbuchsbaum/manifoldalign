@@ -136,9 +136,53 @@ print.simembed <- function(x, ...) {
   return(best_sigma)
 }
 
+#' Full-data LSE objective
+#'
+#' Evaluates the documented objective
+#' \eqn{(1-\alpha) J_s + \alpha J_p} with
+#' \eqn{J_s = \sum_{i<j} M_{ij}(P_{ij}-T_{ij})^2 / (2K)},
+#' \eqn{K = \#\{i<j: M_{ij} \ne 0\}} and
+#' \eqn{J_p = \|W^\top W - I\|_F^2 / (2m^2)}.
+#' @param X Preprocessed data matrix (n x d).
+#' @param W Weight matrix (d x m).
+#' @param T Target similarity matrix (n x n).
+#' @param M Mask matrix (n x n).
+#' @param sigma Gaussian scale sigma_P.
+#' @param alpha Orthogonality weight alpha_p.
+#' @param upper_idx Optional precomputed linear indices of the masked upper triangle.
+#' @return List with components `objective`, `Js` and `Jp`.
+#' @keywords internal
+.lse_objective <- function(X, W, T, M, sigma, alpha, upper_idx = NULL) {
+  if (is.null(upper_idx)) {
+    upper_idx <- which(upper.tri(M, diag = FALSE) & M != 0)
+  }
+  m <- ncol(W)
+  K <- if (length(upper_idx) > 0) length(upper_idx) else 1
+  Y <- X %*% W
+  D2 <- pairwise_sqdist(Y)
+  P_upper <- exp(-D2[upper_idx] / sigma)
+  Js <- sum(M[upper_idx] * (P_upper - T[upper_idx])^2) / (2 * K)
+  WtWmI <- crossprod(W)
+  diag(WtWmI) <- diag(WtWmI) - 1
+  Jp <- if (m > 0) sum(WtWmI^2) / (2 * m^2) else 0
+  list(objective = (1 - alpha) * Js + alpha * Jp, Js = Js, Jp = Jp)
+}
+
 #' Enhanced ADAM optimizer with alpha scheduling
-#' @return List with components W (optimized weight matrix), trace (objective values),
-#'   convergence (status code), message (convergence message), and iterations (count)
+#'
+#' The full-data objective is evaluated after every update, independently of
+#' `verbose`, so logging never changes the stopping decision or the returned
+#' weights. Stopping criteria (checked only once any alpha_p schedule has
+#' finished): absolute change of the full-data objective below `tol` for five
+#' consecutive updates (`"SUCCESS"`), or norm of the (batch) gradient below
+#' `10 * tol` (`"GRADIENT_CONVERGED"`). Exhausting `maxit` updates returns
+#' convergence code 1 (`"MAXITER_REACHED"`) with a warning; a non-finite
+#' objective returns code 3 (`"NONFINITE_OBJECTIVE"`) with a warning.
+#'
+#' @return List with components W (optimized weight matrix), trace (objective
+#'   at the initial weights and after each update), convergence (status code),
+#'   message (convergence message), and iterations (number of ADAM updates
+#'   applied)
 #' @keywords internal
 .optimize_W_enhanced <- function(X, T, M, W0,
                                 sigma = 1, alpha_p = 0.2, alpha_schedule = FALSE,
@@ -146,181 +190,156 @@ print.simembed <- function(x, ...) {
                                 maxit = 500, tol = 1e-6,
                                 verbose = FALSE) {
 
-  n <- nrow(X); d <- ncol(X); m <- ncol(W0)
+  n <- nrow(X)
+  maxit <- as.integer(maxit)
+  if (length(maxit) != 1L || is.na(maxit) || maxit < 1L) {
+    stop("maxit must be a positive integer.")
+  }
+  if (!is.numeric(tol) || length(tol) != 1L || is.na(tol) || tol < 0) {
+    stop("tol must be a non-negative number.")
+  }
 
   W <- W0
   mt <- NULL # Initialize Adam states
   vt <- NULL
-  obj_prev <- Inf
-  sum_M_full <- sum(M)
-  if (sum_M_full == 0) stop("Mask matrix M sums to zero. Cannot optimize.")
-  obj_trace <- numeric(maxit)
+  if (sum(M) == 0) stop("Mask matrix M sums to zero. Cannot optimize.")
 
-  # Alpha scheduling setup
+  # Alpha scheduling setup: decay linearly from 1 to alpha_p over the first
+  # `alpha_decay_steps` updates.
   alpha_p_orig <- alpha_p
-  if (alpha_schedule) {
-    alpha_decay_steps <- min(50, maxit)
-    if (verbose) cat("Using alpha_p scheduling: 1.0 -> ", alpha_p_orig, " over ", alpha_decay_steps, " steps\n")
+  alpha_decay_steps <- if (alpha_schedule) min(50L, maxit) else 0L
+  if (alpha_schedule && verbose) {
+    cat("Using alpha_p scheduling: 1.0 -> ", alpha_p_orig, " over ", alpha_decay_steps, " steps\n")
   }
+  alpha_at <- function(t) {
+    if (alpha_schedule && t <= alpha_decay_steps && alpha_decay_steps > 1L) {
+      1.0 - (1.0 - alpha_p_orig) * (t - 1) / (alpha_decay_steps - 1)
+    } else {
+      alpha_p_orig
+    }
+  }
+  in_schedule <- function(t) alpha_schedule && t <= alpha_decay_steps
 
-  # Pre-calculate for efficiency
-  jp_denom <- 2 * m^2
-  if (jp_denom == 0) jp_denom <- 1
-  upper_idx <- which(upper.tri(M, diag = FALSE) & M == 1, arr.ind = FALSE)
-  
+  upper_idx <- which(upper.tri(M, diag = FALSE) & M != 0)
+
   # Add robustness checks for poorly scaled similarity matrices
-  if (!is.null(T)) {
+  if (!is.null(T) && length(upper_idx) > 0) {
     T_mean <- mean(T[upper_idx])
     if (T_mean < 1e-4 && T_mean > 0) {
       warning(sprintf("Target similarity matrix T appears to be poorly scaled (mean off-diagonal = %.2e). This may cause convergence issues. Consider using adaptive scaling: T <- exp(-dist(X)^2 / median(dist(X)^2))", T_mean))
     }
-    
+
     # Check for extreme scaling that would cause certain failure
     T_max <- max(T[upper_idx])
     if (T_max < 1e-10) {
-      warning("Target similarity matrix T is too close to zero (max off-diagonal = ", 
+      warning("Target similarity matrix T is too close to zero (max off-diagonal = ",
            sprintf("%.2e", T_max), "). This may cause optimization to fail. ",
            "Please rescale your similarity matrix.")
     }
   }
-  
-  # Track stalled optimization
-  stall_counter <- 0
-  stall_threshold <- 5  # Number of iterations with minimal change
-  grad_norm_trace <- numeric(maxit)
-  grad_norm <- Inf  # Initialize for first iteration
 
-  for (t in 1:maxit) {
-    
-    # Alpha scheduling (linearly decay from 1 to target value)
-    if (alpha_schedule && t <= alpha_decay_steps) {
-      current_alpha <- 1.0 - (1.0 - alpha_p_orig) * (t - 1) / (alpha_decay_steps - 1)
-    } else {
-      current_alpha <- alpha_p_orig
-    }
+  # Consecutive updates with an objective change below tol required to stop
+  small_steps <- 0L
+  patience <- 5L
+
+  obj_trace <- rep(NA_real_, maxit + 1L)
+  cur <- .lse_objective(X, W, T, M, sigma, alpha_at(1L), upper_idx = upper_idx)
+  obj <- cur$objective
+  obj_trace[1L] <- obj
+  n_updates <- 0L
+  convergence_info <- NULL
+
+  for (t in seq_len(maxit)) {
+    current_alpha <- alpha_at(t)
 
     # Sample batch
     if (batch < 1 && batch > 0) {
-      idx <- sample.int(n, size = max(1, ceiling(batch*n)))
-      Xb <- X[idx, , drop=FALSE]
-      Tb <- T[idx, idx, drop=FALSE]
-      Mb <- M[idx, idx, drop=FALSE]
+      idx <- sample.int(n, size = max(1, ceiling(batch * n)))
+      Xb <- X[idx, , drop = FALSE]
+      Tb <- T[idx, idx, drop = FALSE]
+      Mb <- M[idx, idx, drop = FALSE]
     } else {
       Xb <- X; Tb <- T; Mb <- M
     }
 
     sum_Mb <- sum(Mb)
     if (sum_Mb == 0) {
-        if(verbose) message(paste("Skipping iteration", t, "due to zero sum in batch mask M."))
-        obj_trace[t] <- obj_prev
-        next
+      if (verbose) message(paste("Skipping iteration", t, "due to zero sum in batch mask M."))
+      obj_trace[t + 1L] <- obj
+      next
     }
 
-    # Calculate objective on full data
-    needs_recalc <- (t == 1 || batch < 1 || verbose)
-    if (needs_recalc) {
-        Y_full <- X %*% W
-        D2_full <- pairwise_sqdist(Y_full)
-        P_upper <- exp(-D2_full[upper_idx] / sigma)
-        # CORRECTED: Use (1-alpha)*Js + alpha*Jp formulation
-        # FIXED: Normalize by upper triangle count, not full mask sum
-        Js_full <- sum((P_upper - T[upper_idx])^2) / (2 * length(upper_idx))
-
-        WtW_full <- crossprod(W)
-        diag(WtW_full) <- diag(WtW_full) - 1
-        Jp_full <- sum(WtW_full^2) / jp_denom
-
-        obj <- (1 - current_alpha) * Js_full + current_alpha * Jp_full
-        obj_trace[t] <- obj
-    } else {
-      obj <- obj_prev
-      obj_trace[t] <- obj
-    }
-
-    # Enhanced convergence check
-    obj_change <- if (t > 1 && !is.infinite(obj_prev)) abs(obj_prev - obj) else Inf
-    
-    # Check for multiple convergence criteria
-    if (t > 1) {
-      # Criterion 1: Objective change below tolerance
-      if (obj_change < tol) {
-        if (verbose) cat(sprintf("Converged at iteration %d (obj change < %.3e)\n", t, tol))
-        obj_trace <- obj_trace[1:t]
-        grad_norm_trace <- grad_norm_trace[1:t]
-        convergence_info <- list(convergence = 0, message = "SUCCESS", iterations = t)
-        break
-      }
-      
-      # Criterion 2: Gradient norm below threshold (indicates stationary point)
-      if (grad_norm < tol * 10) {
-        if (verbose) cat(sprintf("Converged at iteration %d (gradient norm = %.3e)\n", t, grad_norm))
-        obj_trace <- obj_trace[1:t]
-        grad_norm_trace <- grad_norm_trace[1:t]
-        convergence_info <- list(convergence = 0, message = "GRADIENT_CONVERGED", iterations = t)
-        break
-      }
-      
-      # Criterion 3: Stalled optimization detection
-      if (obj_change < tol * 100) {  # Less strict threshold for stall detection
-        stall_counter <- stall_counter + 1
-        if (stall_counter >= stall_threshold) {
-          warning(sprintf(
-            "Optimization stalled at iteration %d (objective unchanged for %d iterations). This often indicates poorly scaled input. Check similarity matrix scaling.",
-            t, stall_threshold
-          ))
-          obj_trace <- obj_trace[1:t]
-          grad_norm_trace <- grad_norm_trace[1:t]
-          convergence_info <- list(convergence = 2, message = "STALLED", iterations = t)
-          break
-        }
-      } else {
-        stall_counter <- 0  # Reset counter if making progress
-      }
-    }
-    obj_prev <- obj
-
-    # Compute gradient on batch
+    # Gradient of the documented objective on the batch
     grad_js_b <- grad_Js(Xb, W, Tb, Mb, sigma, sum_M_batch = sum_Mb)
     grad_jp_b <- grad_Jp(W)
-
-    # CORRECTED: Use (1-alpha)*grad_Js + alpha*grad_Jp
     g <- (1 - current_alpha) * grad_js_b + current_alpha * grad_jp_b
-    
-    # Track gradient norm for convergence monitoring
     grad_norm <- sqrt(sum(g^2))
-    grad_norm_trace[t] <- grad_norm
+
+    if (!in_schedule(t) && grad_norm < tol * 10) {
+      if (verbose) cat(sprintf("Converged after %d updates (gradient norm = %.3e)\n", n_updates, grad_norm))
+      convergence_info <- list(convergence = 0, message = "GRADIENT_CONVERGED", iterations = n_updates)
+      break
+    }
 
     # ADAM update
     up <- adam_update(W, g, mt, vt, t, lr)
     W  <- up$par
     mt <- up$m
     vt <- up$v
+    n_updates <- n_updates + 1L
 
-    # Verbose output
+    # Full-data objective at the updated weights (always evaluated, so the
+    # stopping rule does not depend on `verbose`).
+    obj_prev <- obj
+    cur <- .lse_objective(X, W, T, M, sigma, current_alpha, upper_idx = upper_idx)
+    obj <- cur$objective
+    obj_trace[t + 1L] <- obj
+
     if (verbose && (t %% 20 == 1 || t == maxit)) {
-      if (alpha_schedule && t <= alpha_decay_steps) {
+      if (in_schedule(t)) {
         cat(sprintf("it=%04d  obj=%.6e  Js=%.4e  Jp=%.4e  alpha=%.3f\n",
-                    t, obj, Js_full, Jp_full, current_alpha))
+                    t, obj, cur$Js, cur$Jp, current_alpha))
       } else {
         cat(sprintf("it=%04d  obj=%.6e  Js=%.4e  Jp=%.4e\n",
-                    t, obj, Js_full, Jp_full))
+                    t, obj, cur$Js, cur$Jp))
       }
     }
-  }
 
-  # Handle non-convergence
-  if (!exists("convergence_info")) {
-    # If we exited the loop without setting convergence_info, check why
-    if (t == maxit && abs(obj_prev - obj) >= tol) {
-      warning(paste("Optimization (ADAM) did not converge within", maxit, "iterations. Final objective change =", sprintf("%.3e", abs(obj_prev-obj))))
-      convergence_info <- list(convergence = 1, message = "MAXITER_REACHED", iterations = maxit)
+    if (!is.finite(obj)) {
+      warning(sprintf("Objective became non-finite after %d updates.", n_updates))
+      convergence_info <- list(convergence = 3, message = "NONFINITE_OBJECTIVE", iterations = n_updates)
+      break
+    }
+
+    # Convergence checks compare objectives evaluated with the same alpha_p, so
+    # they are suspended while the alpha_p schedule is still changing it.
+    if (in_schedule(t)) next
+
+    # A single small change can be a coincidence of ADAM's oscillation, so
+    # the change must stay below tol for `patience` consecutive updates.
+    if (abs(obj_prev - obj) < tol) {
+      small_steps <- small_steps + 1L
+      if (small_steps >= patience) {
+        if (verbose) cat(sprintf("Converged after %d updates (obj change < %.3e for %d updates)\n",
+                                 n_updates, tol, patience))
+        convergence_info <- list(convergence = 0, message = "SUCCESS", iterations = n_updates)
+        break
+      }
     } else {
-      convergence_info <- list(convergence = 0, message = "SUCCESS", iterations = t)
+      small_steps <- 0L
     }
   }
 
-  if (t == maxit && length(obj_trace) > t) {
-     obj_trace <- obj_trace[1:t]
+  obj_trace <- obj_trace[!is.na(obj_trace)]
+
+  if (is.null(convergence_info)) {
+    k <- length(obj_trace)
+    last_change <- if (k >= 2L) abs(obj_trace[k] - obj_trace[k - 1L]) else NA_real_
+    warning(sprintf(
+      "Optimization (ADAM) did not converge within %d iterations. Final objective change = %.3e (tol = %.3e).",
+      maxit, last_change, tol
+    ))
+    convergence_info <- list(convergence = 1, message = "MAXITER_REACHED", iterations = n_updates)
   }
 
   return(list(W = W, trace = obj_trace, convergence = convergence_info$convergence,
@@ -448,9 +467,10 @@ grad_Js <- function(X, W, T, M, sigma, sum_M_batch) {
   P <- 0.5 * (P + t(P))  # Ensure symmetry
   
   # Step 1: Compute the coefficient matrix E
-  # E_ij = dJs/dP_ij * dP_ij/dD2_ij = (M_ij * (P_ij - T_ij) / sum_M) * (-P_ij / sigma)
-  # This is incorrect, normalization factor should be 2*length(upper_idx)
-  upper_idx <- which(upper.tri(M, diag=FALSE) & M==1)
+  # Js = sum_{i<j} M_ij (P_ij - T_ij)^2 / (2K), K = #{i<j: M_ij != 0}
+  # (see .lse_objective). With the symmetric full-matrix form,
+  # E_ij = 2 * dJs/dD2_ij = M_ij (P_ij - T_ij) / (2K) * (-2 P_ij / sigma).
+  upper_idx <- which(upper.tri(M, diag = FALSE) & M != 0)
   norm_factor <- if (length(upper_idx) > 0) length(upper_idx) else 1
   
   dJs_dP <- M * (P - T) / (2 * norm_factor)
@@ -458,10 +478,10 @@ grad_Js <- function(X, W, T, M, sigma, sum_M_batch) {
   
   # Step 2: Form the graph Laplacian of the E_matrix
   # L_E = D_E - E, where D_E is the diagonal matrix of row sums
-  L_E <- Matrix::Diagonal(x = rowSums(E_matrix)) - E_matrix
+  L_E <- diag(rowSums(E_matrix), nrow = n) - E_matrix
   
   # Step 3: Compute the final gradient w.r.t W
-  # grad = 2 * X^T * L_E * Y
+  # grad = 2 * X^T * L_E * Y (dense base matrix, so W stays a base matrix)
   grad <- 2 * crossprod(X, L_E %*% Y)
   
   return(grad)
@@ -480,8 +500,8 @@ grad_Jp <- function(W) {
   WtWmI <- WtW
   diag(WtWmI) <- diag(WtWmI) - 1
 
-  # CORRECTED: Use correct factor 1/m² instead of 2/m² to match paper and C++ implementation
-  gradient <- (1 / m^2) * (W %*% WtWmI)
+  # Jp = ||W'W - I||_F^2 / (2 m^2)  =>  dJp/dW = 4 W (W'W - I) / (2 m^2)
+  gradient <- (2 / m^2) * (W %*% WtWmI)
   return(gradient)
 }
 
@@ -542,7 +562,10 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 #' or L-BFGS-B (C++ implementation).
 #' 
 #' Similarities are computed using a Gaussian kernel: P_ij = exp(-||Y_i - Y_j||^2 / sigma_P).
-#' The orthogonality penalty is Jp = ||W'W - I||^2_F / (2*m^2).
+#' The similarity loss is Js = sum_{i<j} M_ij (P_ij - T_ij)^2 / (2K), with K the
+#' number of masked pairs i<j, and the orthogonality penalty is
+#' Jp = ||W'W - I||^2_F / (2*m^2). Both backends use the exact gradients of
+#' these terms.
 #' 
 #' Key algorithmic features:
 #' \itemize{
@@ -562,9 +585,18 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 #'   Uses convex combination: (1-alpha_p)*Js + alpha_p*Jp (default: 0.1).
 #' @param alpha_schedule Logical. If TRUE, linearly decay alpha_p from 1 to specified value 
 #'   over first 50 iterations to avoid early orthogonality trapping (default: FALSE).
-#' @param maxit Integer. Maximum number of iterations (default: 500).
-#' @param tol Numeric. Convergence tolerance. For ADAM (R): change in objective function.
-#'   For L-BFGS-B (C++): gradient norm tolerance (default: 1e-6).
+#' @param maxit Integer. Maximum number of iterations: ADAM updates (R) or
+#'   L-BFGS-B iterations (C++) (default: 500).
+#' @param tol Numeric. Convergence tolerance (default: 1e-6). For ADAM (R): the
+#'   run stops when the absolute change of the full-data objective between
+#'   updates stays below `tol` for five consecutive updates, or the gradient
+#'   norm falls below `10 * tol`; the objective is evaluated after every
+#'   update regardless of `verbose`. If
+#'   `maxit` updates are exhausted first, the result reports
+#'   `convergence = 1` (`"MAXITER_REACHED"`) and a warning is issued.
+#'   For L-BFGS-B (C++): passed as `pgtol`, the tolerance on the largest
+#'   projected-gradient component (L-BFGS-B ignores a relative objective
+#'   tolerance; its `factr` keeps the default of 1e7).
 #' @param batch_size Numeric in (0, 1]. Fraction of data for stochastic updates in ADAM (R only)
 #'   (default: 1, i.e., full batch).
 #' @param use_cpp Logical. If TRUE and C++ backend is available, use L-BFGS-B from C++.
@@ -584,8 +616,11 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 #'   - \code{scale}: Scaling vector used in preprocessing.
 #'   - \code{sigma_P}: Final sigma_P value used (important if auto-selected).
 #'   - \code{alpha_p}: Final alpha_p value used.
-#'   - \code{objective_trace}: Vector of objective function values during optimization.
-#'   - Metadata: \code{target_sim}, \code{mask}, \code{optimizer}, \code{convergence}.
+#'   - \code{objective_trace}: Objective values at the initial weights and after
+#'     each ADAM update (R backend only; \code{NULL} for the C++ backend).
+#'   - Metadata: \code{target_sim}, \code{mask}, \code{optimizer}, \code{convergence}
+#'     (a list with \code{convergence} code (0 = converged), \code{message},
+#'     \code{iterations} and \code{final_value}).
 #'
 #' @examples
 #' \donttest{
