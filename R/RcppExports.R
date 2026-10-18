@@ -27,12 +27,20 @@ compute_edge_distances_cpp <- function(X, A) {
 }
 
 #' Compute edge consistency gradient
-#' 
-#' Efficient computation of the gradient of edge consistency regularizer
-#' 
+#'
+#' Edge-length consistency term over undirected edges (each counted once,
+#' \eqn{i < j}, \eqn{a < b}) with squared Euclidean feature distances
+#' \eqn{d}: for every edge pair, \eqn{G_{ia} += 2 (d^1_{ij} - d^2_{ab}) S_{jb}}
+#' and \eqn{G_{jb} += 2 (d^1_{ij} - d^2_{ab}) S_{ia}}. Instead of looping over
+#' all \eqn{|E_1| |E_2|} edge pairs, this is evaluated with sparse products:
+#' with \eqn{D_k} the strictly upper-triangular edge-distance matrix and
+#' \eqn{U_k} its 0/1 pattern,
+#' \eqn{G = 2 (D_1 S U_2^T - U_1 S D_2^T + D_1^T S U_2 - U_1^T S D_2)},
+#' at cost \eqn{O((|E_1| + |E_2|) \max(n_1, n_2))}.
+#'
 #' @param S Current transport plan (n1 x n2)
-#' @param A1 Adjacency matrix of network 1 (sparse)
-#' @param A2 Adjacency matrix of network 2 (sparse)
+#' @param A1 Adjacency matrix of network 1 (sparse; nonzero pattern is used)
+#' @param A2 Adjacency matrix of network 2 (sparse; nonzero pattern is used)
 #' @param X1 Features of network 1 (n1 x d)
 #' @param X2 Features of network 2 (n2 x d)
 #' @return Gradient matrix (n1 x n2)
@@ -132,14 +140,23 @@ compute_parrot_cost_cpp <- function(X1, X2, R1, R2, W1, W2, alpha = 0.5, sigma =
 }
 
 #' Unified Sinkhorn algorithm with optional log-domain stabilization
-#' 
+#'
+#' Solves balanced entropic OT with Gibbs kernel \code{exp(-cost / epsilon)}
+#' on the raw cost. With \code{stabilized = TRUE} the iterations run in the
+#' log domain for every \code{epsilon}; with \code{stabilized = FALSE} they
+#' use plain kernel scaling, which underflows when \code{cost / epsilon} is
+#' large. Iterations stop when the marginal residual is below \code{tol}. The
+#' plan is returned as computed (no post-hoc rebalancing); use
+#' \code{sinkhorn_unified_potentials()} to obtain the convergence flag and
+#' marginal residual.
+#'
 #' @param cost Cost matrix (n x m)
 #' @param a Source marginal (n x 1)
 #' @param b Target marginal (m x 1)
 #' @param epsilon Entropic regularization parameter
 #' @param max_iter Maximum iterations
-#' @param tol Convergence tolerance
-#' @param stabilized Use log-domain stabilization for numerical stability
+#' @param tol Convergence tolerance on the marginal residual
+#' @param stabilized Use log-domain iterations
 #' @return Transport plan matrix
 sinkhorn_unified <- function(cost, a, b, epsilon, max_iter = 1000L, tol = 1e-9, stabilized = TRUE) {
     .Call(`_manifoldalign_sinkhorn_unified`, cost, a, b, epsilon, max_iter, tol, stabilized)
@@ -147,8 +164,9 @@ sinkhorn_unified <- function(cost, a, b, epsilon, max_iter = 1000L, tol = 1e-9, 
 
 #' Unified Sinkhorn algorithm returning dual potentials for warm-starting
 #'
-#' This variant returns both the transport plan and the (log) scaling vectors
-#' that can be reused to warm-start subsequent Sinkhorn solves.
+#' Same solver as \code{sinkhorn_unified()}, additionally returning the log
+#' scaling vectors (\code{pi = exp(-cost/epsilon + log_u + log_v^T)} exactly)
+#' and convergence diagnostics.
 #'
 #' @param cost Cost matrix (n x m)
 #' @param a Source marginal (n x 1)
@@ -157,9 +175,11 @@ sinkhorn_unified <- function(cost, a, b, epsilon, max_iter = 1000L, tol = 1e-9, 
 #' @param log_u0 Optional warm-start log scaling for rows (length n)
 #' @param log_v0 Optional warm-start log scaling for columns (length m)
 #' @param max_iter Maximum iterations
-#' @param tol Convergence tolerance
-#' @param stabilized Use log-domain stabilization for small epsilon
-#' @return A list with elements pi (plan), log_u, log_v
+#' @param tol Convergence tolerance on the marginal residual
+#' @param stabilized Use log-domain iterations
+#' @return A list with elements \code{pi} (plan), \code{log_u}, \code{log_v},
+#'   \code{converged}, \code{iterations} and \code{marginal_error}
+#'   (max absolute row/column marginal violation of \code{pi}).
 sinkhorn_unified_potentials <- function(cost, a, b, epsilon, log_u0 = NULL, log_v0 = NULL, max_iter = 1000L, tol = 1e-9, stabilized = TRUE) {
     .Call(`_manifoldalign_sinkhorn_unified_potentials`, cost, a, b, epsilon, log_u0, log_v0, max_iter, tol, stabilized)
 }

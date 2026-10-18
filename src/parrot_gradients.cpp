@@ -30,13 +30,56 @@ arma::mat compute_edge_distances_cpp(const arma::mat& X, const arma::sp_mat& A) 
   return D;
 }
 
+namespace {
+
+// Strictly upper-triangular edge-distance matrix D (squared Euclidean feature
+// distance on each undirected edge i < j) and its 0/1 pattern U.
+void parrot_edge_mats(const arma::sp_mat& A, const arma::mat& X,
+                      arma::sp_mat& D, arma::sp_mat& U) {
+  std::vector<arma::uword> rows, cols;
+  std::vector<double> dist;
+  for (arma::sp_mat::const_iterator it = A.begin(); it != A.end(); ++it) {
+    const arma::uword i = it.row();
+    const arma::uword j = it.col();
+    if (i >= j || (*it) == 0.0) continue;
+    double d = 0.0;
+    for (arma::uword k = 0; k < X.n_cols; ++k) {
+      const double diff = X(i, k) - X(j, k);
+      d += diff * diff;
+    }
+    rows.push_back(i);
+    cols.push_back(j);
+    dist.push_back(d);
+  }
+  const arma::uword nnz = rows.size();
+  arma::umat loc(2, nnz);
+  arma::vec dv(nnz);
+  for (arma::uword e = 0; e < nnz; ++e) {
+    loc(0, e) = rows[e];
+    loc(1, e) = cols[e];
+    dv(e) = dist[e];
+  }
+  D = arma::sp_mat(loc, dv, A.n_rows, A.n_cols);
+  U = arma::sp_mat(loc, arma::vec(nnz, arma::fill::ones), A.n_rows, A.n_cols);
+}
+
+} // namespace
+
 //' Compute edge consistency gradient
-//' 
-//' Efficient computation of the gradient of edge consistency regularizer
-//' 
+//'
+//' Edge-length consistency term over undirected edges (each counted once,
+//' \eqn{i < j}, \eqn{a < b}) with squared Euclidean feature distances
+//' \eqn{d}: for every edge pair, \eqn{G_{ia} += 2 (d^1_{ij} - d^2_{ab}) S_{jb}}
+//' and \eqn{G_{jb} += 2 (d^1_{ij} - d^2_{ab}) S_{ia}}. Instead of looping over
+//' all \eqn{|E_1| |E_2|} edge pairs, this is evaluated with sparse products:
+//' with \eqn{D_k} the strictly upper-triangular edge-distance matrix and
+//' \eqn{U_k} its 0/1 pattern,
+//' \eqn{G = 2 (D_1 S U_2^T - U_1 S D_2^T + D_1^T S U_2 - U_1^T S D_2)},
+//' at cost \eqn{O((|E_1| + |E_2|) \max(n_1, n_2))}.
+//'
 //' @param S Current transport plan (n1 x n2)
-//' @param A1 Adjacency matrix of network 1 (sparse)
-//' @param A2 Adjacency matrix of network 2 (sparse)
+//' @param A1 Adjacency matrix of network 1 (sparse; nonzero pattern is used)
+//' @param A2 Adjacency matrix of network 2 (sparse; nonzero pattern is used)
 //' @param X1 Features of network 1 (n1 x d)
 //' @param X2 Features of network 2 (n2 x d)
 //' @return Gradient matrix (n1 x n2)
@@ -46,40 +89,31 @@ arma::mat compute_edge_gradient_cpp(const arma::mat& S,
                                    const arma::sp_mat& A2,
                                    const arma::mat& X1,
                                    const arma::mat& X2) {
-  int n1 = S.n_rows;
-  int n2 = S.n_cols;
-  arma::mat grad(n1, n2, arma::fill::zeros);
-
-  arma::sp_mat::const_iterator it1_end = A1.end();
-  arma::sp_mat::const_iterator it2_end = A2.end();
-
-  for (arma::sp_mat::const_iterator it1 = A1.begin(); it1 != it1_end; ++it1) {
-    int i = it1.row();
-    int j = it1.col();
-    
-    // To match R, only process lower-triangular part to avoid double counting
-    if (i >= j) continue;
-
-    arma::rowvec diff1 = X1.row(i) - X1.row(j);
-    double d1_sq = arma::dot(diff1, diff1);
-
-    for (arma::sp_mat::const_iterator it2 = A2.begin(); it2 != it2_end; ++it2) {
-      int a = it2.row();
-      int b = it2.col();
-      
-      if (a >= b) continue;
-
-      arma::rowvec diff2 = X2.row(a) - X2.row(b);
-      double d2_sq = arma::dot(diff2, diff2);
-      
-      double term = 2 * (d1_sq - d2_sq);
-      
-      grad(i, a) += S(j, b) * term;
-      grad(j, b) += S(i, a) * term;
-    }
+  const arma::uword n1 = S.n_rows;
+  const arma::uword n2 = S.n_cols;
+  if (A1.n_rows != n1 || A1.n_cols != n1 || X1.n_rows != n1) {
+    Rcpp::stop("compute_edge_gradient_cpp: A1/X1 do not match nrow(S).");
+  }
+  if (A2.n_rows != n2 || A2.n_cols != n2 || X2.n_rows != n2) {
+    Rcpp::stop("compute_edge_gradient_cpp: A2/X2 do not match ncol(S).");
   }
 
-  return grad;
+  arma::sp_mat D1, U1, D2, U2;
+  parrot_edge_mats(A1, X1, D1, U1);
+  parrot_edge_mats(A2, X2, D2, U2);
+
+  // (sparse * dense) products; S * sp_mat^T computed as (sp_mat * S^T)^T.
+  const arma::mat St = S.t();
+  const arma::mat SU2t = arma::mat(U2 * St).t();   // S U2^T
+  const arma::mat SD2t = arma::mat(D2 * St).t();   // S D2^T
+  const arma::mat SU2 = arma::mat(U2.t() * St).t(); // S U2
+  const arma::mat SD2 = arma::mat(D2.t() * St).t(); // S D2
+
+  arma::mat grad = arma::mat(D1 * SU2t);
+  grad -= arma::mat(U1 * SD2t);
+  grad += arma::mat(D1.t() * SU2);
+  grad -= arma::mat(U1.t() * SD2);
+  return 2.0 * grad;
 }
 
 //' Compute neighborhood consistency gradient
