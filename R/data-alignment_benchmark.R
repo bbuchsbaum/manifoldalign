@@ -14,6 +14,10 @@
 #'   `domain` columns.}
 #'   \item{labels}{Factor of length 80 giving the latent class for each sample.}
 #' }
+#' @details
+#' `alignment_benchmark` is an exported object built when the package is
+#' installed, not a `data/` dataset, so use it directly after loading the
+#' package; `data(alignment_benchmark)` does not apply.
 #' @keywords datasets
 #'
 #' @examples
@@ -74,6 +78,3 @@ make_domain <- function(transform, noise_sd, suffix) {
     labels = classes
   )
 })
-
-# Ensure object is visible for data() calls
-utils::globalVariables("alignment_benchmark")

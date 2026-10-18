@@ -95,7 +95,7 @@ synthetic_graph_alignment_case <- function(n,
                                            n_anchors = 0L,
                                            seed = 1L) {
   structure <- match.arg(structure)
-  set.seed(as.integer(seed))
+  .local_seed(as.integer(seed))
 
   X1 <- .graph_benchmark_base_coords(n = as.integer(n), d = as.integer(d), structure = structure)
 

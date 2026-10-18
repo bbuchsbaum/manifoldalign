@@ -1,7 +1,7 @@
 .bench_or <- function(x, y) if (is.null(x)) y else x
 
 .rand_rotation_benchmark <- function(d, seed = NULL) {
-  if (!is.null(seed)) set.seed(seed)
+  if (!is.null(seed)) .local_seed(seed)
   Q <- qr.Q(qr(matrix(rnorm(d * d), d)))
   if (det(Q) < 0) Q[, 1] <- -Q[, 1]
   Q
@@ -73,7 +73,7 @@
 }
 
 .synthetic_linear_triplet <- function(n = 60L, noise = 0.01, seed = 1L) {
-  set.seed(seed)
+  .local_seed(seed)
 
   n1 <- floor(n / 2)
   n2 <- n - n1
@@ -110,7 +110,7 @@
 }
 
 .synthetic_isometric_triplet <- function(n = 50L, noise = 0.02, seed = 2L) {
-  set.seed(seed)
+  .local_seed(seed)
   t <- sort(runif(n, 0, 2 * pi))
   true_labels <- factor(ifelse(t < pi, "early", "late"))
 
@@ -131,7 +131,7 @@
 }
 
 .synthetic_hard_triplet <- function(n_side = 10L, noise = 0.03, seed = 3L) {
-  set.seed(seed)
+  .local_seed(seed)
   u <- seq(-1, 1, length.out = n_side)
   grid <- as.matrix(expand.grid(u, u))
   true_labels <- factor(ifelse(grid[, 1] < 0, "left", "right"))
@@ -162,7 +162,7 @@
                                                n_private = 12L,
                                                noise = 0.02,
                                                seed = 4L) {
-  set.seed(seed)
+  .local_seed(seed)
 
   mk_latent <- function(n) matrix(rnorm(n * 2, sd = 0.6), ncol = 2)
   shared <- mk_latent(n_shared)
@@ -215,7 +215,7 @@
   view_names <- c("view1", "view2", "view3")
 
   corrupt <- function(labels, seed_offset) {
-    set.seed(seed + seed_offset)
+    .local_seed(seed + seed_offset)
     labels_chr <- as.character(labels)
     lv <- sort(unique(labels_chr))
     n_flip <- max(1L, floor(length(labels_chr) * label_noise))
@@ -240,7 +240,7 @@
                                          noise = 0.02,
                                          n_views = 4L,
                                          seed = 6L) {
-  set.seed(seed)
+  .local_seed(seed)
   latent <- matrix(rnorm(n * 2), ncol = 2)
   labels <- factor(ifelse(latent[, 1] * latent[, 2] > 0, "diagonal", "off_diagonal"))
 
@@ -269,7 +269,7 @@
                                        dims = c(96L, 128L, 160L),
                                        noise = 0.03,
                                        seed = 7L) {
-  set.seed(seed)
+  .local_seed(seed)
   latent <- matrix(rnorm(n * 3), ncol = 3)
   labels <- factor(ifelse(latent[, 1] + latent[, 2] > 0, "high", "low"))
 
@@ -723,7 +723,7 @@ run_synthetic_alignment_benchmark <- function(methods,
         method_seed <- .benchmark_seed_from_parts(profile, scenario_name, seed, method_name)
         method_spec <- method_specs[[method_name]]
         runtime_sec <- system.time({
-          set.seed(method_seed)
+          .local_seed(method_seed)
           fit <- tryCatch(
             method_spec$fit(scenario),
             error = function(e) {

@@ -27,7 +27,9 @@ Thumbs.db
 .claude/
 
 # Documentation build artifacts
-docs/
+# pkgdown output (hand-authored evidence and policy files live in docs/)
+site/
+vignettes/*.html
 _site/
 inst/doc/
 

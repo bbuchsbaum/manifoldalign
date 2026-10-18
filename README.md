@@ -25,6 +25,11 @@
 | **Spectral MNN** | `spectral_mnn_align()` | Mutual nearest neighbor spectral alignment |
 | **Token-OT Graph** | `token_ot_graph_align()` | Token-level OT with graph structure |
 | **SSMA** | `ssma_align()` | Semi-Supervised Manifold Alignment |
+| **GlobalGeo** | `global_geo_align()` | Landmark geodesic alignment with optional coordinate-anchored column correspondence |
+| **Multiscale** | `multiscale_manifold_align()` | Multiscale manifold alignment over a joint spectral hierarchy |
+| **LSE** | `linear_sim_embed()` | Linear similarity embedding |
+| **Multi-set UOT** | `multiset_uot_align()`, `uot_fit_pair()` | Unbalanced optimal transport of several datasets to a shared template |
+| **Synchronisation** | `align_many()` | Lifts pairwise aligners to many domains by transform synchronisation |
 | **SUMCOR** | `sumcor_align()`, `calibrate_domain()` | Event-keyed multi-domain SUMCOR with repeated observations and an optional event-feature metric; explicit per-domain encoders and frozen-reference calibration of new domains |
 | **RAPID-MA** | `rapid_ma()`, `rapid_ma_feature_scores()` | Scalable structure-aware alignment of many unmatched domains with custom sparse relations; feature-side (dual) coordinates via barycentres |
 
@@ -55,11 +60,11 @@ hd <- as_hyperdesign(
   labels = list(labels1, labels2)
 )
 
-# Align with KEMA
-result <- kema(hd, ncomp = 5)
+# Align with KEMA (as_hyperdesign() stores the labels in a column named `label`)
+result <- kema(hd, y = label, ncomp = 5)
 
-# Or align with Generalized Procrustes
-result <- generalized_procrustes(hd, ncomp = 5)
+# Or with semi-supervised manifold alignment
+result <- ssma_align(hd, y = label, ncomp = 5)
 ```
 
 ## Event-keyed SUMCOR alignment
@@ -108,17 +113,20 @@ dual$dispersion       # how consistently each feature is placed across domains
 
 ## Unified Aligner Interface
 
-All pairwise alignment methods share a consistent adapter interface:
+Methods share an adapter interface. Aligner constructors take no arguments;
+method settings are passed to `fit_pair()` or `fit_many()`, and
+`aligner_capabilities()` reports what each aligner supports.
 
 ```r
-# Create an aligner
-aligner <- parrot_aligner(ncomp = 5)
+# Native multi-domain aligners take a hyperdesign
+fit <- fit_many(kema_aligner(), hd, y = label, ncomp = 5)
 
-# Fit a pair of domains
-fit <- fit_pair(aligner, X1, X2, labels1, labels2)
+# Pairwise aligners take two matrices; PARROT needs the same columns in both
+Y1 <- matrix(rnorm(40 * 10), 40, 10)
+Y2 <- Y1[sample(40), ] + matrix(rnorm(400, sd = 0.1), 40, 10)
+pair <- fit_pair(parrot_aligner(), Y1, Y2, ncomp = 3)
 
-# Align many domains at once
-fit_many(aligner, list(X1, X2, X3), list(l1, l2, l3))
+aligner_capabilities(parrot_aligner())
 ```
 
 ## Articles
@@ -127,7 +135,6 @@ Detailed tutorials are available as package vignettes:
 
 - [Quickstart: Building a hyperdesign and running KEMA/GPA](https://bbuchsbaum.github.io/manifoldalign/articles/quickstart-hyperdesign.html)
 - [Features, Correspondences, and Predictive Performance](https://bbuchsbaum.github.io/manifoldalign/articles/features-and-predictive-performance.html)
-- [Benchmark Guidance by Problem Regime](https://bbuchsbaum.github.io/manifoldalign/articles/benchmark-guidance.html)
 - [Kernel Manifold Alignment with KEMA](https://bbuchsbaum.github.io/manifoldalign/articles/kema-overview.html)
 - [Generalized PCA Alignment](https://bbuchsbaum.github.io/manifoldalign/articles/gpca-align.html)
 - [Pairwise Graph Alignment with CONE](https://bbuchsbaum.github.io/manifoldalign/articles/cone-align.html)
