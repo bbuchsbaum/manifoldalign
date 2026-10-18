@@ -1,3 +1,12 @@
+# ggplot2 is in Suggests: fail early with an actionable message.
+.require_ggplot2 <- function(caller) {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop(caller, "() requires the 'ggplot2' package; install it with ",
+         "install.packages(\"ggplot2\").", call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
 #' Plot cycle-consistency residuals as a heatmap
 #'
 #' Aggregates triangle (i,j,k) residuals into a per-pair matrix and draws a
@@ -25,6 +34,7 @@ plot_cycle_consistency <- function(diagnostics,
                                    N = NULL,
                                    aggregate = c("min", "mean", "max"),
                                    na_color = "#f0f0f0") {
+  .require_ggplot2("plot_cycle_consistency")
   if (is.null(diagnostics$cycle_residuals)) {
     stop("No cycle_residuals found in diagnostics; dataset graph may lack triangles.")
   }
@@ -86,6 +96,7 @@ plot_cycle_consistency <- function(diagnostics,
 #' }
 #' @export
 plot_edge_residuals_heatmap <- function(diagnostics, N = NULL, na_color = "#f0f0f0") {
+  .require_ggplot2("plot_edge_residuals_heatmap")
   if (is.null(diagnostics$edge_residuals)) stop("diagnostics$edge_residuals missing")
   ed <- diagnostics$edge_residuals
   if (is.null(N)) N <- max(c(ed$i, ed$j))
