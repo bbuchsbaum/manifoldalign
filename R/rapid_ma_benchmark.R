@@ -8,6 +8,7 @@
 }
 
 #' @rdname benchmark_rapid_ma
+#' @name benchmark_rapid_ma
 #' @param n_common Number of corresponding nodes shared by the two domains.
 #' @param extra_target Number of additional target-only nodes.
 #' @param source_features,target_features Modality-specific feature widths.
