@@ -113,6 +113,111 @@ hks_time_grid <- function(values,
   times * time_scale
 }
 
+# Dense symmetric eigendecomposition returning the `k` eigenpairs at the
+# requested end of the spectrum. `eigen()` sorts values in decreasing order,
+# so the smallest-algebraic end must be taken from the tail and reordered.
+.dense_sym_eigs <- function(L, k, which = c("SA", "LA")) {
+  which <- match.arg(which)
+  eig <- eigen(as.matrix(L), symmetric = TRUE)
+  ord <- order(eig$values, decreasing = identical(which, "LA"))
+  idx <- ord[seq_len(min(k, length(ord)))]
+  list(values = eig$values[idx], vectors = eig$vectors[, idx, drop = FALSE])
+}
+
+# Symmetric eigensolver shared by the graph-alignment methods.
+#
+# Returns the `k` smallest-algebraic (`which = "SA"`) or largest-algebraic
+# (`which = "LA"`) eigenpairs of the symmetric matrix `L`, sorted ascending for
+# "SA" and descending for "LA". `backend` selects the preferred iterative
+# solver; PRIMME is optional and is used only when `.primme_available()`. When
+# PRIMME is requested but missing, small problems (n <= `dense_max_n_small`) use
+# a dense `eigen()` and larger ones use RSpectra. Requests with k >= n - 1 are
+# always solved densely. If the iterative solver converges fewer than `k`
+# eigenpairs the result is recomputed densely when n <= `dense_fallback_max_n`;
+# otherwise an error names the shortfall rather than silently returning fewer
+# eigenpairs. The backend actually used is returned in `$backend`.
+.sym_eigs <- function(L, k, which = c("SA", "LA"),
+                      backend = c("rspectra", "primme"),
+                      tol = 1e-6, maxitr = 1000L, initvec = NULL,
+                      dense_max_n_small = 200L,
+                      dense_fallback_max_n = 3000L,
+                      context = "Eigen-decomposition") {
+  which <- match.arg(which)
+  backend <- match.arg(backend)
+  n <- nrow(L)
+  k <- as.integer(k)
+  if (!is.finite(k) || k < 1L || k > n) {
+    stop(context, ": requested ", k, " eigenpairs from a ", n, " x ", n,
+         " matrix.", call. = FALSE)
+  }
+
+  finish <- function(values, vectors, used) {
+    values <- as.numeric(values)
+    vectors <- as.matrix(vectors)
+    ord <- order(values, decreasing = identical(which, "LA"))
+    list(values = values[ord], vectors = vectors[, ord, drop = FALSE],
+         backend = used, nconv = length(values))
+  }
+  dense <- function(used = "dense") {
+    d <- .dense_sym_eigs(L, k, which = which)
+    finish(d$values, d$vectors, used)
+  }
+
+  if (k >= n - 1L) return(dense())
+  # RSpectra has no method for Matrix's symmetric storage classes (e.g. the
+  # dsCMatrix produced by forceSymmetric()); hand it general storage.
+  if (inherits(L, "Matrix")) {
+    L <- if (inherits(L, "sparseMatrix")) {
+      methods::as(methods::as(L, "generalMatrix"), "CsparseMatrix")
+    } else {
+      as.matrix(L)
+    }
+  }
+  if (identical(backend, "primme") && !.primme_available()) {
+    if (n <= dense_max_n_small) return(dense())
+    backend <- "rspectra"
+  }
+
+  decomp <- if (identical(backend, "primme")) {
+    tryCatch(PRIMME::eigs_sym(L, NEig = k, which = which), error = function(e) e)
+  } else {
+    opts <- list(tol = tol, maxitr = as.integer(maxitr))
+    if (!is.null(initvec)) opts$initvec <- initvec
+    tryCatch(
+      withCallingHandlers(
+        RSpectra::eigs_sym(L, k = k, which = which, opts = opts),
+        # Non-convergence is detected from `nconv` below; do not leak the
+        # solver's own warning in addition to that handling.
+        warning = function(w) {
+          if (grepl("converged", conditionMessage(w), fixed = TRUE)) {
+            invokeRestart("muffleWarning")
+          }
+        }
+      ),
+      error = function(e) e
+    )
+  }
+
+  failed <- inherits(decomp, "error")
+  nconv <- if (failed) 0L else {
+    nc <- decomp$nconv
+    if (is.null(nc)) length(decomp$values) else as.integer(nc)
+  }
+  if (!failed && nconv >= k && length(decomp$values) >= k &&
+      all(is.finite(decomp$values))) {
+    return(finish(decomp$values[seq_len(k)],
+                  as.matrix(decomp$vectors)[, seq_len(k), drop = FALSE],
+                  backend))
+  }
+
+  if (n <= dense_fallback_max_n) return(dense("dense_fallback"))
+  if (failed) {
+    stop(context, " failed: ", conditionMessage(decomp), call. = FALSE)
+  }
+  stop(context, ": the ", backend, " eigensolver converged only ", nconv,
+       " of ", k, " requested eigenpairs (n = ", n, ").", call. = FALSE)
+}
+
 .rspectra_v0_deterministic <- function(n, seed = 1L) {
   idx <- seq_len(n)
   s <- as.numeric(seed)
@@ -190,15 +295,20 @@ compute_graph_laplacian <- function(A,
 #' @param A Square adjacency/affinity matrix (dense or sparse).
 #' @param k Integer number of non-trivial eigenpairs to return.
 #' @param normalized Logical; use the normalized Laplacian (default TRUE).
-#' @param which Which eigenpairs to request (passed to the eigensolver). Default
-#'   is `"SA"` (smallest algebraic) for Laplacian bases.
+#' @param which Which end of the spectrum to return: `"SA"` (smallest
+#'   algebraic; default, the usual choice for Laplacian bases) or `"LA"`
+#'   (largest algebraic). Because the Laplacian is positive semi-definite,
+#'   `"SM"` and `"LM"` are accepted as synonyms; other values are an error.
+#'   If the iterative solver converges fewer eigenpairs than requested, the
+#'   decomposition is recomputed densely for graphs with at most 3000 nodes and
+#'   is an error for larger graphs.
 #' @param eig_tol Positive threshold; eigenvalues `<= eig_tol` are treated as
 #'   trivial and dropped.
 #' @param extra Integer number of extra eigenpairs requested to survive multiple
 #'   near-zero modes on disconnected graphs.
 #' @param seed Integer seed used to build a deterministic initial vector for
 #'   RSpectra (helps reproducibility).
-#' @param tol Numeric tolerance passed to RSpectra/PRIMME when available.
+#' @param tol Numeric convergence tolerance passed to RSpectra.
 #' @param maxitr Maximum iterations passed to RSpectra when available.
 #'
 #' @return A list with fields `values` (length k) and `vectors` (n x k).
@@ -233,31 +343,19 @@ compute_laplacian_basis <- function(A,
   k_request <- min(k + extra, n - 1L)
   if (k_request < 2L) stop("Not enough eigenpairs available.", call. = FALSE)
 
-  decomp <- if (requireNamespace("RSpectra", quietly = TRUE)) {
-    v0 <- tryCatch(.rspectra_v0_deterministic(n, seed = seed), error = function(e) NULL)
-    opts <- list(tol = tol, maxitr = as.integer(maxitr))
-    if (!is.null(v0)) opts$initvec <- v0
-    safe_compute(
-      RSpectra::eigs_sym(L, k = k_request, which = which, opts = opts),
-      "Eigen-decomposition failed in compute_laplacian_basis()"
-    )
-  } else if (requireNamespace("PRIMME", quietly = TRUE)) {
-    safe_compute(
-      PRIMME::eigs_sym(L, NEig = k_request, which = which),
-      "Eigen-decomposition failed in compute_laplacian_basis()"
-    )
-  } else {
-    eig_full <- eigen(as.matrix(L), symmetric = TRUE)
-    list(values = eig_full$values[seq_len(k_request)],
-         vectors = eig_full$vectors[, seq_len(k_request), drop = FALSE])
-  }
+  # The Laplacian is positive semi-definite, so "SM"/"LM" coincide with
+  # "SA"/"LA"; any other selector is rejected rather than passed through.
+  which_alg <- switch(which, SA = , SM = "SA", LA = , LM = "LA",
+                      stop("`which` must be one of \"SA\", \"SM\", \"LA\" or \"LM\".",
+                           call. = FALSE))
 
-  evals <- as.numeric(decomp$values)
-  evecs <- as.matrix(decomp$vectors)
+  v0 <- tryCatch(.rspectra_v0_deterministic(n, seed = seed), error = function(e) NULL)
+  decomp <- .sym_eigs(L, k_request, which = which_alg, backend = "rspectra",
+                      tol = tol, maxitr = maxitr, initvec = v0,
+                      context = "Eigen-decomposition in compute_laplacian_basis()")
 
-  ord <- if (which %in% c("LA", "LM")) order(evals, decreasing = TRUE) else order(evals)
-  evals <- evals[ord]
-  evecs <- evecs[, ord, drop = FALSE]
+  evals <- decomp$values
+  evecs <- decomp$vectors
 
   keep <- which(is.finite(evals) & evals > eig_tol)
   if (!length(keep)) stop("No non-trivial eigenvalues found.", call. = FALSE)
