@@ -150,17 +150,6 @@ rapid_ma_benchmark_fixture <- function(
   )
 }
 
-.rapid_benchmark_probabilities <- function(probability, classes) {
-  probability <- as.matrix(probability)
-  output <- matrix(0, nrow(probability), length(classes),
-                   dimnames = list(NULL, classes))
-  shared <- intersect(colnames(probability), classes)
-  if (length(shared)) output[, shared] <- probability[, shared, drop = FALSE]
-  zero <- rowSums(output) <= 0
-  if (any(zero)) output[zero, ] <- 1 / length(classes)
-  output / pmax(rowSums(output), 1e-15)
-}
-
 # Held-out classification metrics shared by benchmark_rapid_ma() and the
 # blocked-inductive evidence runner.
 #

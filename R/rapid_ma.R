@@ -738,10 +738,10 @@
 #' objective does not increase (within `control$objective_tolerance`), damping
 #' the map and prototype steps by `control$backtrack_factor` on each retry. With
 #' `control$map_type = "orthogonal"` every accepted map, including damped
-#' blends, is retracted back to an orthogonal matrix by a polar factor. If every
-#' retry of an iteration fails with an error, the fit stops with status
-#' `"stalled"`, records the message in `convergence$last_candidate_error`, and
-#' emits a warning.
+#' blends, is retracted back to an orthogonal matrix by a polar factor. When no
+#' retry of an iteration is accepted the fit stops with status `"stalled"` and
+#' keeps the last accepted state; if a retry failed with an error, the message
+#' is recorded in `convergence$last_candidate_error` and a warning is emitted.
 #'
 #' @param data A list of numeric domain matrices (rows are samples) or a
 #'   `hyperdesign`.
