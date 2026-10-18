@@ -5,6 +5,7 @@ Version: 0.1.0.9000
 Authors@R: person("Brad", "Buchsbaum", email = "brad.buchsbaum@gmail.com", role = c("aut", "cre"))
 Description: Provides tools for manifold alignment and domain adaptation across multiple data domains. Implements Kernel Manifold Alignment (KEMA) and related algorithms for aligning data manifolds while preserving local structure and class relationships. Features include semi-supervised learning support, efficient sparse matrix operations, and pseudolabeling for unsupervised domain adaptation. The package enables alignment of heterogeneous data types through kernel-based methods while maintaining computational efficiency for large-scale datasets.
 License: MIT + file LICENSE
+Copyright: See inst/COPYRIGHTS for the vendored LEMON network simplex code.
 Encoding: UTF-8
 Imports:
     Matrix,
@@ -37,6 +38,7 @@ Suggests:
     proxy,
     ps,
     rmarkdown,
+    matrixStats,
     parallel,
     PRIMME,
     pryr,

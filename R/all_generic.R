@@ -19,13 +19,16 @@
 #'   \code{kema.multidesign})
 #' @param y Name of the label variable to use for alignment. Can contain NA 
 #'   values for unlabeled samples in semi-supervised learning scenarios
-#' @param ... Additional arguments passed to specific methods. See 
-#'   \code{\link{kema.hyperdesign}} and \code{\link{kema.multidesign}} for 
-#'   details on method-specific parameters such as \code{preproc}, 
-#'   \code{ncomp}, \code{knn}, \code{sigma}, \code{u}, \code{kernel}, 
-#'   \code{sample_frac}, \code{use_laplacian}, \code{solver}, \code{dweight}, 
-#'   \code{rweight}, \code{simfun}, \code{disfun}, \code{lambda}, and for 
-#'   \code{kema.multidesign} the additional \code{subject} parameter
+#' @param ... Additional arguments passed to specific methods. See
+#'   \code{\link{kema.hyperdesign}} and \code{\link{kema.multidesign}} for
+#'   method-specific parameters such as \code{preproc}, \code{ncomp},
+#'   \code{knn}, \code{sigma}, \code{u}, \code{kernel}, \code{sample_frac},
+#'   \code{solver} (only \code{"exact"}), \code{backend},
+#'   \code{backend_control}, \code{lambda}, \code{seed}, and for
+#'   \code{kema.multidesign} the additional \code{subject} parameter. The
+#'   withdrawn controls \code{use_laplacian}, \code{dweight}, \code{rweight},
+#'   \code{simfun}, \code{disfun} and \code{centre_kernel} are rejected with
+#'   an error.
 #'
 #' @details
 #' KEMA solves the original paper objective:

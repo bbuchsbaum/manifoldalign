@@ -11,7 +11,7 @@
 
 | Method | Function | Description |
 |--------|----------|-------------|
-| **KEMA** | `kema()` | Kernel Manifold Alignment with exact and regression-based solvers |
+| **KEMA** | `kema()` | Kernel Manifold Alignment (exact generalized eigenproblem) with a kernel encoder for out-of-sample prediction |
 | **GPCA** | `gpca_align()` | Generalized PCA alignment via shared subspace estimation |
 | **GPA** | `generalized_procrustes()` | Generalized Procrustes Analysis for partial observations |
 | **CONE** | `cone_align()`, `cone_align_multiple()` | Spectral graph alignment with anchor-based matching |

@@ -741,7 +741,7 @@ benchmark_rapid_ma <- function(
         kema = .rapid_benchmark_measure({
           arguments <- utils::modifyList(
             list(data = hd, ncomp = ncomp, knn = min(5L, knn),
-                 solver = "regression", sample_frac = 1,
+                 solver = "exact", sample_frac = 1,
                  lambda = 0.01),
             method_control
           )

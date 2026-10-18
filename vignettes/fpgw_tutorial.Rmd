@@ -122,7 +122,10 @@ cat("Total transported mass:", sum(P_partial), "\n")
 
 ### TV-Penalized FPGW
 
-The total variation penalty provides a soft constraint on transported mass:
+The total variation penalty provides a soft constraint on transported mass.
+Its term `lambda * (|mu|^2 + |nu|^2 - 2 |gamma|^2)` charges for mass that is
+left untransported, so larger `lambda` transports more mass; small `lambda`
+lets the plan drop mass that would be expensive to move:
 
 ```{r tv-penalized}
 # Use TV penalty instead of hard mass constraint
