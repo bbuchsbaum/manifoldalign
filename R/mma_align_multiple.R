@@ -17,7 +17,11 @@
 #'
 #' @param data A hyperdesign object containing three or more domains
 #' @param ref_idx Integer; which domain acts as reference (default 1)
-#' @param preproc Preprocessing function (default multivarious::center())
+#' @param preproc A multivarious pre-processor (default \code{center()}), a
+#'   list with one per domain, a plain function, or \code{NULL}. Pre-processors
+#'   are fitted on each domain separately and stored in \code{result$preproc}
+#'   (concatenated by feature block) for out-of-sample projection. A plain
+#'   function is applied to the training data only and is not stored.
 #' @param ncomp Number of components; set NULL to choose automatically
 #' @param sigma Gaussian affinity bandwidth (in data units)
 #' @param knn Number of nearest neighbors for graph construction (default adaptive)
@@ -34,7 +38,11 @@
 #' @param em_max_iter Integer EM iterations (default 50)
 #' @param em_tol Numeric EM tolerance on relative change (default 1e-5)
 #' @param em_sigma0 Optional initial stddev in embedding units; NULL for auto
-#' @param em_outlier Prior mass for uniform outlier component (default 0.01)
+#' @param em_outlier Prior mass \eqn{w} of the uniform outlier component
+#'   (default 0.01). Posteriors follow Coherent Point Drift: with \eqn{M}
+#'   Gaussian centroids, \eqn{N} data points and embedding dimension \eqn{K},
+#'   the outlier term in the posterior denominator is
+#'   \eqn{(2\pi\sigma^2)^{K/2} \frac{w}{1-w} \frac{M}{N}}.
 #' @param force_SO Logical; if TRUE, force det(R)=+1 (default FALSE)
 #' @param target_var Lower bound criterion for auto K when ncomp=NULL (default 0.95)
 #' @param match_to One of "reference" (default) or "consensus"
@@ -43,12 +51,32 @@
 #' @param n_centers Optional integer overriding consensus_centers; must be <= min sizes
 #' @param consensus_init Initialization for consensus centers: "ref" or "kmeans"
 #' @param final_assignment Optional post-processing: "none" (default), "hungarian",
-#'   or "argmax". Affects only extras$assignment; core EM remains soft.
+#'   or "argmax". Affects only extras$assignment; core EM remains soft. Both
+#'   rules return, for every domain \eqn{g}, an integer vector of length
+#'   \eqn{n_g}: entry \eqn{j} is the reference row (reference mode) or
+#'   consensus centre (consensus mode) matched to row \eqn{j} of domain
+#'   \eqn{g}. "argmax" takes the highest posterior per row (many-to-one);
+#'   "hungarian" solves a one-to-one assignment maximising the summed
+#'   posterior, and rows left unmatched when \eqn{n_g} exceeds the number of
+#'   reference rows/centres are \code{NA}. The reference domain's own
+#'   assignment is the identity.
 #' @param ... Unused.
 #'
 #' @return A multiblock alignment object with stacked scores, block loadings,
 #'   and extras (rotations, posteriors, histogram alignment info, and optionally
-#'   consensus and final assignment).
+#'   consensus and final assignment). Score rows follow the input row order of
+#'   each domain. \code{rotations[[g]]} is the orthogonal \eqn{R_g} with
+#'   \eqn{E_g \approx E_{ref} R_g^\top} (reference mode) or
+#'   \eqn{E_g \approx C R_g^\top} (consensus mode), so the aligned scores are
+#'   \eqn{E_g R_g}. \code{posteriors[[g]]} has one row per reference row or
+#'   consensus centre and one column per row of domain \eqn{g}. The loadings
+#'   \code{v} are the minimum-norm least-squares map from each domain's
+#'   preprocessed features to its aligned scores, an approximation of the
+#'   nonlinear spectral embedding that is exact only when the features have
+#'   full row rank. \code{em_stats} reports EM iterations, whether the
+#'   relative log-likelihood change fell below \code{em_tol}
+#'   (\code{converged}), the final \eqn{\sigma^2} and the CPD
+#'   log-likelihood.
 #'
 #' @examples
 #' \donttest{
@@ -120,28 +148,18 @@ mma_align_multiple.hyperdesign <- function(
   consensus_init   <- match.arg(consensus_init)
   final_assignment <- match.arg(final_assignment)
 
-  # Preprocess per-domain (reuse cone_align pattern)
-  pdata <- lapply(domains, function(domain) {
-    x_pre <- safe_compute(
-      if (is.function(preproc)) preproc(domain$x) else domain$x,
-      "Data preprocessing failed. Check preprocessing function or data format."
-    )
-
-    if (is.function(preproc) && !inherits(preproc, "scaler")) {
-      warning("Consider scaling data before embedding as sigma is in data units", call. = FALSE)
-    }
-    list(x = x_pre, design = domain$design)
-  })
-  names(pdata) <- names(domains)
-
-  # Block indices and concat preproc descriptor
-  block_idx <- compute_block_indices(pdata)
-  proc <- if (is.function(preproc)) {
-    proclist <- setNames(rep(list(preproc), length(pdata)), names(pdata))
-    block_idx_list <- split(block_idx, row(block_idx))
-    safe_compute(multivarious::concat_pre_processors(proclist, block_idx_list),
-                 "Preprocessing concatenation failed")
-  } else NULL
+  # Fit per-domain preprocessing (stateful pre-processors are stored,
+  # concatenated by feature block, for out-of-sample projection).
+  if (is.function(preproc) && !inherits(preproc, "scaler")) {
+    warning("Consider scaling data before embedding as sigma parameter is ",
+            "sensitive to data units", call. = FALSE)
+  }
+  prepped <- .fit_domain_preproc(
+    lapply(domains, function(domain) list(x = domain$x, design = domain$design)),
+    preproc
+  )
+  pdata <- prepped$pdata
+  proc <- prepped$proc
 
   mma_align_multiple_fit(
     strata            = pdata,
@@ -256,7 +274,7 @@ mma_align_multiple_fit <- function(
         gate_tau = signature_gate_tau,
         retry_if_weak = signature_retry_if_weak
       )
-      R0[[g]]     <- ag$S %*% ag$P
+      R0[[g]]     <- .mma_signature_rotation(ag)
       aligns[[g]] <- ag
     }
   }
@@ -288,15 +306,15 @@ mma_align_multiple_fit <- function(
                                sigma2 = EM$sigma2, loglik_last = EM$loglik_last)
     }
 
-    aligned <- lapply(seq_len(m), function(g) embeddings[[g]] %*% t(rotations[[g]]))
+    # E_g ~ E_ref t(R_g)  =>  E_g R_g is domain g in the reference frame.
+    aligned <- lapply(seq_len(m), function(g) embeddings[[g]] %*% rotations[[g]])
     scores  <- do.call(rbind, aligned)
 
-    assignment <- build_final_assignment(final_assignment, posteriors, mode = "reference")
+    assignment <- build_final_assignment(final_assignment, posteriors, mode = "reference",
+                                         ref_idx = ref_idx,
+                                         n_rows = vapply(embeddings, nrow, integer(1)))
 
-    loadings <- do.call(rbind, lapply(seq_len(m), function(i) {
-      xi <- strata[[i]]$x
-      Matrix::crossprod(xi, embeddings[[i]])
-    }))
+    loadings <- .stack_regression_loadings(strata, aligned)
 
     return(new_alignment_result(
       scores = scores,
@@ -320,7 +338,7 @@ mma_align_multiple_fit <- function(
   }
 
   # consensus branch
-  aligned0 <- lapply(seq_len(m), function(g) embeddings[[g]] %*% t(R0[[g]]))
+  aligned0 <- lapply(seq_len(m), function(g) embeddings[[g]] %*% R0[[g]])
   n_list   <- vapply(aligned0, nrow, integer(1))
   n0       <- determine_n_centers(n_list, consensus_centers, n_centers, ref_idx)
 
@@ -343,15 +361,13 @@ mma_align_multiple_fit <- function(
   em_stats   <- list(iterations = EMc$iterations, converged = EMc$converged,
                      sigma2 = EMc$sigma2, loglik_last = EMc$loglik_last)
 
-  aligned <- lapply(seq_len(m), function(g) embeddings[[g]] %*% t(rotations[[g]]))
+  # E_g ~ C t(R_g)  =>  E_g R_g is domain g in the consensus frame.
+  aligned <- lapply(seq_len(m), function(g) embeddings[[g]] %*% rotations[[g]])
   scores  <- do.call(rbind, aligned)
 
   assignment <- build_final_assignment(final_assignment, posteriors, mode = "consensus")
 
-  loadings <- do.call(rbind, lapply(seq_len(m), function(i) {
-    xi <- strata[[i]]$x
-    Matrix::crossprod(xi, embeddings[[i]])
-  }))
+  loadings <- .stack_regression_loadings(strata, aligned)
 
   new_alignment_result(
     scores = scores,
@@ -414,15 +430,10 @@ compute_mma_embeddings <- function(strata, ncomp, sigma, knn, embedding, normali
       K <- max(2L, min(K_final, max(n - 2L, 1L)))
       k_req <- min(K + 1L, max(n - 1L, 1L))
 
-      decomp <- NULL
-      if (n <= 50 && requireNamespace("PRIMME", quietly = TRUE)) {
-        decomp <- safe_compute(PRIMME::eigs_sym(L, NEig = k_req, which = "SA"), "Eigen-decomposition failed in MMA")
-      } else if (requireNamespace("RSpectra", quietly = TRUE)) {
-        decomp <- safe_compute(RSpectra::eigs_sym(L, k = k_req, which = "SA", opts = list(tol = 1e-4, maxitr = 300)),
-                               "Eigen-decomposition failed in MMA")
-      } else {
-        decomp <- safe_compute(PRIMME::eigs_sym(L, NEig = k_req, which = "SA"), "Eigen-decomposition failed in MMA")
-      }
+      decomp <- .sym_eigs(L, k_req, which = "SA",
+                          backend = if (n <= 50) "primme" else "rspectra",
+                          tol = 1e-4, maxitr = 300L,
+                          context = "Eigen-decomposition in MMA")
 
       lam <- as.numeric(decomp$values)
       U   <- decomp$vectors
@@ -493,15 +504,10 @@ choose_K_theta_min <- function(L, target_var = 0.95) {
   n <- nrow(L)
   Kcap <- max(2L, min(64L, max(n - 2L, 1L)))
   k_req <- min(Kcap + 1L, max(n - 1L, 1L))
-  decomp <- NULL
-  if (n <= 50 && requireNamespace("PRIMME", quietly = TRUE)) {
-    decomp <- safe_compute(PRIMME::eigs_sym(L, NEig = k_req, which = "SA"), "Eigen-decomposition failed in MMA (K)")
-  } else if (requireNamespace("RSpectra", quietly = TRUE)) {
-    decomp <- safe_compute(RSpectra::eigs_sym(L, k = k_req, which = "SA", opts = list(tol = 1e-4, maxitr = 300)),
-                           "Eigen-decomposition failed in MMA (K)")
-  } else {
-    decomp <- safe_compute(PRIMME::eigs_sym(L, NEig = k_req, which = "SA"), "Eigen-decomposition failed in MMA (K)")
-  }
+  decomp <- .sym_eigs(L, k_req, which = "SA",
+                      backend = if (n <= 50) "primme" else "rspectra",
+                      tol = 1e-4, maxitr = 300L,
+                      context = "Eigen-decomposition in MMA (K selection)")
   lam <- as.numeric(decomp$values)
   # Ensure ascending order and filter out near-zero eigenvalues
   lam <- sort(lam[lam > 1e-12], decreasing = FALSE)
@@ -562,7 +568,7 @@ eigensignature_align <- function(Uref, Ug,
     perm <- clue::solve_LSAP(cost)
     P <- diag(K)[, as.integer(perm), drop = FALSE]
     svec <- vapply(seq_len(K), function(i) B[i, as.integer(perm)[i]], numeric(1))
-    S <- diag(svec)
+    S <- diag(svec, nrow = K)
     # Confidence in [0,1] by rescaling A
     minA <- suppressWarnings(min(A, na.rm = TRUE)); maxA <- suppressWarnings(max(A, na.rm = TRUE))
     if (!is.finite(minA)) minA <- 0; if (!is.finite(maxA)) maxA <- 1
@@ -680,7 +686,7 @@ eigensignature_align <- function(Uref, Ug,
       perm <- clue::solve_LSAP(C_w2)  # minimize cost
       P <- diag(K)[, as.integer(perm), drop = FALSE]
       svec <- vapply(seq_len(K), function(i) sign_w2[i, as.integer(perm)[i]], numeric(1))
-      S <- diag(svec)
+      S <- diag(svec, nrow = K)
       # Similarity from cost for confidence
       medC <- stats::median(C_w2[is.finite(C_w2)])
       if (!is.finite(medC) || medC <= 0) medC <- mean(C_w2[is.finite(C_w2) & C_w2 > 0])
@@ -720,7 +726,7 @@ eigensignature_align <- function(Uref, Ug,
       perm <- clue::solve_LSAP(cost_h)
       P <- diag(K)[, as.integer(perm), drop = FALSE]
       svec <- vapply(seq_len(K), function(i) sign_w2[i, as.integer(perm)[i]], numeric(1))
-      S <- diag(svec)
+      S <- diag(svec, nrow = K)
       pair_scores <- vapply(seq_len(K), function(i) A_hybrid[i, as.integer(perm)[i]], numeric(1))
       pair_conf <- vapply(seq_len(K), function(i) A_hybrid[i, as.integer(perm)[i]], numeric(1))
       return(list(P = P, S = S, scores = A_hybrid, signs = svec, perm = as.integer(perm),
@@ -775,6 +781,14 @@ eigensignature_align <- function(Uref, Ug,
   res
 }
 
+# Initial rotation from an eigensignature match. ag$perm[i] is the column of
+# U_g matched to reference column i with sign ag$signs[i], i.e.
+# U_g[, perm[i]] ~ signs[i] * U_ref[, i]. MMA's rotation convention is
+# E_g ~ E_ref %*% t(R), so R[perm[i], i] = signs[i], which is P %*% S.
+.mma_signature_rotation <- function(ag) {
+  ag$P %*% ag$S
+}
+
 # ---------- EM: pairwise to reference ----------
 
 em_mma_pairwise_R <- function(X_ref, X_g, R_init, sigma2_0 = NULL, outlier = 0.01,
@@ -791,42 +805,87 @@ em_mma_pairwise_R <- function(X_ref, X_g, R_init, sigma2_0 = NULL, outlier = 0.0
                    sum(rowSums((RX   - rep(1, nr) %o% muY )^2)) / (nr * K)) / 2, 1e-8)
   } else sigma2 <- max(sigma2_0, 1e-8)
 
-  pi_out <- outlier
-  pi_in  <- (1 - pi_out) / nr
-  c_out  <- (pi_out / pi_in)
   obj_prev <- -Inf
   alpha <- matrix(0, nr, ng)
   ll <- NA_real_
+  converged <- FALSE
 
   for (it in seq_len(max_iter)) {
+    # Model: X_g rows ~ N(X_ref rows %*% t(R), sigma2 I) mixed with a uniform
+    # outlier component (Coherent Point Drift, Myronenko & Song 2010).
     RX <- X_ref %*% t(R)              # nr x K
-    YtRX <- X_g %*% t(RX)             # ng x nr
-    YY <- rowSums(X_g^2)              # ng
-    RR <- rowSums(RX^2)               # nr
-    D2 <- outer(RR, YY, "+") - 2 * t(YtRX)   # nr x ng
+    D2 <- pmax(outer(rowSums(RX^2), rowSums(X_g^2), "+") - 2 * tcrossprod(RX, X_g), 0)
 
-    G <- exp(-D2 / (2 * sigma2))      # nr x ng
-    denom <- colSums(G) + c_out
-    alpha <- sweep(G, 2L, denom, "/")
+    es <- .mma_cpd_estep(D2, sigma2, K = K, w = outlier)
+    alpha <- es$alpha
+    ll <- es$loglik
 
+    # M-step rotation: maximise tr(R' X_g' alpha' X_ref) over O(K), i.e.
+    # M = X_ref' alpha X_g = U S V'  =>  R = V U'.
     M <- crossprod(X_ref, alpha %*% X_g)   # K x K
-    sv <- svd(M)
-    Rnew <- sv$u %*% t(sv$v)
-    if (force_SO && det(Rnew) < 0) { sv$u[,K] <- -sv$u[,K]; Rnew <- sv$u %*% t(sv$v) }
-    R <- Rnew
+    R <- .mma_procrustes_rotation(M, force_SO = force_SO)
 
-    num <- sum(alpha * D2)
-    den <- K * sum(alpha)
-    sigma2 <- max(num / max(den, 1e-12), 1e-12)
+    RX <- X_ref %*% t(R)
+    D2_new <- pmax(outer(rowSums(RX^2), rowSums(X_g^2), "+") - 2 * tcrossprod(RX, X_g), 0)
+    sigma2 <- max(sum(alpha * D2_new) / max(K * sum(alpha), 1e-12), 1e-12)
 
-    ll <- sum(log(colSums(G) + c_out))
     if (is.finite(obj_prev)) {
       rel <- abs(ll - obj_prev) / (abs(obj_prev) + 1e-8)
-      if (rel < tol) break
+      if (rel < tol) {
+        converged <- TRUE
+        break
+      }
     }
     obj_prev <- ll
   }
-  list(R = R, alpha = alpha, sigma2 = sigma2, iterations = it, converged = (it < max_iter), loglik_last = ll)
+  list(R = R, alpha = alpha, sigma2 = sigma2, iterations = it, converged = converged,
+       loglik_last = ll)
+}
+
+# Orthogonal Procrustes step: argmax_R tr(R M') over O(K) (or SO(K) when
+# force_SO) for M = sum_ij alpha_ij x_ref_i x_g_j'. With M = U S V' the
+# maximiser of sum_ij alpha_ij <R x_ref_i, x_g_j> is R = V U'.
+.mma_procrustes_rotation <- function(M, force_SO = FALSE) {
+  sv <- svd(M)
+  R <- sv$v %*% t(sv$u)
+  if (isTRUE(force_SO) && det(R) < 0) {
+    K <- ncol(M)
+    sv$v[, K] <- -sv$v[, K]
+    R <- sv$v %*% t(sv$u)
+  }
+  R
+}
+
+# CPD E-step. D2 is the n_centroid x n_data matrix of squared distances
+# between transformed centroids and data points. With w the outlier weight,
+# posteriors are
+#   P(m | x_n) = exp(-D2_mn / (2 s2)) /
+#                (sum_k exp(-D2_kn / (2 s2)) + (2 pi s2)^(K/2) w/(1-w) M/N)
+# and the log-likelihood of the data is
+#   sum_n log( (1-w)/M (2 pi s2)^(-K/2) sum_m exp(-D2_mn/(2 s2)) + w/N ).
+# Computed in the log domain so small sigma2 does not underflow.
+.mma_cpd_estep <- function(D2, sigma2, K, w) {
+  M <- nrow(D2)
+  N <- ncol(D2)
+  logG <- -D2 / (2 * sigma2)
+  colmax <- apply(logG, 2L, max)
+  # log sum_m exp(logG[m, n]) per data point
+  log_inlier <- colmax + log(colSums(exp(sweep(logG, 2L, colmax, "-"))))
+  log_c <- if (w > 0) {
+    (K / 2) * log(2 * pi * sigma2) + log(w) - log1p(-w) + log(M) - log(N)
+  } else {
+    -Inf
+  }
+  # log(sum_m G_mn + c), evaluated without overflow in either term
+  log_denom <- if (is.finite(log_c)) {
+    pmax(log_inlier, log_c) + log1p(exp(-abs(log_inlier - log_c)))
+  } else {
+    log_inlier
+  }
+  alpha <- exp(sweep(logG, 2L, log_denom, "-"))
+  loglik <- sum(log_denom) +
+    N * (log1p(-w) - log(M) - (K / 2) * log(2 * pi * sigma2))
+  list(alpha = alpha, loglik = loglik)
 }
 
 # ---------- EM: consensus (joint template) ----------
@@ -849,66 +908,62 @@ em_mma_consensus <- function(X_list, R_init, C_init, sigma2_0 = NULL,
     max(res / max(cnt, 1) / K, 1e-6)
   } else max(sigma2_0, 1e-8)
 
-  pi_out <- outlier
   obj_prev <- -Inf
   alpha_list <- vector("list", m)
   ll <- NA_real_
+  converged <- FALSE
+
+  sqdist_to_centers <- function(C, Rg, Xg) {
+    RC <- C %*% t(Rg)            # n0 x K
+    pmax(outer(rowSums(RC^2), rowSums(Xg^2), "+") - 2 * tcrossprod(RC, Xg), 0)
+  }
 
   for (it in seq_len(max_iter)) {
-    denom_sum <- 0.0
-    num_sigma <- 0.0
-    sum_alpha <- 0.0
-
-    # E-step
+    # E-step (CPD posteriors per domain; model x_g ~ N(R_g c, sigma2 I))
+    ll <- 0
     for (g in seq_len(m)) {
-      Xg <- X_list[[g]]
-      Rg <- R_list[[g]]
-      RC <- C %*% t(Rg)            # n0 x K
-      YY <- rowSums(Xg^2)          # n_g
-      CC <- rowSums(RC^2)          # n0
-      D2 <- outer(CC, YY, "+") - 2 * (RC %*% t(Xg))
-      G <- exp(-D2 / (2 * sigma2))
-      c_out <- (pi_out / ((1 - pi_out) / n0))
-      denom <- colSums(G) + c_out
-      alpha <- sweep(G, 2L, denom, "/")
-      alpha_list[[g]] <- alpha
-      num_sigma <- num_sigma + sum(alpha * D2)
-      sum_alpha <- sum_alpha + sum(alpha)
-      denom_sum <- denom_sum + sum(log(denom))
+      es <- .mma_cpd_estep(sqdist_to_centers(C, R_list[[g]], X_list[[g]]),
+                           sigma2, K = K, w = outlier)
+      alpha_list[[g]] <- es$alpha
+      ll <- ll + es$loglik
     }
 
-    # M-step: rotations
+    # M-step: rotations (see .mma_procrustes_rotation)
     for (g in seq_len(m)) {
-      Xg <- X_list[[g]]
-      alpha <- alpha_list[[g]]
-      M <- crossprod(C, alpha %*% Xg)
-      sv <- svd(M)
-      Rg <- sv$u %*% t(sv$v)
-      if (force_SO && det(Rg) < 0) { sv$u[,K] <- -sv$u[,K]; Rg <- sv$u %*% t(sv$v) }
-      R_list[[g]] <- Rg
+      M <- crossprod(C, alpha_list[[g]] %*% X_list[[g]])
+      R_list[[g]] <- .mma_procrustes_rotation(M, force_SO = force_SO)
     }
 
-    # M-step: consensus centers C
+    # M-step: consensus centers C (x ~ R c  =>  c ~ R' x, rows X_g %*% R_g)
     numC <- matrix(0, nrow = n0, ncol = K)
     denC <- Reduce("+", lapply(alpha_list, rowSums))
     for (g in seq_len(m)) {
-      Xg <- X_list[[g]]; Rg <- R_list[[g]]
-      numC <- numC + alpha_list[[g]] %*% (Xg %*% Rg)
+      numC <- numC + alpha_list[[g]] %*% (X_list[[g]] %*% R_list[[g]])
     }
     denC[denC == 0] <- 1
     C <- numC / denC
 
-    sigma2 <- max(num_sigma / (K * sum_alpha), 1e-12)
-    ll <- denom_sum
+    # M-step: sigma2 at the updated rotations and centres
+    num_sigma <- 0
+    sum_alpha <- 0
+    for (g in seq_len(m)) {
+      num_sigma <- num_sigma + sum(alpha_list[[g]] * sqdist_to_centers(C, R_list[[g]], X_list[[g]]))
+      sum_alpha <- sum_alpha + sum(alpha_list[[g]])
+    }
+    sigma2 <- max(num_sigma / max(K * sum_alpha, 1e-12), 1e-12)
+
     if (is.finite(obj_prev)) {
       rel <- abs(ll - obj_prev) / (abs(obj_prev) + 1e-8)
-      if (rel < tol) break
+      if (rel < tol) {
+        converged <- TRUE
+        break
+      }
     }
     obj_prev <- ll
   }
 
   list(R_list = R_list, C = C, alpha_list = alpha_list, sigma2 = sigma2,
-       iterations = it, converged = (it < max_iter), loglik_last = ll)
+       iterations = it, converged = converged, loglik_last = ll)
 }
 
 # ---------- Helpers: centers and final assignments ----------
@@ -940,35 +995,50 @@ init_consensus_centers <- function(aligned0, ref_idx, n_centers, method = c("ref
   }
 }
 
-build_final_assignment <- function(final_assignment, posteriors, mode = c("reference","consensus")) {
+# Hard assignments from soft posteriors. Every posterior matrix A has one row
+# per reference row / consensus centre and one column per row of domain g, so
+# both rules return, per domain, an integer vector of length ncol(A) whose
+# entry j is the reference row / centre matched to row j of domain g.
+build_final_assignment <- function(final_assignment, posteriors, mode = c("reference","consensus"),
+                                   ref_idx = NULL, n_rows = NULL) {
   mode <- match.arg(mode)
   if (final_assignment == "none") return(NULL)
 
-  if (mode == "reference") {
-    if (final_assignment == "argmax") {
-      return(lapply(posteriors, function(A) if (all(is.na(A))) NA_integer_ else max.col(t(A), ties.method = "first")))
-    } else {
-      return(lapply(posteriors, function(A) if (all(is.na(A))) NA_integer_ else hungarian_from_posterior(A)))
-    }
+  rule <- if (final_assignment == "argmax") {
+    function(A) max.col(t(A), ties.method = "first")
   } else {
-    if (final_assignment == "argmax") {
-      return(lapply(posteriors, function(A) max.col(t(A), ties.method = "first")))
+    hungarian_from_posterior
+  }
+  out <- vector("list", length(posteriors))
+  for (g in seq_along(posteriors)) {
+    if (mode == "reference" && !is.null(ref_idx) && g == ref_idx) {
+      # The reference domain is matched to itself.
+      out[[g]] <- seq_len(n_rows[[g]])
     } else {
-      return(lapply(posteriors, hungarian_from_posterior))
+      out[[g]] <- rule(posteriors[[g]])
     }
   }
+  out
 }
 
+# One-to-one assignment maximising the summed posterior. A is n_ref x n_g
+# (rows: reference rows / centres; columns: rows of domain g). Returns an
+# integer vector of length n_g mapping each domain-g row to its reference row,
+# with NA for the n_g - n_ref rows left unmatched when n_g > n_ref.
 hungarian_from_posterior <- function(A) {
-  nr <- nrow(A); nc <- ncol(A); s <- max(nr, nc)
-  base <- if (length(A)) max(A, na.rm = TRUE) else 0
-  if (!is.finite(base)) base <- 0
-  C <- matrix(base, s, s)
-  C[1:nr, 1:nc] <- base - A
-  perm <- clue::solve_LSAP(C)
-  res <- rep(NA_integer_, nc)
-  for (j in seq_len(min(s, nc))) {
-    if (perm[j] <= nr) res[j] <- perm[j] else res[j] <- NA_integer_
+  A <- as.matrix(A)
+  nr <- nrow(A); nc <- ncol(A)
+  if (!nr || !nc) return(rep(NA_integer_, nc))
+  if (anyNA(A)) stop("Posterior matrix contains missing values.", call. = FALSE)
+  # clue::solve_LSAP() needs nrow <= ncol and matches every row.
+  if (nc <= nr) {
+    # each domain-g row (a row of t(A)) gets a distinct reference row
+    as.integer(clue::solve_LSAP(t(A), maximum = TRUE))
+  } else {
+    # each reference row gets a distinct domain-g row; invert that map
+    ref_to_g <- as.integer(clue::solve_LSAP(A, maximum = TRUE))
+    res <- rep(NA_integer_, nc)
+    res[ref_to_g] <- seq_len(nr)
+    res
   }
-  res
 }

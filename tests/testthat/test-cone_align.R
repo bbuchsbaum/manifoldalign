@@ -135,13 +135,15 @@ test_that("cone_align solver choices produce valid permutations", {
     manifoldalign:::cone_align_iterate(embeddings, solver = "linear",
                                        max_iter = 10, tol = 0.01, lambda = 0.05)
   )
-  res_auction <- suppressMessages(
-    manifoldalign:::cone_align_iterate(embeddings, solver = "auction",
-                                       max_iter = 10, tol = 0.01, lambda = 0.05)
-  )
-
   expect_equal(sort(res_linear[["P"]]), seq_len(n))
-  expect_equal(sort(res_auction[["P"]]), seq_len(n))
+
+  # "auction" was never implemented by clue::solve_LSAP(); it is rejected
+  # instead of silently running the exact solver.
+  expect_error(
+    manifoldalign:::cone_align_iterate(embeddings, solver = "auction",
+                                       max_iter = 10, tol = 0.01, lambda = 0.05),
+    "not available"
+  )
 })
 
 test_that("cone_align uses anchors to break symmetries", {

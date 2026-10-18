@@ -41,18 +41,32 @@
 #'   \item \code{ncomp}: Dimension of spectral embeddings
 #'   \item \code{sigma}: Bandwidth for embedding computation
 #'   \item \code{lambda}: Regularization for numerical stability
-#'   \item \code{solver}: Assignment algorithm ("linear" or "auction")
+#'   \item \code{solver}: Assignment algorithm; only the exact Hungarian
+#'     solver (\code{"linear"}) is available
 #'   \item \code{knn}: Number of nearest neighbors for graph construction
 #' }
 #'
 #' @return A \code{multiblock_biprojector} object containing:
 #' \itemize{
-#'   \item \code{s}: Aligned embeddings for all nodes
-#'   \item \code{v}: Primal vectors for out-of-sample projection
-#'   \item \code{assignment}: Node-to-node correspondence assignments
+#'   \item \code{s}: Aligned embeddings. Rows follow the input row order of
+#'     each domain (domain 1 rows first, then domain 2 rows); domain 1 is
+#'     rotated into the frame of domain 2.
+#'   \item \code{v}: Loadings for out-of-sample projection, fitted by least
+#'     squares so that the preprocessed \eqn{X_i v_i} best approximates the
+#'     aligned scores of block \eqn{i} (minimum-norm solution). This is a
+#'     linear bridge to a nonlinear spectral embedding: it reproduces the
+#'     training scores exactly only when \eqn{X_i} has full row rank, and is
+#'     otherwise the best linear approximation.
+#'   \item \code{assignment}: Integer vector of length \eqn{n_1};
+#'     \code{assignment[i]} is the row of domain 2 matched to row \code{i} of
+#'     domain 1. Score rows are not reordered by it.
 #'   \item \code{rotation}: Orthogonal transformation matrices
+#'     (\code{list(Q, I)}; domain 1 scores are \code{E1 \%*\% Q})
+#'   \item \code{converged}, \code{iterations}: Whether the assignment
+#'     stabilised before \code{max_iter}, and the number of iterations run
 #'   \item \code{sdev}: Standard deviations of aligned components
-#'   \item Additional metadata for reconstruction and validation
+#'   \item \code{preproc}: The fitted per-domain preprocessor (concatenated by
+#'     feature block), or \code{NULL} when \code{preproc = NULL}
 #' }
 #'
 #' @examples
@@ -108,17 +122,24 @@ cone_align <- function(data, ...) {
 #'   containing anchor/correspondence labels. Shared non-NA values indicate
 #'   fixed correspondences used to estimate the rotation and constrain the
 #'   assignment update.
-#' @param preproc Preprocessing function to apply to the data (default: center())
+#' @param preproc A multivarious pre-processor (default: \code{center()}),
+#'   a list of one per domain, a plain function, or \code{NULL}. Pre-processors
+#'   are fitted separately on each domain and stored in \code{result$preproc}
+#'   for out-of-sample projection. A plain function is applied to the training
+#'   data only and is not stored, so \code{result$preproc} is then \code{NULL}.
 #' @param ncomp Number of embedding dimensions (default: 10)
 #' @param sigma Diffusion parameter for embedding computation (default: 0.73)
 #' @param lambda Regularization parameter for numerical stability (default: 0.1)
 #' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
-#' @param solver Assignment algorithm: "linear" for exact assignment
-#'   (default) or "auction" for large-scale approximation
+#' @param solver Assignment algorithm. Only \code{"linear"} (the exact
+#'   Hungarian solver from \code{clue::solve_LSAP()}) is available;
+#'   \code{"auction"} was never implemented by the backend and is rejected.
 #' @param max_iter Maximum number of iterations (default: 30)
 #' @param tol Convergence tolerance for assignment changes (default: 0.01)
 #' @param knn Number of nearest neighbors for graph construction
 #'   (default: adaptive)
+#' @param verbose Logical; if TRUE, report convergence of the alternating
+#'   assignment/rotation updates (default: FALSE).
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return A multiblock_biprojector object containing the CONE-Align results
@@ -135,10 +156,11 @@ cone_align.hyperdesign <- function(data,
                                   sigma = 0.73,
                                   lambda = 0.1,
                                   use_laplacian = TRUE,
-                                  solver = c("linear", "auction"),
+                                  solver = "linear",
                                   max_iter = 30,
                                   tol = 0.01,
                                   knn = NULL,
+                                  verbose = FALSE,
                                   ...) {
   
   # Fix S3 dispatch - check class first
@@ -162,9 +184,9 @@ cone_align.hyperdesign <- function(data,
   chk::chk_number(tol)
   chk::chk_true(tol > 0)
   
-  # Validate solver parameter (following KEMA/GRASP pattern)
-  solver <- match.arg(solver)
-  
+  chk::chk_flag(verbose)
+  solver <- .check_lsap_solver(solver)
+
   # Validate input data structure
   if (length(domains) == 0) {
     stop("data must be a non-empty hyperdesign object", call. = FALSE)
@@ -175,21 +197,18 @@ cone_align.hyperdesign <- function(data,
          "alignment with 3+ domains, use cone_align_multiple()", call. = FALSE)
   }
   
-  # Preprocess data (following KEMA pattern but simplified)
-  pdata <- lapply(domains, function(domain) {
-    x_preprocessed <- safe_compute(
-      if (is.function(preproc)) preproc(domain$x) else domain$x,
-      "Data preprocessing failed. Check preprocessing function or data format."
-    )
-    
-    # Add data scaling warning as suggested
-    if (is.function(preproc) && !inherits(preproc, "scaler")) {
-      warning("Consider scaling data before embedding as sigma parameter is ", 
-              "sensitive to data units", call. = FALSE)
-    }
-    
-    list(x = x_preprocessed, design = domain$design)
-  })
+  # Fit the per-domain preprocessors (multivarious preppers are fitted and
+  # stored for out-of-sample projection).
+  if (is.function(preproc) && !inherits(preproc, "scaler")) {
+    warning("Consider scaling data before embedding as sigma parameter is ",
+            "sensitive to data units", call. = FALSE)
+  }
+  prepped <- .fit_domain_preproc(
+    lapply(domains, function(domain) list(x = domain$x, design = domain$design)),
+    preproc
+  )
+  pdata <- prepped$pdata
+  proc <- prepped$proc
 
   # Extract anchors (optional)
   anchor_info <- NULL
@@ -207,31 +226,10 @@ cone_align.hyperdesign <- function(data,
     anchor_info <- resolve_cone_anchor_map(v1, v2)
   }
 
-  # Block indices computation (following package pattern)
-  block_indices <- compute_block_indices(pdata)
-  
-  # Create proper preprocessing structure for multivarious
-  # For simplicity, we'll create a minimal preprocessing object
-  if (is.function(preproc)) {
-    # Create a list of preprocessing functions
-    proclist <- lapply(names(pdata), function(x) preproc)
-    names(proclist) <- names(pdata)
-    
-    # Convert block_indices matrix to list format for multivarious::concat_pre_processors
-    block_indices_list <- split(block_indices, row(block_indices))
-    
-    proc <- safe_compute(
-      multivarious::concat_pre_processors(proclist, block_indices_list),
-      "Preprocessing concatenation failed"
-    )
-  } else {
-    proc <- NULL
-  }
-  
   # Call CONE-Align fitting function
-  cone_align_fit(pdata, proc, ncomp, sigma, lambda, use_laplacian, 
+  cone_align_fit(pdata, proc, ncomp, sigma, lambda, use_laplacian,
                 solver, max_iter, tol, feature_block_indices(pdata), knn,
-                anchors = anchor_info)
+                anchors = anchor_info, verbose = verbose)
 }
 
 #' CONE-Align for List of Feature Matrices
@@ -242,20 +240,18 @@ cone_align.hyperdesign <- function(data,
 #'
 #' @param data A list containing exactly two matrices representing node features
 #'   for each graph domain. Each matrix should have format: nodes x features.
-#' @param anchors Optional anchor information for semi-supervised alignment.
-#'   For hyperdesign inputs, use an unquoted column name in each domain's design
-#'   table. For list inputs, anchors are currently ignored.
-#' @param preproc Preprocessing function to apply to the data (default: center())
+#' @param preproc See the hyperdesign method.
 #' @param ncomp Number of embedding dimensions (default: 10)
 #' @param sigma Diffusion parameter for graph construction (default: 0.73)
 #' @param lambda Regularization parameter for numerical stability (default: 0.1)
 #' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
-#' @param solver Assignment algorithm: "linear" for exact assignment (default), 
-#'   "auction" for large-scale approximation
+#' @param solver Assignment algorithm; see the hyperdesign method.
 #' @param max_iter Maximum number of iterations (default: 30)
 #' @param tol Convergence tolerance for assignment changes (default: 0.01)
 #' @param knn Number of nearest neighbors for graph construction
 #'   (default: adaptive)
+#' @param verbose Logical; if TRUE, report convergence of the alternating
+#'   assignment/rotation updates (default: FALSE).
 #' @param ... Additional arguments (currently unused)
 #'
 #' @return A multiblock_biprojector object containing the CONE-Align results
@@ -284,10 +280,11 @@ cone_align.list <- function(data,
                            sigma = 0.73,
                            lambda = 0.1,
                            use_laplacian = TRUE,
-                           solver = c("linear", "auction"),
+                           solver = "linear",
                            max_iter = 30,
                            tol = 0.01,
                            knn = NULL,
+                           verbose = FALSE,
                            ...) {
   
   # Validate input list
@@ -298,7 +295,11 @@ cone_align.list <- function(data,
   if (length(data) != 2) {
     stop("CONE-Align currently supports exactly 2 domains", call. = FALSE)
   }
-  
+  if ("anchors" %in% ...names()) {
+    stop("`anchors` is only supported for hyperdesign input; ",
+         "wrap the matrices in a hyperdesign with an anchor column.", call. = FALSE)
+  }
+
   # Validate that all elements are matrices
   if (!all(vapply(data, is.matrix, logical(1)))) {
     stop("All elements in data list must be matrices", call. = FALSE)
@@ -329,60 +330,27 @@ cone_align.list <- function(data,
   chk::chk_number(tol)
   chk::chk_true(tol > 0)
   
-  # Validate solver parameter
-  solver <- match.arg(solver)
-  
+  chk::chk_flag(verbose)
+  solver <- .check_lsap_solver(solver)
+
   # Convert list of matrices to stratum format (internal structure)
-  pdata <- lapply(seq_along(data), function(i) {
-    x_matrix <- data[[i]]
-    
-    # Apply preprocessing if provided
-    x_preprocessed <- if (is.function(preproc)) {
-      safe_compute(
-        preproc(x_matrix),
-        "Data preprocessing failed. Check preprocessing function or data format."
-      )
-    } else {
-      x_matrix
-    }
-    
-    # Add scaling warning for sigma sensitivity
-    if (is.function(preproc) && !inherits(preproc, "scaler")) {
-      warning("Consider scaling data before embedding as sigma parameter is ", 
-              "sensitive to data units", call. = FALSE)
-    }
-    
-    # Create minimal stratum structure (no design needed for direct matrices)
-    list(
-      x = x_preprocessed,
-      design = data.frame(node_id = seq_len(nrow(x_preprocessed)))
-    )
+  strata <- lapply(seq_along(data), function(i) {
+    list(x = data[[i]], design = data.frame(node_id = seq_len(nrow(data[[i]]))))
   })
-  names(pdata) <- paste0("domain_", seq_along(pdata))
-  
-  # Compute block indices
-  block_indices <- compute_block_indices(pdata)
-  
-  # Create minimal preprocessing structure
-  if (is.function(preproc)) {
-    # Create a list of preprocessing functions
-    proclist <- lapply(names(pdata), function(x) preproc)
-    names(proclist) <- names(pdata)
-    
-    # Convert block_indices matrix to list format for multivarious::concat_pre_processors
-    block_indices_list <- split(block_indices, row(block_indices))
-    
-    proc <- safe_compute(
-      multivarious::concat_pre_processors(proclist, block_indices_list),
-      "Preprocessing concatenation failed"
-    )
-  } else {
-    proc <- NULL
+  names(strata) <- paste0("domain_", seq_along(strata))
+
+  if (is.function(preproc) && !inherits(preproc, "scaler")) {
+    warning("Consider scaling data before embedding as sigma parameter is ",
+            "sensitive to data units", call. = FALSE)
   }
-  
+  prepped <- .fit_domain_preproc(strata, preproc)
+  pdata <- prepped$pdata
+  proc <- prepped$proc
+
   # Call CONE-Align fitting function
-  cone_align_fit(pdata, proc, ncomp, sigma, lambda, use_laplacian, 
-                solver, max_iter, tol, feature_block_indices(pdata), knn)
+  cone_align_fit(pdata, proc, ncomp, sigma, lambda, use_laplacian,
+                solver, max_iter, tol, feature_block_indices(pdata), knn,
+                verbose = verbose)
 }
 
 #' @rdname cone_align
@@ -404,11 +372,114 @@ compute_block_indices <- function(pdata) {
         end   = cumsum(lens))
 }
 
+# Fit per-domain preprocessing for the graph-alignment methods (CONE-Align,
+# CONE multiple, GRASP, MMA, coupled diagonalization).
+#
+# `preproc` may be NULL, a multivarious prepper/pre_processor (broadcast to
+# every domain and fitted separately on each), a plain function, or a list with
+# one entry per domain. Stateful pre-processors are cloned before fitting so a
+# caller's object is never mutated. Fitted pre-processors are concatenated by
+# *feature* column blocks, which is the index space
+# `multivarious::concat_pre_processors()` and `project()` work in. A plain
+# function carries no fitted state, so it is applied to the training data only
+# and the returned `proc` is NULL (projection of new data cannot replay it).
+# Returns list(pdata = domains with transformed `x`, proc = concat pre-processor
+# or NULL).
+.fit_domain_preproc <- function(domains, preproc) {
+  nb <- length(domains)
+  pdata <- domains
+  if (is.null(preproc)) {
+    return(list(pdata = pdata, proc = NULL))
+  }
+
+  is_stateful <- function(p) inherits(p, "prepper") || inherits(p, "pre_processor")
+  if (is.function(preproc) || is_stateful(preproc)) {
+    preproc <- rep(list(preproc), nb)
+  } else if (!is.list(preproc) || length(preproc) != nb) {
+    stop("`preproc` must be NULL, a pre-processor, a function, or a list with one ",
+         "entry per domain (", nb, ").", call. = FALSE)
+  }
+
+  proclist <- vector("list", nb)
+  stateless <- FALSE
+  for (i in seq_len(nb)) {
+    pre_i <- preproc[[i]]
+    if (is.null(pre_i)) pre_i <- multivarious::pass()
+    Xi <- pdata[[i]]$x
+
+    if (is.function(pre_i)) {
+      pdata[[i]]$x <- safe_compute(
+        pre_i(Xi),
+        "Data preprocessing failed. Check preprocessing function or data format."
+      )
+      stateless <- TRUE
+      next
+    }
+    if (!is_stateful(pre_i)) {
+      stop("`preproc[[", i, "]]` must be NULL, a pre-processor or a function.",
+           call. = FALSE)
+    }
+
+    pre_i <- unserialize(serialize(pre_i, connection = NULL))
+    Xi <- as.matrix(Xi)
+    if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
+      ft <- multivarious::fit_transform(pre_i, Xi)
+      pdata[[i]]$x <- ft$transformed
+      proclist[[i]] <- ft$preproc
+    } else {
+      templ <- multivarious::prep(pre_i)
+      Xi_tf <- multivarious::init_transform(templ, Xi)
+      pdata[[i]]$x <- Xi_tf
+      proc_attr <- attr(Xi_tf, "preproc")
+      proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
+    }
+  }
+
+  if (stateless) {
+    return(list(pdata = pdata, proc = NULL))
+  }
+  names(proclist) <- names(pdata)
+  proc <- multivarious::concat_pre_processors(proclist, feature_block_indices(pdata))
+  list(pdata = pdata, proc = proc)
+}
+
+# Loadings that map (preprocessed) features onto aligned scores.
+#
+# The spectral graph methods produce scores that are nonlinear functions of the
+# features, so there is no exact linear encoder. This returns the
+# minimum-norm least-squares bridge `v = X^+ S`, so `X %*% v` is the orthogonal
+# projection of the aligned scores `S` onto the column space of `X`: exact when
+# `X` has full row rank, otherwise the best linear approximation. Directions
+# with singular value below `rel_tol * max(d)` are treated as null.
+.score_regression_loadings <- function(X, S, rel_tol = 1e-8) {
+  X <- as.matrix(X)
+  S <- as.matrix(S)
+  if (nrow(X) != nrow(S)) {
+    stop("Loadings regression: X has ", nrow(X), " rows but scores have ",
+         nrow(S), ".", call. = FALSE)
+  }
+  out <- matrix(0, ncol(X), ncol(S))
+  if (!ncol(X) || !nrow(X)) return(out)
+  sv <- svd(X)
+  keep <- sv$d > rel_tol * max(sv$d)
+  if (!any(keep)) return(out)
+  sv$v[, keep, drop = FALSE] %*%
+    (crossprod(sv$u[, keep, drop = FALSE], S) / sv$d[keep])
+}
+
+# Stack per-block regression loadings for a list of (preprocessed) strata and
+# the matching list of aligned score blocks.
+.stack_regression_loadings <- function(strata, score_blocks) {
+  do.call(rbind, lapply(seq_along(strata), function(i) {
+    .score_regression_loadings(strata[[i]]$x, score_blocks[[i]])
+  }))
+}
+
 #' @keywords internal
-cone_align_fit <- function(strata, proc, ncomp, sigma, lambda, use_laplacian, 
+cone_align_fit <- function(strata, proc, ncomp, sigma, lambda, use_laplacian,
                           solver, max_iter, tol, feature_blocks, knn,
-                          anchors = NULL) {
-  
+                          anchors = NULL, verbose = FALSE) {
+
   # Compute spectral embeddings (following GRASP pattern)
   embeddings <- compute_cone_embeddings(strata, ncomp, sigma, use_laplacian, knn)
 
@@ -417,23 +488,23 @@ cone_align_fit <- function(strata, proc, ncomp, sigma, lambda, use_laplacian,
   }
 
   # Iterative alignment (core CONE-Align algorithm)
-  alignment_result <- cone_align_iterate(embeddings, solver, max_iter, tol, lambda, anchors = anchors)
-  
-  # Compute scores with consistent alignment direction (map graph 1 -> graph 2 space)
+  alignment_result <- cone_align_iterate(embeddings, solver, max_iter, tol, lambda,
+                                         anchors = anchors, verbose = verbose)
+
+  # Scores keep each domain's input row order: graph 1 is rotated into the
+  # frame of graph 2, and the correspondence is reported separately in
+  # `assignment` (assignment[i] = graph-2 row matched to graph-1 row i).
   embed1_aligned <- embeddings[[1]] %*% alignment_result$Q
-  embed2_permuted <- embeddings[[2]][alignment_result$P, , drop = FALSE]
-  scores <- rbind(embed1_aligned, embed2_permuted)
-  
-  # Primal vectors computation (following KEMA/GRASP pattern)
-  loadings <- do.call(rbind, lapply(seq_along(strata), function(i) {
-    xi <- strata[[i]]$x
-    alpha_i <- embeddings[[i]]
-    Matrix::crossprod(xi, alpha_i)
-  }))
+  embed2 <- embeddings[[2]]
+  scores <- rbind(embed1_aligned, embed2)
+
+  # Loadings regress the aligned scores of each block on its preprocessed
+  # features, so X_i v_i lands in the aligned frame.
+  loadings <- .stack_regression_loadings(strata, list(embed1_aligned, embed2))
 
   # Store rotations used to produce scores (graph 1 rotated, graph 2 identity)
   rotation_list <- list(alignment_result$Q,
-                        diag(ncol(embed2_permuted)))
+                        diag(ncol(embed2)))
 
   new_alignment_result(
     scores = scores,
@@ -443,7 +514,9 @@ cone_align_fit <- function(strata, proc, ncomp, sigma, lambda, use_laplacian,
     subclass = "cone_align",
     extras = list(
       assignment = alignment_result$P,
-      rotation = rotation_list
+      rotation = rotation_list,
+      converged = alignment_result$converged,
+      iterations = alignment_result$iterations
     )
   )
 }
@@ -518,36 +591,15 @@ compute_embedding <- function(domain, ncomp, sigma, use_laplacian, knn) {
   # Request one extra eigenvector to account for the trivial one if using Laplacian
   k_request <- min(ncomp_safe + 1, n_nodes - 1)
 
-  # Based on comprehensive benchmarking:
-  # - RSpectra is faster for typical cone_align use cases
-  # - PRIMME is competitive only for very small problems
-  if (n_nodes <= 50 && requireNamespace("PRIMME", quietly = TRUE)) {
-    # Use PRIMME for very small problems where overhead is minimal
-    decomp <- safe_compute(
-      PRIMME::eigs_sym(L, NEig = k_request, which = "SA"),
-      "Eigen-decomposition failed in CONE-Align"
-    )
-  } else if (requireNamespace("RSpectra", quietly = TRUE)) {
-    # Use RSpectra for all other cases (it's consistently faster)
-    decomp <- safe_compute(
-      RSpectra::eigs_sym(L, k = k_request, which = "SA", 
-                         opts = list(tol = 1e-4, maxitr = 300)),
-      "Eigen-decomposition failed in CONE-Align"
-    )
-  } else {
-    # Fallback to PRIMME if RSpectra not available
-    decomp <- safe_compute(
-      PRIMME::eigs_sym(L, NEig = k_request, which = "SA"),
-      "Eigen-decomposition failed in CONE-Align"
-    )
-  }
-  
+  # PRIMME (optional) for very small graphs, RSpectra otherwise; see
+  # .sym_eigs() for the dense fallbacks and the convergence check.
+  decomp <- .sym_eigs(L, k_request, which = "SA",
+                      backend = if (n_nodes <= 50) "primme" else "rspectra",
+                      tol = 1e-4, maxitr = 300L,
+                      context = "Eigen-decomposition in CONE-Align")
+
   evals <- decomp$values
   vecs <- decomp$vectors
-
-  ord <- order(evals)
-  evals <- evals[ord]
-  vecs <- vecs[, ord, drop = FALSE]
   
   # Select eigenvectors corresponding to smallest non-zero eigenvalues.
   # The first eigenvector for the Laplacian is often trivial (constant vector).
@@ -589,17 +641,11 @@ compute_embedding <- function(domain, ncomp, sigma, use_laplacian, knn) {
 #' @keywords internal
 #' @noRd
 graph_laplacian <- function(A, normalized = TRUE) {
-  deg <- Matrix::rowSums(A)
-  if (normalized) {
-    # Symmetric normalized Laplacian: I - D^(-1/2) * A * D^(-1/2)
-    deg[deg == 0] <- 1  # Avoid division by zero for isolated nodes
-    D_inv_sqrt <- Matrix::Diagonal(x = 1 / sqrt(deg))
-    L <- Matrix::Diagonal(nrow(A)) - D_inv_sqrt %*% A %*% D_inv_sqrt
-  } else {
-    # Combinatorial Laplacian: D - A
-    L <- Matrix::Diagonal(x = deg) - A
-  }
-  as(L, "CsparseMatrix")
+  # Symmetrise first: the eigensolvers below assume a symmetric operator and
+  # read only one triangle, so a directed kNN adjacency would otherwise yield
+  # a silently wrong spectrum. Self-loops are kept, as before.
+  compute_graph_laplacian(A, normalized = normalized, symmetrize = TRUE,
+                          zero_diagonal = FALSE)
 }
 
 #' Iterative CONE-Align Algorithm
@@ -609,9 +655,12 @@ graph_laplacian <- function(A, normalized = TRUE) {
 #' @param max_iter Maximum iterations
 #' @param tol Convergence tolerance
 #' @param lambda Regularization parameter
-#' @return List with final rotation, permutation, and iteration count
+#' @param verbose Logical; report convergence via message()
+#' @return List with final rotation, permutation, iteration count and
+#'   convergence flag
 #' @keywords internal
-cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda, anchors = NULL) {
+cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda, anchors = NULL,
+                               verbose = FALSE) {
 
   if (nrow(embeddings[[1]]) == 0 || nrow(embeddings[[2]]) == 0) {
     stop("Input embeddings to cone_align_iterate must have non-zero rows.")
@@ -678,14 +727,16 @@ cone_align_iterate <- function(embeddings, solver, max_iter, tol, lambda, anchor
     }
   }
   
-  if (converged) {
-    message(sprintf("Converged after %d iterations.", i))
-  } else {
-    message(sprintf("Maximum iterations (%d) reached without convergence.", max_iter))
+  if (isTRUE(verbose)) {
+    if (converged) {
+      message(sprintf("Converged after %d iterations.", i))
+    } else {
+      message(sprintf("Maximum iterations (%d) reached without convergence.", max_iter))
+    }
   }
-  
+
   # Return the permutation, rotation, matched indices, and iteration count
-  list(P = P, Q = Q, P_matched = P, iterations = i)
+  list(P = P, Q = Q, P_matched = P, iterations = i, converged = converged)
 }
 
 #' Solve Procrustes Problem for CONE-Align
@@ -741,11 +792,13 @@ solve_procrustes_cone <- function(Z1, Z2, P, lambda = 0, anchors = NULL) {
 #' @param Z1 First embedding matrix
 #' @param Z2 Second embedding matrix
 #' @param Q Orthogonal transformation matrix
-#' @param solver Assignment algorithm ("linear" or "auction")
+#' @param solver Assignment algorithm (only "linear", the exact Hungarian solver)
 #' @return Vector of assignment indices
 #' @keywords internal
 solve_assignment_cone <- function(Z1, Z2, Q, solver, anchors = NULL) {
   
+  solver <- .check_lsap_solver(solver)
+
   # Pre-compute transformed embeddings to avoid repeated multiplication
   Z1_transformed <- Z1 %*% Q
   
@@ -768,11 +821,7 @@ solve_assignment_cone <- function(Z1, Z2, Q, solver, anchors = NULL) {
 
   # Solve the assignment problem (optionally with hard anchors).
   if (is.null(anchor_map) || all(is.na(anchor_map))) {
-    if (solver == "auction" && n1 >= 1000) {
-      assignment <- clue::solve_LSAP(D, method = "auction")
-    } else {
-      assignment <- clue::solve_LSAP(D)
-    }
+    assignment <- clue::solve_LSAP(D)
     return(as.integer(assignment))
   }
 
@@ -797,11 +846,7 @@ solve_assignment_cone <- function(Z1, Z2, Q, solver, anchors = NULL) {
   }
 
   D_sub <- D[free_i, free_j, drop = FALSE]
-  if (solver == "auction" && length(free_i) >= 1000) {
-    assignment <- clue::solve_LSAP(D_sub, method = "auction")
-  } else {
-    assignment <- clue::solve_LSAP(D_sub)
-  }
+  assignment <- clue::solve_LSAP(D_sub)
 
   P[free_i] <- free_j[as.integer(assignment)]
   P
