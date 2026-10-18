@@ -14,6 +14,26 @@
 #' @param inner_max_iter Maximum Sinkhorn iterations. Default: 30
 #' @param inner_tol Sinkhorn convergence tolerance. Default: 1e-9
 #' @param dist_chunk_size Chunk size for distance computation. Default: 1000
+#' @details
+#' For each pair of domains the solver minimises the entropic GW objective
+#' \deqn{E(P) = \sum_{i,j,k,l} (C^1_{ik} - C^2_{jl})^2 P_{ij} P_{kl} +
+#'   \epsilon \sum_{ij} P_{ij} \log P_{ij}}
+#' over couplings with marginals \code{p} and \code{q} by the projected
+#' mirror-descent scheme of Peyre, Cuturi & Solomon (2016): each outer step
+#' solves an entropic OT problem whose cost is the gradient \eqn{2M(P)} of the
+#' quadratic term, with regularisation \code{epsilon}. Its fixed points are
+#' stationary points of \eqn{E} with the same \code{epsilon}, and the
+#' reported \code{losses} are \eqn{E(P)}. The inner entropic OT problems use a
+#' log-stabilised Sinkhorn iteration; if it cannot produce a finite coupling
+#' the function stops with an error rather than substituting another plan.
+#' \code{distances} are \eqn{\sqrt{\langle M(P), P\rangle}} (without the
+#' entropy term).
+#'
+#' The returned object is not a projector and does not inherit from
+#' \code{multiblock_biprojector}. Dense plans for all pairs are held in memory;
+#' the estimated size is checked against
+#' \code{getOption("manifoldalign.ot_max_dense_bytes")} (default 4e9 bytes)
+#' before any work starts.
 #' @export
 gromov_wasserstein.hyperdesign <- function(data,
                                          epsilon = 0.1,
@@ -48,9 +68,12 @@ gromov_wasserstein.hyperdesign <- function(data,
     stop("Gromov-Wasserstein requires at least 2 domains", call. = FALSE)
   }
   
+  .ot_reject_dots(list(...), "gromov_wasserstein")
+
   X_list <- lapply(data, function(d) d$x)
   n_samples <- sapply(X_list, nrow)
-  
+  .ot_check_dense_memory(n_samples, "gromov_wasserstein")
+
   # Get domain names with fallback
   domain_names <- names(data)
   if (is.null(domain_names)) {
@@ -199,11 +222,75 @@ gromov_wasserstein.hyperdesign <- function(data,
       domain_data = X_list,
       metric = metric
     ),
-    class = c("gromov_wasserstein", "multiblock_biprojector")
+    class = "gromov_wasserstein"
   )
 }
 
-# Simplified and stable entropic GW solver
+# Row-wise log-sum-exp of a matrix.
+.lse_rows <- function(A) {
+  mx <- apply(A, 1L, max)
+  mx + log(rowSums(exp(A - mx)))
+}
+
+# Entropic OT  min <cost, P> + eps * sum(P log P)  over Pi(p, q), solved by a
+# stabilised Sinkhorn iteration. Dual potentials (f, g) are kept in the log
+# domain and the kernel exp((f_i + g_j - cost_ij) / eps) is rebuilt (scalings
+# absorbed into the potentials) whenever the scalings leave [e^-50, e^50] or
+# become non-finite; the exact log-domain updates used on rebuild cannot
+# underflow. `g_init` warm-starts the column potential. Returns the coupling,
+# the potentials, the final column-marginal error, and the iteration count.
+.sinkhorn_stabilized <- function(cost, p, q, eps, g_init = NULL,
+                                 max_iter = 1000, tol = 1e-9) {
+  log_p <- log(p)
+  log_q <- log(q)
+  g <- if (is.null(g_init)) numeric(length(q)) else g_init
+
+  f_update <- function(g) eps * (log_p - .lse_rows(sweep(-cost, 2, g, "+") / eps))
+  g_update <- function(f) eps * (log_q - .lse_rows(t((f - cost) / eps)))
+  kernel <- function(f, g) exp((sweep(-cost, 2, g, "+") + f) / eps)
+  ok <- function(x) all(is.finite(x)) && all(x > 0) && max(abs(log(x))) < 50
+
+  f <- f_update(g)
+  K <- kernel(f, g)  # row sums are exactly p, so no entry exceeds 1
+  u <- rep(1, length(p))
+  v <- rep(1, length(q))
+  err <- Inf
+  it <- 0L
+  while (it < max_iter) {
+    it <- it + 1L
+    v_new <- q / as.vector(crossprod(K, u))
+    u_new <- p / as.vector(K %*% v_new)
+    if (!ok(u_new) || !ok(v_new)) {
+      # absorb the last good scalings, then exact log-domain updates
+      f <- f + eps * log(u)
+      g <- g + eps * log(v)
+      g <- g_update(f)
+      f <- f_update(g)
+      K <- kernel(f, g)
+      u <- rep(1, length(p))
+      v <- rep(1, length(q))
+    } else {
+      u <- u_new
+      v <- v_new
+    }
+    # rows are exact after the u-update; measure the column error
+    err <- sum(abs(v * as.vector(crossprod(K, u)) - q))
+    if (err <= tol) break
+  }
+
+  P <- K * outer(u, v)
+  if (any(!is.finite(P))) {
+    stop("Entropic GW: the inner Sinkhorn iteration produced a non-finite ",
+         "coupling (epsilon = ", eps, ")", call. = FALSE)
+  }
+  list(P = P, f = f + eps * log(u), g = g + eps * log(v), err = err,
+       iterations = it)
+}
+
+# Entropic Gromov-Wasserstein (square loss) by projected mirror descent
+# (Peyre, Cuturi & Solomon 2016): P <- argmin_{Pi(p,q)} <2 M(P_old), P> +
+# epsilon * sum(P log P), where 2 M(P) is the gradient of <M(P), P>. Fixed
+# points are stationary for the reported loss <M(P), P> + epsilon * sum(P log P).
 solve_entropic_gw <- function(C1, C2, p, q, P_init,
                               epsilon = 0.1,
                               max_iter = 100,
@@ -223,114 +310,52 @@ solve_entropic_gw <- function(C1, C2, p, q, P_init,
   constC1 <- as.vector(C1_sqr %*% p)
   constC2 <- as.vector(C2_sqr %*% q)
   const_term <- outer(constC1, rep(1, n2)) + outer(rep(1, n1), constC2)
+  gw_M <- function(P) const_term - 2 * (C1 %*% P %*% t(C2))
+  neg_entropy <- function(P) sum(P[P > 0] * log(P[P > 0]))
 
+  M <- gw_M(P)
   loss_old <- Inf
+  g_warm <- NULL
+  converged <- FALSE
+  iter <- 0L
 
   for (iter in seq_len(max_iter)) {
-    M <- const_term - 2 * C1 %*% P %*% t(C2)
-    M[M < 0 & M > -1e-12] <- 0
+    sk <- .sinkhorn_stabilized(2 * M, p, q, epsilon, g_init = g_warm,
+                               max_iter = inner_max_iter, tol = inner_tol)
+    P <- sk$P
+    g_warm <- sk$g
 
-    m0 <- min(M)
-    K <- exp(-(M - m0) / epsilon)
-
-    u <- rep(1, n1)
-    v <- rep(1, n2)
-    u_old <- u
-    v_old <- v
-    ok <- TRUE
-
-    for (sinkhorn_iter in seq_len(inner_max_iter)) {
-      Kv <- K %*% v + 1e-300
-      u <- p / Kv
-
-      Ktu <- t(K) %*% u + 1e-300
-      v <- q / Ktu
-
-      if (any(!is.finite(u)) || any(!is.finite(v))) {
-        ok <- FALSE
-        if (verbose) {
-          message(sprintf("  Warning: numerical instability at iter %d (sinkhorn iter %d)",
-                          iter, sinkhorn_iter))
-        }
-        break
-      }
-
-      if (inner_tol > 0) {
-        du <- max(abs(u - u_old) / (abs(u_old) + 1e-15))
-        dv <- max(abs(v - v_old) / (abs(v_old) + 1e-15))
-        if (max(du, dv) < inner_tol) {
-          break
-        }
-        u_old <- u
-        v_old <- v
-      }
-    }
-
-    if (!ok) {
-      P <- outer(p, q)
-      M <- const_term - 2 * C1 %*% P %*% t(C2)
-      M[M < 0 & M > -1e-12] <- 0
-      loss_new <- sum(P * M) + epsilon * sum(P * log(P + 1e-20))
-      return(list(
-        P = P,
-        distance = sqrt(max(0, sum(P * M))),
-        loss = loss_new,
-        converged = FALSE,
-        iterations = iter
-      ))
-    }
-
-    P <- sweep(sweep(K, 1, u, "*"), 2, v, "*")
-
-    if (!all(is.finite(P))) {
-      if (verbose) {
-        message(sprintf("  Warning: transport plan produced NaN/Inf at iter %d; using product plan", iter))
-      }
-      P <- outer(p, q)
-    }
-
-    M <- const_term - 2 * C1 %*% P %*% t(C2)
-    M[M < 0 & M > -1e-12] <- 0
-    loss_new <- sum(P * M) + epsilon * sum(P * log(P + 1e-20))
+    M <- gw_M(P)
+    loss_new <- sum(P * M) + epsilon * neg_entropy(P)
 
     if (verbose && iter %% 10 == 0) {
       message(sprintf("  Iteration %3d: loss = %.6e", iter, loss_new))
     }
 
-    if (is.finite(loss_new) && is.finite(loss_old)) {
-      rel_change <- abs(loss_old - loss_new) / (abs(loss_old) + 1e-15)
-      if (is.finite(rel_change) && rel_change < tol) {
-        if (verbose) {
-          message(sprintf("  Converged at iteration %d", iter))
-        }
-        return(list(
-          P = P,
-          distance = sqrt(max(0, sum(P * M))),
-          loss = loss_new,
-          converged = TRUE,
-          iterations = iter
-        ))
-      }
-    }
-
+    rel_change <- abs(loss_old - loss_new) / (abs(loss_old) + 1e-15)
     loss_old <- loss_new
+    if (is.finite(rel_change) && rel_change < tol) {
+      converged <- TRUE
+      if (verbose) {
+        message(sprintf("  Converged at iteration %d", iter))
+      }
+      break
+    }
   }
 
-  if (verbose) {
+  if (!converged && verbose) {
     message("  Did not converge within max_iter iterations")
   }
-
-  M <- const_term - 2 * C1 %*% P %*% t(C2)
-  M[M < 0 & M > -1e-12] <- 0
 
   list(
     P = P,
     distance = sqrt(max(0, sum(P * M))),
     loss = loss_old,
-    converged = FALSE,
-    iterations = max_iter
+    converged = converged,
+    iterations = iter
   )
 }
+
 
 #' @method print gromov_wasserstein
 #' @export
@@ -362,8 +387,11 @@ print.gromov_wasserstein <- function(x, ...) {
 #' @param from Source domain index or name
 #' @param to Target domain index or name
 #' @param type Prediction type. `"weights"` (default) returns barycentric
-#'   weights over target-domain samples. `"transport"` returns barycentric
-#'   combinations of target-domain features when available.
+#'   weights over target-domain samples: the inverse-distance weighted
+#'   average of the row-normalised coupling rows of the `k` nearest
+#'   source-domain training samples. `"transport"` returns those weights
+#'   multiplied by the target-domain features (the barycentric projection), so
+#'   both types always agree; there is no implicit fallback to another map.
 #' @param k Number of nearest neighbours used to build the barycentric
 #'   combination (default: 5).
 #' @param ... Reserved for future use.
@@ -431,46 +459,11 @@ predict.gromov_wasserstein <- function(object, newdata, from, to,
     return(bary_weights)
   }
 
+  # The transport map is always the barycentric projection through the
+  # learned coupling, so type = "transport" equals the "weights" output
+  # multiplied by the target-domain features.
   transported <- bary_weights %*% as.matrix(target_data)
   colnames(transported) <- colnames(target_data)
-
-  # If the transport plan is nearly uniform, fall back to target-space neighbours
-  max_weights <- apply(bary_weights, 1L, max)
-  needs_fallback <- !is.null(target_data) & (max_weights < 0.3)
-  if (any(needs_fallback)) {
-    fallback_idx <- find_knn_indices(
-      newdata[needs_fallback, , drop = FALSE],
-      target_data,
-      k = min(k, nrow(target_data)),
-      metric = metric
-    )
-
-    compute_local_mix <- function(idx_row, dist_row, n_target) {
-      if (any(is.na(idx_row))) {
-        return(rep(1 / n_target, n_target))
-      }
-      if (any(dist_row < 1e-12)) {
-        mask <- dist_row < 1e-12
-        weights <- mask / sum(mask)
-      } else {
-        weights <- 1 / (dist_row + 1e-8)
-        weights <- weights / sum(weights)
-      }
-      row_w <- numeric(n_target)
-      row_w[idx_row] <- weights
-      row_w
-    }
-
-    fallback_weights <- t(vapply(
-      seq_len(nrow(fallback_idx$idx)),
-      function(i) compute_local_mix(fallback_idx$idx[i, ], fallback_idx$dists[i, ], nrow(target_data)),
-      numeric(nrow(target_data))
-    ))
-
-    bary_weights[needs_fallback, ] <- fallback_weights
-    transported[needs_fallback, ] <- fallback_weights %*% as.matrix(target_data)
-  }
-
   transported
 }
 

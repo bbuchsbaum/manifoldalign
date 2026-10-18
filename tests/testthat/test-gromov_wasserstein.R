@@ -28,7 +28,8 @@ test_that("gromov_wasserstein works with basic hyperdesign input", {
   
   # Check basic properties
   expect_s3_class(result, "gromov_wasserstein")
-  expect_s3_class(result, "multiblock_biprojector")
+  # Not a projector: it has no s/v/sdev/preproc/block_indices fields.
+  expect_false(inherits(result, "multiblock_biprojector"))
   
   # Check transport plan
   expect_length(result$transport_plans, 1)  # One pair of domains
@@ -246,7 +247,118 @@ test_that("gromov_wasserstein out-of-sample weights behave as probabilities", {
   transported <- predict(result, new_points, from = "source", to = "target",
                          type = "transport", k = 2)
   expect_equal(dim(transported), dim(new_points))
-  expect_equal(transported, X2[1:2, , drop = FALSE], tolerance = 0.3)
+  # The transport map is the barycentric projection through the coupling:
+  # it must agree with the returned weights (no implicit kNN fallback).
+  expect_equal(unname(transported), unname(weight_mat %*% X2), tolerance = 1e-12)
+})
+
+test_that("gromov_wasserstein transport agrees with weights for entropic plans and unequal dimensions", {
+  skip_if_not_installed("multidesign")
+
+  set.seed(77)
+  n <- 12
+  X1 <- matrix(rnorm(n * 3), n, 3)
+  X2 <- matrix(rnorm(n * 5), n, 5)
+  design <- data.frame(id = seq_len(n))
+  hd <- hyperdesign(list(
+    a = multidesign::multidesign(X1, design),
+    b = multidesign::multidesign(X2, design)
+  ))
+  # A large epsilon gives a diffuse plan: every barycentric weight is < 0.3,
+  # which previously triggered a kNN search of source rows in target space.
+  fit <- gromov_wasserstein(hd, epsilon = 5, max_iter = 20)
+  newX <- matrix(rnorm(4 * 3), 4, 3)
+  W <- predict(fit, newX, from = 1, to = 2, type = "weights", k = 3)
+  expect_true(all(apply(W, 1L, max) < 0.3))
+  expect_no_warning(
+    Tr <- predict(fit, newX, from = 1, to = 2, type = "transport", k = 3)
+  )
+  expect_equal(dim(Tr), c(4L, 5L))
+  expect_equal(unname(Tr), unname(W %*% X2), tolerance = 1e-12)
+})
+
+test_that("entropic GW plan is stationary for the reported objective", {
+  skip_if_not_installed("multidesign")
+
+  set.seed(4321)
+  n1 <- 9
+  n2 <- 7
+  X1 <- matrix(rnorm(n1 * 2), n1, 2)
+  X2 <- matrix(rnorm(n2 * 3), n2, 3)
+  hd <- hyperdesign(list(
+    a = multidesign::multidesign(X1, data.frame(id = seq_len(n1))),
+    b = multidesign::multidesign(X2, data.frame(id = seq_len(n2)))
+  ))
+  eps <- 0.05
+  fit <- gromov_wasserstein(hd, epsilon = eps, max_iter = 500, tol = 1e-14,
+                            inner_max_iter = 500, inner_tol = 1e-13)
+  expect_true(fit$converged[1, 2])
+  P <- fit$transport_plans[[1]]
+  C1 <- fit$cost_matrices[[1]]
+  C2 <- fit$cost_matrices[[2]]
+  p <- rep(1 / n1, n1)
+  q <- rep(1 / n2, n2)
+  P <- unname(P)
+  expect_equal(rowSums(P), p, tolerance = 1e-8)
+  expect_equal(colSums(P), q, tolerance = 1e-8)
+
+  M <- outer(as.vector(C1^2 %*% p), as.vector(C2^2 %*% q), "+") - 2 * C1 %*% P %*% t(C2)
+  # Reported loss is <M, P> + eps * sum(P log P)
+  expect_equal(fit$losses[1, 2], sum(P * M) + eps * sum(P * log(P)), tolerance = 1e-8)
+
+  # Stationarity on Pi(p, q): the gradient 2M + eps (log P + 1) must be of the
+  # form f_i + g_j. Measure the double-centred residual.
+  sep_residual <- function(G) {
+    R <- sweep(sweep(G, 1, rowMeans(G)), 2, colMeans(G)) + mean(G)
+    max(abs(R))
+  }
+  res_reported <- sep_residual(2 * M + eps * log(P))
+  res_twice <- sep_residual(2 * M + 2 * eps * log(P))
+  expect_lt(res_reported, 1e-6)
+  # With twice the coefficient (the old solver's fixed point) it is not stationary.
+  expect_gt(res_twice, 1e3 * res_reported)
+})
+
+test_that("entropic GW inner Sinkhorn stays finite for tiny epsilon", {
+  skip_if_not_installed("multidesign")
+
+  set.seed(99)
+  n <- 8
+  X1 <- matrix(rnorm(n * 2), n, 2)
+  X2 <- matrix(rnorm(n * 2) * 3, n, 2)
+  design <- data.frame(id = seq_len(n))
+  hd <- hyperdesign(list(
+    a = multidesign::multidesign(X1, design),
+    b = multidesign::multidesign(X2, design)
+  ))
+  # exp(-cost / 1e-4) underflows to zero for an unstabilised kernel; the old
+  # solver then silently returned the product coupling outer(p, q).
+  fit <- gromov_wasserstein(hd, epsilon = 1e-4, max_iter = 30,
+                            inner_max_iter = 2000, inner_tol = 1e-10)
+  P <- unname(fit$transport_plans[[1]])
+  expect_true(all(is.finite(P)))
+  # Rows are exact after every Sinkhorn sweep; columns converge slowly for
+  # such a small epsilon.
+  expect_equal(rowSums(P), rep(1 / n, n), tolerance = 1e-10)
+  expect_equal(colSums(P), rep(1 / n, n), tolerance = 1e-3)
+  # Not the product coupling: a near-deterministic plan
+  expect_gt(max(P), 0.5 / n)
+})
+
+test_that("gromov_wasserstein rejects unknown arguments and oversized problems", {
+  skip_if_not_installed("multidesign")
+
+  set.seed(3)
+  n <- 6
+  design <- data.frame(id = seq_len(n))
+  hd <- hyperdesign(list(
+    a = multidesign::multidesign(matrix(rnorm(n * 2), n, 2), design),
+    b = multidesign::multidesign(matrix(rnorm(n * 2), n, 2), design)
+  ))
+  expect_error(gromov_wasserstein(hd, epsilom = 0.1), "unused argument")
+  old <- options(manifoldalign.ot_max_dense_bytes = 100)
+  on.exit(options(old), add = TRUE)
+  expect_error(gromov_wasserstein(hd), "ot_max_dense_bytes")
 })
 
 test_that("gromov_wasserstein recovers a simple 1D permutation structure", {
