@@ -114,7 +114,10 @@ gpca_align <- function(data, ...) {
 #'
 #' @param data A hyperdesign object containing multiple data domains
 #' @param y Name of the label variable to use for alignment
-#' @param preproc Preprocessing function to apply to the data (default `center()`)
+#' @param preproc Preprocessing to apply to each domain (default `center()`): a
+#'   single preprocessor broadcast to all domains, a list with one entry per
+#'   domain, or `NULL` for none. `NULL` entries leave that domain unchanged and
+#'   are recorded as an identity transform.
 #' @param ncomp Number of components to extract (default 2)
 #' @param simfun Function to compute similarity between labels
 #' @param u Trade-off parameter between within-domain and between-domain similarity (0-1)
@@ -422,25 +425,12 @@ gpca_align.hyperdesign <- function(
     M <- M + Matrix::Diagonal(n, lambda)
   }
 
-  eig_la <- NA_real_
-  if (requireNamespace("RSpectra", quietly = TRUE)) {
-    eig_la <- tryCatch(
-      RSpectra::eigs_sym(M, 1L, which = "LA", opts = list(retvec = FALSE))$values[1],
-      error = function(e) NA_real_
-    )
-  } else if (requireNamespace("PRIMME", quietly = TRUE)) {
-    eig_la <- tryCatch(
-      PRIMME::eigs_sym(M, NEig = 1L, which = "LA", method = "PRIMME_DEFAULT_MIN_MATVECS")$values[1],
-      error = function(e) NA_real_
-    )
-  } else if (n <= 1200L) {
-    eig_la <- tryCatch(
-      max(eigen(as.matrix(M), symmetric = TRUE, only.values = TRUE)$values),
-      error = function(e) NA_real_
-    )
-  }
+  eig_la <- .gpca_largest_eigenvalue(M)
   if (is.finite(eig_la) && eig_la > 0) {
     M <- M / eig_la
+  } else if (!is.finite(eig_la)) {
+    warning("Could not compute the largest eigenvalue of the row metric; ",
+            "the metric is used without spectral normalisation.", call. = FALSE)
   }
 
   ## -------------------------- preprocessing per domain --------------------------
@@ -480,8 +470,11 @@ gpca_align.hyperdesign <- function(
         proclist[[i]] <- attr(Xi_tf, "preproc") %||% templ
       }
     } else {
+      # No preprocessing for this domain: record a fitted identity transform
+      # so the concatenated preprocessor stays aligned with the blocks.
+      # (Assigning NULL with `[[<-` would delete the list element.)
       pdata[[i]]$x <- data[[i]]$x
-      proclist[[i]] <- NULL
+      proclist[i] <- list(.identity_preproc(data[[i]]$x))
     }
   }
   names(proclist) <- names(data)
@@ -573,3 +566,33 @@ gpca_align.hyperdesign <- function(
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
+
+# Largest eigenvalue of a symmetric (sparse) metric. RSpectra first, then
+# PRIMME when installed, then a dense eigendecomposition for small problems.
+# Returns NA when every backend fails.
+.gpca_largest_eigenvalue <- function(M) {
+  n <- nrow(M)
+  val <- tryCatch(
+    RSpectra::eigs_sym(M, 1L, which = "LA", opts = list(retvec = FALSE))$values[1],
+    error = function(e) NA_real_
+  )
+  if (!isTRUE(is.finite(val)) && .primme_available()) {
+    val <- tryCatch(
+      PRIMME::eigs_sym(M, NEig = 1L, which = "LA", method = "PRIMME_DEFAULT_MIN_MATVECS")$values[1],
+      error = function(e) NA_real_
+    )
+  }
+  if (!isTRUE(is.finite(val)) && n <= 1200L) {
+    val <- tryCatch(
+      max(eigen(as.matrix(M), symmetric = TRUE, only.values = TRUE)$values),
+      error = function(e) NA_real_
+    )
+  }
+  if (length(val) != 1L) NA_real_ else as.numeric(val)
+}
+
+# A fitted identity (pass-through) preprocessor for a domain that is not
+# preprocessed, so concatenated preprocessors keep one entry per block.
+.identity_preproc <- function(X) {
+  multivarious::fit_transform(multivarious::pass(), as.matrix(X[seq_len(min(1L, nrow(X))), , drop = FALSE]))$preproc
+}

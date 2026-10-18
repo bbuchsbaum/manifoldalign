@@ -125,8 +125,7 @@ compute_rank_matrices <- function(strata, sv_thresh = 1) {
 
 #' @noRd
 .lambda_max_power <- function(op, n, n_iter = 30L, tol = 1e-6, seed = 1L) {
-  set.seed(seed)
-  v <- rnorm(n)
+  v <- .with_local_seed(seed, stats::rnorm(n))
   v <- v / sqrt(sum(v * v))
   lambda_prev <- 0
 
@@ -149,6 +148,45 @@ compute_rank_matrices <- function(strata, sv_thresh = 1) {
   }
 
   lambda_prev
+}
+
+# Keep only the entries of a symmetric similarity matrix that join samples
+# from different domains (Eq. 12 of the LRA paper). Works on the stored
+# entries, so the cost is O(nnz) rather than O(n^2).
+#' @noRd
+.lowrank_cross_domain_edges <- function(C, block_id) {
+  n <- nrow(C)
+  C <- methods::as(methods::as(methods::as(C, "dMatrix"), "generalMatrix"), "TsparseMatrix")
+  keep <- block_id[C@i + 1L] != block_id[C@j + 1L]
+  Matrix::sparseMatrix(
+    i = C@i[keep] + 1L,
+    j = C@j[keep] + 1L,
+    x = C@x[keep],
+    dims = c(n, n)
+  )
+}
+
+# Extreme eigenpairs of a symmetric matrix: PRIMME when installed, otherwise a
+# dense eigendecomposition for small problems or RSpectra. Returns the k
+# smallest ("SA") or largest ("LA") eigenpairs.
+#' @noRd
+.lowrank_eigs_sym <- function(A, k, which = c("SA", "LA")) {
+  which <- match.arg(which)
+  n <- nrow(A)
+  k <- as.integer(min(k, n))
+  if (.primme_available()) {
+    eig <- PRIMME::eigs_sym(A, NEig = k, which = which,
+                            method = "PRIMME_DEFAULT_MIN_MATVECS")
+    return(list(values = eig$values, vectors = eig$vectors))
+  }
+  if (n <= 2000L || k >= n - 1L) {
+    e <- eigen(as.matrix(A), symmetric = TRUE)
+    # eigen() returns eigenvalues in decreasing order.
+    idx <- if (which == "SA") rev(seq_len(n))[seq_len(k)] else seq_len(k)
+    return(list(values = e$values[idx], vectors = e$vectors[, idx, drop = FALSE]))
+  }
+  eig <- RSpectra::eigs_sym(A, k = k, which = which)
+  list(values = eig$values, vectors = eig$vectors)
 }
 
 #' @noRd
@@ -235,7 +273,9 @@ lowrank_align <- function(data, y, ...) {
 #' @rdname lowrank_align
 #' @method lowrank_align hyperdesign
 #'
-#' @param preproc Preprocessing function (default: center())
+#' @param preproc Preprocessing (default: center()): a single preprocessor
+#'   broadcast to all domains, a list with one entry per domain, or `NULL` for
+#'   none. `NULL` entries are recorded as an identity transform.
 #' @param ncomp Number of components to extract (default: 2)
 #' @param simfun Function to compute similarity matrix from labels. Should 
 #'   handle NA labels gracefully (e.g., created with createSimFun())
@@ -252,12 +292,16 @@ lowrank_align <- function(data, y, ...) {
 #'   NULL (default), uses system default. Set to 1 for reproducible results 
 #'   across systems.
 #' @param sv_thresh Singular value threshold used when forming R (default: 1).
-#'   Values at or below the threshold are discarded, matching Eq. 11 of the
-#'   original Low-Rank Alignment paper.
-#' @param solver Eigen solver backend. `"explicit"` (default) forms the dense
-#'   matrices and uses PRIMME, matching the original implementation. `"operator"`
-#'   keeps low-rank factors and uses RSpectra with a matrix-vector operator to
-#'   reduce memory and runtime.
+#'   Only singular values strictly greater than `max(sv_thresh, 1)` are kept:
+#'   the closed-form factor `1 - 1/s^2` of Eq. 11 of the original Low-Rank
+#'   Alignment paper is non-positive for `s <= 1`, so values of `sv_thresh`
+#'   below 1 behave exactly like `sv_thresh = 1`. Larger values discard more
+#'   directions. Must be a finite non-negative number.
+#' @param solver Eigen solver backend. `"explicit"` (default) forms the
+#'   matrices and uses PRIMME when it is installed (otherwise a dense
+#'   eigendecomposition for up to 2000 samples, or RSpectra), matching the
+#'   original implementation. `"operator"` keeps low-rank factors and uses
+#'   RSpectra with a matrix-vector operator to reduce memory and runtime.
 #'
 #' @details
 #' The scale_M parameter controls whether to apply eigenvalue-based scaling:
@@ -295,6 +339,10 @@ lowrank_align.hyperdesign <- function(data, y,
                                      ...) {
 
   solver <- match.arg(solver)
+  if (!is.numeric(sv_thresh) || length(sv_thresh) != 1L || !is.finite(sv_thresh) ||
+      sv_thresh < 0) {
+    stop("`sv_thresh` must be a finite non-negative number.", call. = FALSE)
+  }
   y <- rlang::enquo(y)
 
   # Extract labels, preserving NA values for semi-supervised learning
@@ -361,14 +409,15 @@ lowrank_align.hyperdesign <- function(data, y,
       proc_attr <- attr(Xi_tf, "preproc")
       proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
     } else {
+      # Record an identity transform; `proclist[[i]] <- NULL` would delete
+      # the element and misalign the blocks.
       pdata[[i]]$x <- Xi
-      proclist[[i]] <- NULL
+      proclist[i] <- list(.identity_preproc(Xi))
     }
   }
   names(proclist) <- names(pdata)
 
   sample_sizes <- vapply(pdata, function(x) nrow(x$x), integer(1))
-  sample_offsets <- cumsum(c(0L, sample_sizes))
 
   feature_sizes <- vapply(pdata, function(x) ncol(x$x), integer(1))
   feature_offsets <- cumsum(c(0L, feature_sizes))
@@ -392,23 +441,10 @@ lowrank_align.hyperdesign <- function(data, y,
   C_block <- (C_block + Matrix::t(C_block)) / 2
   Matrix::diag(C_block) <- 0
 
-  # Mask to cross-set edges only (Eq. 12)
-  if (length(sample_sizes) > 1L) {
-    C_mask <- Matrix::Matrix(0, ninstances, ninstances, sparse = TRUE)
-    for (a in seq_along(sample_sizes)) {
-      ia <- (sample_offsets[a] + 1L):sample_offsets[a + 1L]
-      if (length(ia) == 0L) next
-      for (b in seq_along(sample_sizes)) {
-        if (a == b) next
-        jb <- (sample_offsets[b] + 1L):sample_offsets[b + 1L]
-        if (length(jb) == 0L) next
-        C_mask[ia, jb] <- 1
-      }
-    }
-    C_block <- C_block * C_mask
-  } else {
-    C_block <- Matrix::Matrix(0, ninstances, ninstances, sparse = TRUE)
-  }
+  # Mask to cross-set edges only (Eq. 12): filter the stored entries by
+  # domain id instead of materialising an n x n mask.
+  block_id <- rep.int(seq_along(sample_sizes), sample_sizes)
+  C_block <- .lowrank_cross_domain_edges(C_block, block_id)
 
   deg <- Matrix::rowSums(C_block)
   iso <- which(deg == 0)
@@ -430,10 +466,8 @@ lowrank_align.hyperdesign <- function(data, y,
     M <- crossprod(R_i, R_i)
 
     if (scale_M) {
-      s_m <- PRIMME::eigs_sym(M, NEig = 1, which = "LA",
-                              method = "PRIMME_DEFAULT_MIN_MATVECS")
-      s_l <- PRIMME::eigs_sym(Ls, NEig = 1, which = "LA",
-                              method = "PRIMME_DEFAULT_MIN_MATVECS")
+      s_m <- .lowrank_eigs_sym(M, 1L, which = "LA")
+      s_l <- .lowrank_eigs_sym(Ls, 1L, which = "LA")
       if (s_m$values[1] > 0 && is.finite(s_m$values[1]) &&
           s_l$values[1] > 0 && is.finite(s_l$values[1])) {
         e_ratio <- s_l$values[1] / s_m$values[1]
@@ -447,8 +481,7 @@ lowrank_align.hyperdesign <- function(data, y,
 
     Z <- (1 - mu) * M + (2 * mu * Ls)
 
-    eig <- PRIMME::eigs_sym(Z, NEig = nev, which = "SA",
-                             method = "PRIMME_DEFAULT_MIN_MATVECS")
+    eig <- .lowrank_eigs_sym(Z, nev, which = "SA")
     evals <- eig$values
     vecs <- eig$vectors
 
