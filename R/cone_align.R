@@ -199,6 +199,10 @@ cone_align.hyperdesign <- function(data,
   
   # Fit the per-domain preprocessors (multivarious preppers are fitted and
   # stored for out-of-sample projection).
+  if (is.function(preproc) && !inherits(preproc, "scaler")) {
+    warning("Consider scaling data before embedding as sigma parameter is ",
+            "sensitive to data units", call. = FALSE)
+  }
   prepped <- .fit_domain_preproc(
     lapply(domains, function(domain) list(x = domain$x, design = domain$design)),
     preproc
@@ -335,6 +339,10 @@ cone_align.list <- function(data,
   })
   names(strata) <- paste0("domain_", seq_along(strata))
 
+  if (is.function(preproc) && !inherits(preproc, "scaler")) {
+    warning("Consider scaling data before embedding as sigma parameter is ",
+            "sensitive to data units", call. = FALSE)
+  }
   prepped <- .fit_domain_preproc(strata, preproc)
   pdata <- prepped$pdata
   proc <- prepped$proc

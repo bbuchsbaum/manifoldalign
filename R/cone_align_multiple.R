@@ -67,6 +67,10 @@ cone_align_multiple.hyperdesign <- function(data,
   solver <- .check_lsap_solver(solver)
 
   # Fit per-domain preprocessing (stored for out-of-sample projection)
+  if (is.function(preproc) && !inherits(preproc, "scaler")) {
+    warning("Consider scaling data before embedding as sigma parameter is ",
+            "sensitive to data units", call. = FALSE)
+  }
   prepped <- .fit_domain_preproc(
     lapply(domains, function(domain) list(x = domain$x, design = domain$design)),
     preproc

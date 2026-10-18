@@ -163,3 +163,12 @@ test_that("graph Laplacians are symmetrised before the symmetric eigensolve", {
     expect_equal(as.matrix(L), as.matrix(L_ref))
   }
 })
+
+test_that("plain-function preprocessing is applied but not stored", {
+  fx <- generate_permuted_alignment(n = 14, d = 3, noise_sd = 0.02, seed = 41)
+  expect_warning(
+    res <- cone_align(list(fx$X1, fx$X2), preproc = function(x) scale(x), ncomp = 3),
+    "Consider scaling"
+  )
+  expect_null(res$preproc)
+})

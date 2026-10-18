@@ -150,6 +150,10 @@ mma_align_multiple.hyperdesign <- function(
 
   # Fit per-domain preprocessing (stateful pre-processors are stored,
   # concatenated by feature block, for out-of-sample projection).
+  if (is.function(preproc) && !inherits(preproc, "scaler")) {
+    warning("Consider scaling data before embedding as sigma parameter is ",
+            "sensitive to data units", call. = FALSE)
+  }
   prepped <- .fit_domain_preproc(
     lapply(domains, function(domain) list(x = domain$x, design = domain$design)),
     preproc
