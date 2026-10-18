@@ -214,7 +214,8 @@ Rcpp::List uot_ti_sinkhorn_kl_dense_cpp(const arma::mat& cost,
     _["lambda"] = lambda,
     _["f"] = f,
     _["g"] = g,
-    _["iterations"] = it + 1,
+    // `it` equals max_iter when the loop ran out without converging.
+    _["iterations"] = converged ? it + 1 : it,
     _["converged"] = converged,
     _["residual"] = residual
   );
@@ -390,7 +391,8 @@ Rcpp::List uot_ti_sinkhorn_kl_sparse_cpp(const Rcpp::IntegerVector& row_ptr,
     _["lambda"] = lambda,
     _["f"] = f,
     _["g"] = g,
-    _["iterations"] = it + 1,
+    // `it` equals max_iter when the loop ran out without converging.
+    _["iterations"] = converged ? it + 1 : it,
     _["converged"] = converged,
     _["residual"] = residual,
     _["backend"] = "sparse_csr_scan"
@@ -576,7 +578,8 @@ Rcpp::List uot_ti_sinkhorn_kl_sparse_csr_csc_cpp(const Rcpp::IntegerVector& row_
     _["lambda"] = lambda,
     _["f"] = f,
     _["g"] = g,
-    _["iterations"] = it + 1,
+    // `it` equals max_iter when the loop ran out without converging.
+    _["iterations"] = converged ? it + 1 : it,
     _["converged"] = converged,
     _["residual"] = residual,
     _["backend"] = "sparse_csr_csc"

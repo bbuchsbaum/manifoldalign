@@ -2,6 +2,8 @@
 #include <cmath>
 #include <limits>
 #include <vector>
+#include <utility>
+#include <algorithm>
 
 // [[Rcpp::depends(RcppArmadillo)]]
 
@@ -23,8 +25,9 @@ using namespace arma;
 //' @param F Optional source features (n x D).
 //' @param G Optional template features (m x D).
 //' @param lambda_feat Weight for feature distance-squared term.
-//' @param max_dist Optional maximum distance threshold; edges with
-//'   `nn_dists > max_dist` are dropped.
+//' @param max_dist Maximum distance threshold; edges with
+//'   `nn_dists > max_dist` are dropped. The default `NA` (like `Inf`) keeps
+//'   all edges.
 //' @param extra_i Optional 1-based row indices for additional edges.
 //' @param extra_j Optional 1-based column indices for additional edges.
 //' @param extra_dists Optional distances for additional edges (aligned to
@@ -38,7 +41,10 @@ using namespace arma;
 //' @param prior_sigma Optional positive scale (in the units of `Y_template`).
 //'   When finite, the prior penalty uses `||y_j - y_pref||^2 / prior_sigma^2`.
 //' @return A list with CSR fields `row_ptr`, `col_idx`, `cost` and CSC fields
-//'   `col_ptr`, `row_idx`, `cost_csc`, plus dimensions.
+//'   `col_ptr`, `row_idx`, `cost_csc`, plus dimensions. Within each row the
+//'   edges are sorted by column; duplicate `(i, j)` edges (for example a kNN
+//'   edge that is also supplied through `extra_i`/`extra_j`) are merged into a
+//'   single edge that keeps the smallest cost.
 //' @export
 // [[Rcpp::export]]
 Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx,
@@ -48,7 +54,7 @@ Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx,
                                         Rcpp::Nullable<arma::mat> F = R_NilValue,
                                         Rcpp::Nullable<arma::mat> G = R_NilValue,
                                         double lambda_feat = 0.0,
-                                        double max_dist = std::numeric_limits<double>::infinity(),
+                                        double max_dist = NA_REAL,
                                         Rcpp::Nullable<Rcpp::IntegerVector> extra_i = R_NilValue,
                                         Rcpp::Nullable<Rcpp::IntegerVector> extra_j = R_NilValue,
                                         Rcpp::Nullable<Rcpp::NumericVector> extra_dists = R_NilValue,
@@ -66,8 +72,11 @@ Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx,
   if (!std::isfinite(lambda_coord) || lambda_coord < 0.0) stop("lambda_coord must be >= 0");
   if (!std::isfinite(lambda_feat) || lambda_feat < 0.0) stop("lambda_feat must be >= 0");
   if (!std::isfinite(lambda_prior) || lambda_prior < 0.0) stop("lambda_prior must be >= 0");
-  if (!(std::isfinite(max_dist) || std::isinf(max_dist)) || max_dist <= 0.0) {
-    stop("max_dist must be a positive finite value or Inf");
+  if (ISNA(max_dist)) {
+    max_dist = std::numeric_limits<double>::infinity();  // default: no threshold
+  }
+  if (std::isnan(max_dist) || max_dist <= 0.0) {
+    stop("max_dist must be a positive finite value, Inf, or NA");
   }
 
   bool have_feat = (F.isNotNull() && G.isNotNull() && lambda_feat > 0.0);
@@ -124,71 +133,6 @@ Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx,
     }
   }
 
-  // First pass: count nnz per row/column (after filtering).
-  std::vector<int> row_counts(n_rows, 0);
-  std::vector<int> col_counts(n_cols, 0);
-
-  for (int i = 0; i < n_rows; ++i) {
-    for (int t = 0; t < k; ++t) {
-      int j = nn_idx(i, t);
-      if (IntegerVector::is_na(j) || j <= 0) continue;
-      if (j > n_cols) stop("nn_idx contains index > n_cols");
-      double d = nn_dists(i, t);
-      if (!std::isfinite(d)) continue;
-      if (d > max_dist) continue;
-      row_counts[i] += 1;
-      col_counts[j - 1] += 1;
-    }
-  }
-
-  std::vector<int> extra_row_counts(n_rows, 0);
-  std::vector<int> extra_i0;
-  std::vector<int> extra_j0;
-  std::vector<double> extra_d0;
-  if (have_extra) {
-    extra_i0.reserve(extra_i_vec.size());
-    extra_j0.reserve(extra_i_vec.size());
-    extra_d0.reserve(extra_i_vec.size());
-    for (R_xlen_t e = 0; e < extra_i_vec.size(); ++e) {
-      int ii = extra_i_vec[e];
-      int jj = extra_j_vec[e];
-      if (IntegerVector::is_na(ii) || IntegerVector::is_na(jj)) continue;
-      if (ii <= 0 || ii > n_rows) stop("extra_i out of bounds");
-      if (jj <= 0 || jj > n_cols) stop("extra_j out of bounds");
-      double d = extra_d_vec[e];
-      if (!std::isfinite(d)) continue;
-      if (d > max_dist) continue;
-      int i0 = ii - 1;
-      int j0 = jj - 1;
-      extra_row_counts[i0] += 1;
-      col_counts[j0] += 1;
-      extra_i0.push_back(i0);
-      extra_j0.push_back(j0);
-      extra_d0.push_back(d);
-    }
-  }
-
-  Rcpp::IntegerVector row_ptr(n_rows + 1);
-  row_ptr[0] = 0;
-  for (int i = 0; i < n_rows; ++i) {
-    row_ptr[i + 1] = row_ptr[i] + row_counts[i] + extra_row_counts[i];
-  }
-  const int nnz_total = row_ptr[n_rows];
-
-  Rcpp::IntegerVector col_ptr(n_cols + 1);
-  col_ptr[0] = 0;
-  for (int j = 0; j < n_cols; ++j) {
-    col_ptr[j + 1] = col_ptr[j] + col_counts[j];
-  }
-
-  Rcpp::IntegerVector col_idx(nnz_total);
-  Rcpp::NumericVector cost(nnz_total);
-
-  std::vector<int> row_next(n_rows);
-  for (int i = 0; i < n_rows; ++i) {
-    row_next[i] = row_ptr[i];
-  }
-
   auto compute_cost = [&](int i0, int j0, double d) -> double {
     double c = 0.0;
     if (lambda_coord > 0.0) {
@@ -217,30 +161,72 @@ Rcpp::List uot_build_sparse_cost_knn_cpp(const Rcpp::IntegerMatrix& nn_idx,
     return c;
   };
 
-  // Second pass: fill CSR from nn matrices.
+  // Collect the edges of every row (kNN edges and extra edges), then merge
+  // duplicate (i, j) pairs so that each edge appears once; otherwise the
+  // softmin/log-sum-exp reductions in the solvers would count it twice.
+  // Duplicates keep the smallest cost.
+  typedef std::pair<int, double> Edge;  // (0-based column, cost)
+  std::vector<std::vector<Edge> > row_edges(n_rows);
   for (int i = 0; i < n_rows; ++i) {
+    row_edges[i].reserve(k);
     for (int t = 0; t < k; ++t) {
       int j = nn_idx(i, t);
       if (IntegerVector::is_na(j) || j <= 0) continue;
+      if (j > n_cols) stop("nn_idx contains index > n_cols");
       double d = nn_dists(i, t);
       if (!std::isfinite(d)) continue;
       if (d > max_dist) continue;
-      int pos = row_next[i]++;
-      int j0 = j - 1;
-      col_idx[pos] = j;
-      cost[pos] = compute_cost(i, j0, d);
+      row_edges[i].push_back(Edge(j - 1, compute_cost(i, j - 1, d)));
+    }
+  }
+  if (have_extra) {
+    for (R_xlen_t e = 0; e < extra_i_vec.size(); ++e) {
+      int ii = extra_i_vec[e];
+      int jj = extra_j_vec[e];
+      if (IntegerVector::is_na(ii) || IntegerVector::is_na(jj)) continue;
+      if (ii <= 0 || ii > n_rows) stop("extra_i out of bounds");
+      if (jj <= 0 || jj > n_cols) stop("extra_j out of bounds");
+      double d = extra_d_vec[e];
+      if (!std::isfinite(d)) continue;
+      if (d > max_dist) continue;
+      row_edges[ii - 1].push_back(Edge(jj - 1, compute_cost(ii - 1, jj - 1, d)));
     }
   }
 
-  // Fill CSR from extra edges.
-  if (!extra_i0.empty()) {
-    for (size_t e = 0; e < extra_i0.size(); ++e) {
-      int i0 = extra_i0[e];
-      int j0 = extra_j0[e];
-      double d = extra_d0[e];
-      int pos = row_next[i0]++;
-      col_idx[pos] = j0 + 1;
-      cost[pos] = compute_cost(i0, j0, d);
+  std::vector<int> col_counts(n_cols, 0);
+  Rcpp::IntegerVector row_ptr(n_rows + 1);
+  row_ptr[0] = 0;
+  for (int i = 0; i < n_rows; ++i) {
+    std::vector<Edge>& edges = row_edges[i];
+    std::sort(edges.begin(), edges.end());  // by column, then by cost
+    std::size_t w = 0;
+    for (std::size_t r = 0; r < edges.size(); ++r) {
+      if (w > 0 && edges[w - 1].first == edges[r].first) {
+        continue;  // sorted: the first copy has the smallest cost
+      }
+      edges[w++] = edges[r];
+    }
+    edges.resize(w);
+    for (std::size_t r = 0; r < edges.size(); ++r) {
+      col_counts[edges[r].first] += 1;
+    }
+    row_ptr[i + 1] = row_ptr[i] + static_cast<int>(edges.size());
+  }
+  const int nnz_total = row_ptr[n_rows];
+
+  Rcpp::IntegerVector col_ptr(n_cols + 1);
+  col_ptr[0] = 0;
+  for (int j = 0; j < n_cols; ++j) {
+    col_ptr[j + 1] = col_ptr[j] + col_counts[j];
+  }
+
+  Rcpp::IntegerVector col_idx(nnz_total);
+  Rcpp::NumericVector cost(nnz_total);
+  for (int i = 0; i < n_rows; ++i) {
+    int pos = row_ptr[i];
+    for (std::size_t r = 0; r < row_edges[i].size(); ++r, ++pos) {
+      col_idx[pos] = row_edges[i][r].first + 1;  // 1-based
+      cost[pos] = row_edges[i][r].second;
     }
   }
 
