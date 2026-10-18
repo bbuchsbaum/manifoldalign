@@ -11,7 +11,11 @@
 #'   based on sample order.
 #'   Each matrix should be n_i x n_j sparse matrix indicating correspondences 
 #'   between modality i and j.
-#' @param preproc Preprocessing function to apply to the data (default: center())
+#' @param preproc A multivarious pre-processor (default: \code{center()}), a
+#'   list with one per domain, a plain function, or \code{NULL}. Pre-processors
+#'   are fitted on each domain and stored in \code{result$preproc}
+#'   (concatenated by feature block) for out-of-sample projection; a plain
+#'   function is applied to the training data only and is not stored.
 #' @param ncomp Number of coupled eigenvectors to extract (default: 10)
 #' @param ncomp_per_domain Number of eigenvectors per domain to compute before 
 #'   coupling (default: 20). Must be >= ncomp.
@@ -142,92 +146,14 @@ coupled_diagonalization.hyperdesign <- function(data,
     })
   }
   
-  # Apply preprocessing to each domain
-  pdata <- data
-  nb <- m
+  # Fit per-domain preprocessing; stateful pre-processors are concatenated by
+  # feature block (the column index space used by project()).
+  domains <- lapply(unclass(data), function(d) list(x = as.matrix(d$x), design = d$design))
+  prepped <- .fit_domain_preproc(domains, preproc)
+  pdata <- prepped$pdata
+  names(pdata) <- names(data)
+  proc <- prepped$proc
 
-  if (is.null(preproc)) {
-    proclist <- rep(list(NULL), nb)
-    for (i in seq_len(nb)) {
-      pdata[[i]]$x <- as.matrix(pdata[[i]]$x)
-    }
-  } else {
-    is_stateful_preproc <- inherits(preproc, "prepper") || inherits(preproc, "pre_processor")
-    broadcast_preproc <- is.function(preproc) || is_stateful_preproc
-    if (broadcast_preproc) {
-      if (is_stateful_preproc) {
-        preproc <- replicate(
-          nb,
-          unserialize(serialize(preproc, connection = NULL)),
-          simplify = FALSE
-        )
-      } else {
-        preproc <- rep(list(preproc), nb)
-      }
-    } else if (is.list(preproc) && length(preproc) != nb) {
-      stop(
-        "Length of `preproc` list (",
-        length(preproc),
-        ") must match number of domains (",
-        nb,
-        ").",
-        call. = FALSE
-      )
-    }
-
-    proclist <- vector("list", nb)
-    for (i in seq_len(nb)) {
-      Xi <- as.matrix(data[[i]]$x)
-      pre_i <- preproc[[i]]
-
-      if (is.null(pre_i)) {
-        pdata[[i]]$x <- Xi
-        proclist[[i]] <- NULL
-        next
-      }
-
-      # Functions are applied directly (avoid deprecated multivarious::prep()).
-      if (is.function(pre_i)) {
-        Xi_tf <- pre_i(Xi)
-        pdata[[i]]$x <- Xi_tf
-        proclist[[i]] <- pre_i
-        next
-      }
-
-      if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
-        pre_i <- unserialize(serialize(pre_i, connection = NULL))
-      }
-
-      if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
-        ft <- multivarious::fit_transform(pre_i, Xi)
-        pdata[[i]]$x <- ft$transformed
-        proclist[[i]] <- ft$preproc
-      } else {
-        # Back-compat for older multivarious versions
-        templ <- multivarious::prep(pre_i)
-        Xi_tf <- multivarious::init_transform(templ, Xi)
-        pdata[[i]]$x <- Xi_tf
-        proc_attr <- attr(Xi_tf, "preproc")
-        proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
-      }
-    }
-  }
-
-  names(proclist) <- names(pdata)
-  
-  # Get sample block indices using the exported function
-  sample_block_idx <- block_indices(pdata)
-  
-  sample_blocks_list <- lapply(seq_len(nrow(sample_block_idx)), function(i) {
-    out <- as.integer(sample_block_idx[i, ])
-    names(out) <- colnames(sample_block_idx)
-    out
-  })
-  names(sample_blocks_list) <- names(pdata)
-  
-  # This call should now succeed.
-  proc <- multivarious::concat_pre_processors(proclist, sample_blocks_list)
-  
   feature_blocks <- feature_block_indices(pdata)
   
   # Extract data matrices
@@ -302,31 +228,18 @@ coupled_diagonalization.hyperdesign <- function(data,
       L <- Matrix::forceSymmetric(Matrix::Diagonal(nrow(W)) - Dm12 %*% W %*% Dm12)
       
       # Compute eigendecomposition
-      # Request one additional eigenpair so we can drop the trivial λ≈0 mode
+      # Request one additional eigenpair so we can drop the trivial λ≈0 mode.
+      # The normalized Laplacian is PSD, so the smallest-algebraic ("SA") end
+      # is the low-frequency end; RSpectra's "SM" mode needs many more
+      # iterations for the same pairs.
       n_eigs_total <- min(ncomp_per_domain + 1L, nrow(L))
-      eig <- tryCatch({
-        if (requireNamespace("RSpectra", quietly = TRUE) && n_eigs_total < nrow(L)) {
-          RSpectra::eigs_sym(L, n_eigs_total, which = "SM")
-        } else if (n_eigs_total < nrow(L) / 2 && nrow(L) > 50) {
-          PRIMME::eigs_sym(L, NEig = n_eigs_total, which = "SA",
-                          method = "PRIMME_DEFAULT_MIN_MATVECS")
-        } else {
-          eig_full <- eigen(as.matrix(L), symmetric = TRUE)
-          idx <- order(eig_full$values)[seq_len(n_eigs_total)]
-          list(
-            vectors = eig_full$vectors[, idx, drop = FALSE],
-            values = eig_full$values[idx]
-          )
-        }
-      }, error = function(e) {
-        if (verbose) message("Sparse eigensolver failed, using base eigen: ", e$message)
-        eig_full <- eigen(as.matrix(L), symmetric = TRUE)
-        idx <- order(eig_full$values)[seq_len(n_eigs_total)]
-        list(
-          vectors = eig_full$vectors[, idx, drop = FALSE],
-          values = eig_full$values[idx]
-        )
-      })
+      eig <- .sym_eigs(L, n_eigs_total, which = "SA", backend = "rspectra",
+                       tol = 1e-10, maxitr = 1000L,
+                       context = paste0("Eigen-decomposition for domain ", domain_name))
+      if (verbose && !identical(eig$backend, "rspectra")) {
+        message("Domain ", domain_name, ": eigenpairs computed with the ",
+                eig$backend, " solver.")
+      }
       
       ord <- order(eig$values)
       vals <- eig$values[ord]
@@ -940,133 +853,4 @@ compute_cost_cd <- function(A,
 coupled_diagonalization.default <- function(data, ...) {
   stop("No applicable method for coupled_diagonalization. ",
        "data must be a hyperdesign object.", call. = FALSE)
-}
-
-# For backward compatibility - keep the original function as internal
-#' @keywords internal
-coupled_diagonalisation_internal <- function(
-    X_list,                # list of data matrices (modality i: n_i × d_i)
-    F_list,                # list of correspondence matrices (n_i × q)
-    k        = 10,         # # joint eigenvectors wanted
-    kprime   = 20,         # # low-frequency eigenvectors per modality (≥k)
-    mu_c     = 1,          # coupling weight
-    knn      = 10,         # k-NN for graph
-    sigma    = NULL,       # Gaussian σ (NULL => median NN dist)
-    maxIter  = 200,        # outer iterations
-    step0    = 0.3,        # base step size
-    tol      = 1e-6) {     # relative cost tolerance
-  
-  # This is the original implementation preserved for reference
-  # Users should use the new coupled_diagonalization() function instead
-  
-  m <- length(X_list)
-  stopifnot(length(F_list) == m, kprime >= k)
-  
-  # Build Laplacians and get first k′ eigenpairs
-  Ubar    <- vector("list", m)
-  Lambda  <- vector("list", m)
-  FiUbar  <- vector("list", m)
-  
-  for (i in seq_len(m)) {
-    # Use FNN for backward compatibility in internal function
-    nn <- FNN::get.knn(X_list[[i]], k = knn)
-    n  <- nrow(X_list[[i]])
-    i_idx  <- rep(seq_len(n), each = knn)
-    j_idx  <- as.vector(nn$nn.index)
-    d2 <- as.vector(nn$nn.dist)^2
-    
-    sigma_i <- sigma
-    if (is.null(sigma_i)) {
-      sigma_i <- median(sqrt(d2))
-    }
-    
-    w  <- exp(-d2 / (2 * sigma_i^2))
-    W  <- Matrix::sparseMatrix(i = c(i_idx, j_idx), j = c(j_idx, i_idx), 
-                              x = c(w, w), dims = c(n, n))
-    diag(W) <- 0
-    
-    # Laplacian
-    d <- rowSums(W)
-    d[d == 0] <- 1
-    Dm12 <- Matrix::Diagonal(x = 1 / sqrt(d))
-    L <- Matrix::Diagonal(n = nrow(W)) - Dm12 %*% W %*% Dm12
-    
-    eig <- RSpectra::eigs_sym(L, kprime, which = "SM")
-    Ubar[[i]]   <- eig$vectors
-    Lambda[[i]] <- eig$values
-    FiUbar[[i]] <- crossprod(F_list[[i]], Ubar[[i]])
-  }
-  
-  # Initialize A_i
-  A <- lapply(seq_len(m), function(i) {
-    M <- matrix(0, kprime, k)
-    M[seq_len(k), ] <- diag(k)
-    M
-  })
-  
-  # Cost function
-  cost_function <- function(A) {
-    cost_d <- 0
-    cost_c <- 0
-    for (i in seq_len(m)) {
-      Ai <- A[[i]]
-      Li_diag <- diag(Lambda[[i]])
-      Mi <- crossprod(Ai, Li_diag %*% Ai)
-      cost_d <- cost_d + sum((Mi - diag(diag(Mi)))^2)
-    }
-    
-    for (i in 1:(m - 1)) {
-      for (j in (i + 1):m) {
-        diff <- FiUbar[[i]] %*% A[[i]] - FiUbar[[j]] %*% A[[j]]
-        cost_c <- cost_c + sum(diff * diff)
-      }
-    }
-    cost_d + mu_c * cost_c
-  }
-  
-  # Gradient
-  gradient_block <- function(idx, A) {
-    Ai      <- A[[idx]]
-    Li_diag <- diag(Lambda[[idx]])
-    Mi      <- crossprod(Ai, Li_diag %*% Ai)
-    S       <- Mi - diag(diag(Mi))
-    
-    grad_diag <- 4 * (Li_diag %*% Ai %*% S)
-    
-    accum <- matrix(0, nrow = kprime, ncol = k)
-    for (j in seq_len(m)) {
-      if (j != idx) {
-        diff   <- FiUbar[[idx]] %*% Ai - FiUbar[[j]] %*% A[[j]]
-        accum  <- accum + crossprod(FiUbar[[idx]], diff)
-      }
-    }
-    grad_coupling <- 2 * mu_c * accum
-    
-    grad_diag + grad_coupling
-  }
-  
-  # Optimization
-  cost_old <- Inf
-  for (iter in seq_len(maxIter)) {
-    for (i in seq_len(m)) {
-      grad_i <- gradient_block(i, A)
-      gnorm  <- sqrt(sum(grad_i * grad_i))
-      eta    <- step0 / max(gnorm, 1e-9)
-      A_new  <- A[[i]] - eta * grad_i
-      A[[i]] <- qr.Q(qr(A_new))[, seq_len(k)]
-    }
-    
-    cost_new <- cost_function(A)
-    
-    if ((cost_old - cost_new) / (abs(cost_old) + 1e-9) < tol) {
-      message("Convergence criterion met.")
-      break
-    }
-    cost_old <- cost_new
-  }
-  
-  # Final coupled bases
-  V <- lapply(seq_len(m), function(i) Ubar[[i]] %*% A[[i]])
-  names(V) <- paste0("modality_", seq_len(m))
-  invisible(V)
 }
