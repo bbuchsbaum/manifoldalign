@@ -58,29 +58,32 @@ benchmark_token_ot_graph_align_scalability <- function(
   for (s in seq_along(sizes)) {
     n <- sizes[[s]]
     for (r in seq_len(as.integer(n_reps))) {
-      set.seed(as.integer(seed) + s * 1009L + r * 17L)
-      X1 <- matrix(rnorm(n * as.integer(d)), n, as.integer(d))
-      perm21 <- sample.int(n)
-      map12 <- match(seq_len(n), perm21)
-      X2 <- X1[perm21, , drop = FALSE] + matrix(rnorm(n * as.integer(d), sd = noise_sd), n, as.integer(d))
+      # Data generation and fit run under a per-replicate seed; the caller's
+      # RNG state is restored afterwards.
+      .with_local_seed(as.integer(seed) + s * 1009L + r * 17L, {
+        X1 <- matrix(rnorm(n * as.integer(d)), n, as.integer(d))
+        perm21 <- sample.int(n)
+        map12 <- match(seq_len(n), perm21)
+        X2 <- X1[perm21, , drop = FALSE] + matrix(rnorm(n * as.integer(d), sd = noise_sd), n, as.integer(d))
 
-      hd <- as_hyperdesign(list(source = X1, target = X2))
-      ctrl <- token_ot_graph_align_control(
-        n_levels = n_levels,
-        prior_mode = prior_mode,
-        views = views,
-        candidate_k = candidate_k,
-        token_mode = token_mode,
-        verbose = FALSE
-      )
+        hd <- as_hyperdesign(list(source = X1, target = X2))
+        ctrl <- token_ot_graph_align_control(
+          n_levels = n_levels,
+          prior_mode = prior_mode,
+          views = views,
+          candidate_k = candidate_k,
+          token_mode = token_mode,
+          verbose = FALSE
+        )
 
-      if (isTRUE(verbose)) {
-        message("token_ot_graph_align benchmark: n=", n, " rep=", r)
-      }
+        if (isTRUE(verbose)) {
+          message("token_ot_graph_align benchmark: n=", n, " rep=", r)
+        }
 
-      t0 <- proc.time()[[3]]
-      fit <- token_ot_graph_align(hd, ncomp = min(10L, as.integer(d)), control = ctrl)
-      runtime <- proc.time()[[3]] - t0
+        t0 <- proc.time()[[3]]
+        fit <- token_ot_graph_align(hd, ncomp = min(10L, as.integer(d)), control = ctrl)
+        runtime <- proc.time()[[3]] - t0
+      })
 
       assignment <- fit$assignment
       acc <- NA_real_

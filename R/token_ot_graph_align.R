@@ -14,14 +14,21 @@
 #'   providing anchor identifiers (shared values indicate known correspondences).
 #'   Use `NULL` for unsupervised alignment.
 #' @param preproc Optional preprocessing (default: `multivarious::center()`).
-#' @param ncomp Integer number of components stored in `s` (scores) and `v`
-#'   (loadings). Used for the baseline embedding view when available.
+#' @param ncomp Integer number of components stored in `s` and `v`. Used for
+#'   the baseline embedding view when available.
 #' @param control Control settings from [token_ot_graph_align_control()].
 #' @param ... Additional arguments (reserved for future extensions).
 #'
 #' @return A `multiblock_biprojector` with subclass `token_ot_graph_align`.
-#'   Extras include `transport_plan` (sparse coupling), `assignment` (greedy or
-#'   Hungarian), and `diagnostics`.
+#'   The alignment itself is carried by the extras `transport_plan` (sparse
+#'   coupling), `assignment` (greedy or Hungarian) and `diagnostics`
+#'   (`objective` is the unscaled transport cost; `objective_scaled` the
+#'   solver-internal median-scaled value). `s` holds each domain's own baseline
+#'   embedding (the per-domain Laplacian eigenmap, or the first view), stacked
+#'   domain 1 then domain 2. These coordinates are computed independently per
+#'   domain and are \emph{not} aligned to a common frame, so rows of `s` from
+#'   different domains must not be compared directly; `v` holds the matching
+#'   descriptive loadings \eqn{X_i^T s_i}.
 #' @export
 token_ot_graph_align <- function(data, ...) {
   UseMethod("token_ot_graph_align")
@@ -308,18 +315,10 @@ resolve_token_ot_graph_align_control <- function(control) {
   if (n < 3L) stop("Each domain must have at least 3 rows.", call. = FALSE)
   k_use <- min(as.integer(knn), n - 1L)
   sigma_use <- if (is.null(sigma)) {
-    tryCatch({
-      old <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) get(".Random.seed", envir = .GlobalEnv) else NULL
-      on.exit({
-        if (is.null(old)) {
-          if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) rm(".Random.seed", envir = .GlobalEnv)
-        } else {
-          assign(".Random.seed", old, envir = .GlobalEnv)
-        }
-      }, add = TRUE)
-      set.seed(as.integer(seed))
-      choose_sigma(X)
-    }, error = function(e) 0.5)
+    tryCatch(
+      .with_local_seed(as.integer(seed), choose_sigma(X)),
+      error = function(e) 0.5
+    )
   } else {
     as.numeric(sigma)
   }
@@ -747,16 +746,11 @@ resolve_token_ot_graph_align_control <- function(control) {
   if (k >= n) {
     return(seq_len(n))
   }
-  old <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) get(".Random.seed", envir = .GlobalEnv) else NULL
-  on.exit({
-    if (is.null(old)) {
-      if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) rm(".Random.seed", envir = .GlobalEnv)
-    } else {
-      assign(".Random.seed", old, envir = .GlobalEnv)
-    }
-  }, add = TRUE)
-  set.seed(as.integer(seed))
-  km <- stats::kmeans(scale(X, center = TRUE, scale = FALSE), centers = as.integer(k), nstart = 1, iter.max = 50)
+  km <- .with_local_seed(
+    as.integer(seed),
+    stats::kmeans(scale(X, center = TRUE, scale = FALSE), centers = as.integer(k),
+                  nstart = 1, iter.max = 50)
+  )
   as.integer(km$cluster)
 }
 

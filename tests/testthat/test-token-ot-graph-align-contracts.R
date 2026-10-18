@@ -436,3 +436,41 @@ test_that("benchmark_graph_alignment_methods runs (gpca only)", {
   expect_true(all(is.finite(res$top1_accuracy)))
   expect_true(all(is.finite(res$coverage)))
 })
+
+test_that("token-OT pair_loss reports the unscaled transport cost", {
+  set.seed(20261018)
+  n <- 20
+  d <- 3
+  X1 <- matrix(rnorm(n * d), n, d)
+  perm21 <- sample(n)
+  X2 <- X1[perm21, , drop = FALSE] + matrix(rnorm(n * d, sd = 0.05), n, d)
+  ctrl <- token_ot_graph_align_control(views = "raw", candidate_k = 6L,
+                                       token_mode = "view_only", verbose = FALSE)
+  algo <- token_ot_graph_aligner()
+
+  fit <- fit_pair(algo, X1, X2, ncomp = 3L, control = ctrl)
+  dg <- fit$diagnostics
+  expect_identical(pair_loss(fit), as.numeric(dg$objective))
+  # The scaled objective divides by a per-pair cost scale; it is not the loss.
+  expect_false(isTRUE(all.equal(pair_loss(fit), as.numeric(dg$objective_scaled))))
+  expect_true(is.finite(pair_loss(fit)))
+})
+
+test_that("token-OT internal seeding restores the caller's RNG state", {
+  set.seed(5)
+  X <- matrix(rnorm(60), 20, 3)
+  set.seed(77)
+  ref <- runif(3)
+
+  set.seed(77)
+  invisible(manifoldalign:::.kmeans_membership(X, 4, seed = 11))
+  expect_identical(runif(3), ref)
+
+  set.seed(77)
+  invisible(manifoldalign:::.build_knn_graph(X, knn = 4, seed = 11))
+  expect_identical(runif(3), ref)
+
+  # Deterministic given the internal seed.
+  expect_identical(manifoldalign:::.kmeans_membership(X, 4, seed = 11),
+                   manifoldalign:::.kmeans_membership(X, 4, seed = 11))
+})
