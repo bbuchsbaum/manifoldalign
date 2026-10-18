@@ -132,26 +132,68 @@
   do.call(order, c(list(label_key), columns, list(method = "radix", na.last = TRUE)))
 }
 
-.rapid_weighted_prototype_view <- function(embedding, structure, attribute,
-                                           control) {
+# Weighted, column-standardized selection view over the embedding, structure,
+# and attribute blocks. Without `reference`, each block is standardized by its
+# own rows and the column statistics are returned. With `reference` (the
+# statistics of a previous call), the same centering and scaling is applied,
+# so that rows of a different population (for example prototypes) are placed
+# on the scale of the reference population (the nodes).
+.rapid_weighted_prototype_view_state <- function(embedding, structure,
+                                                 attribute, control,
+                                                 reference = NULL) {
   blocks <- list()
-  add_block <- function(x, weight) {
-    if (!ncol(x) || weight <= 0) return(NULL)
-    sqrt(weight) * .rapid_scale_dense(x, drop_constant = FALSE)$view
+  stats <- list()
+  inputs <- list(embedding = embedding, structure = structure,
+                 attribute = attribute)
+  for (name in names(inputs)) {
+    x <- inputs[[name]]
+    weight <- control[[paste0(name, "_weight")]]
+    if (is.null(x) || !ncol(x) || weight <= 0) next
+    if (is.null(reference)) {
+      scaled <- .rapid_scale_dense(x, drop_constant = FALSE)
+      view <- scaled$view
+      stats[[name]] <- list(center = scaled$center, scale = scaled$scale)
+    } else {
+      stats[[name]] <- reference[[name]]
+      view <- sweep(as.matrix(x), 2L, stats[[name]]$center, "-")
+      view <- sweep(view, 2L, stats[[name]]$scale, "/")
+      view[!is.finite(view)] <- 0
+    }
+    blocks[[name]] <- sqrt(weight) * view
   }
-  blocks$embedding <- add_block(embedding, control$embedding_weight)
-  blocks$structure <- add_block(structure, control$structure_weight)
-  blocks$attribute <- add_block(attribute, control$attribute_weight)
-  blocks <- blocks[!vapply(blocks, is.null, logical(1))]
   if (!length(blocks)) {
     stop("Prototype initialization has no non-empty weighted view.", call. = FALSE)
   }
-  do.call(cbind, blocks)
+  list(view = do.call(cbind, blocks), stats = stats)
+}
+
+.rapid_weighted_prototype_view <- function(embedding, structure, attribute,
+                                           control) {
+  .rapid_weighted_prototype_view_state(
+    embedding, structure, attribute, control
+  )$view
+}
+
+# Node selection view, its standardization, and a canonical node order. Only
+# initialization and empty-prototype recovery need these; ordinary prototype
+# updates skip them because they sort every node.
+.rapid_prototype_selection <- function(observations) {
+  if (!is.null(observations$selection_view)) return(observations)
+  state <- .rapid_weighted_prototype_view_state(
+    observations$embedding, observations$structure, observations$attribute,
+    observations$control
+  )
+  observations$selection_view <- state$view
+  observations$selection_stats <- state$stats
+  observations$canonical_order <- .rapid_canonical_order(
+    state$view, observations$label
+  )
+  observations
 }
 
 .rapid_prototype_observations <- function(embeddings, labels = NULL,
                                           structures = NULL, attributes = NULL,
-                                          control = NULL) {
+                                          control = NULL, selection = TRUE) {
   control <- .rapid_resolve_prototype_control(control)
   embedding_domains <- .rapid_as_domain_matrices(embeddings, "embeddings")
   n_by_domain <- vapply(embedding_domains, nrow, integer(1))
@@ -171,25 +213,24 @@
   if (control$unknown_level %in% label[!is.na(label)]) {
     stop("`unknown_level` collides with an observed class label.", call. = FALSE)
   }
-  selection_view <- .rapid_weighted_prototype_view(
-    embedding, structure, attribute, control
-  )
-  canonical_order <- .rapid_canonical_order(selection_view, label)
   domain_index <- rep(seq_along(n_by_domain), n_by_domain)
   row_index <- sequence(n_by_domain)
 
-  list(
+  observations <- list(
     embedding = embedding,
     structure = structure,
     attribute = attribute,
     label = label,
-    selection_view = selection_view,
-    canonical_order = canonical_order,
+    selection_view = NULL,
+    selection_stats = NULL,
+    canonical_order = NULL,
     domain_index = domain_index,
     row_index = row_index,
     n_by_domain = n_by_domain,
     control = control
   )
+  if (isTRUE(selection)) observations <- .rapid_prototype_selection(observations)
+  observations
 }
 
 .rapid_sqdist_to_centers <- function(X, centers) {
@@ -431,10 +472,16 @@
   recover <- head(empty, control$max_recoveries)
   retained <- setdiff(empty, recover)
   used <- integer(0)
-  current_view <- .rapid_weighted_prototype_view(
-    state$embedding, state$structure, state$attribute, control
-  )
+  observations <- .rapid_prototype_selection(observations)
   observation_view <- observations$selection_view
+  # Standardize prototypes with the node statistics, so node-to-prototype
+  # distances compare both populations on one scale.
+  current_view <- .rapid_weighted_prototype_view_state(
+    state$embedding, state$structure, state$attribute, control,
+    reference = observations$selection_stats
+  )$view
+  canonical_rank <- integer(nrow(observation_view))
+  canonical_rank[observations$canonical_order] <- seq_len(nrow(observation_view))
 
   for (k in recover) {
     candidates <- .rapid_recovery_candidates(
@@ -456,8 +503,6 @@
     } else {
       score <- rowSums(observation_view[candidates, , drop = FALSE]^2)
     }
-    canonical_rank <- integer(nrow(observation_view))
-    canonical_rank[observations$canonical_order] <- seq_len(nrow(observation_view))
     pool <- which(score == max(score))
     chosen <- candidates[pool[which.min(canonical_rank[candidates[pool]])]]
     state$embedding[k, ] <- observations$embedding[chosen, ]
@@ -491,7 +536,7 @@
     .rapid_resolve_prototype_control(control)
   }
   observations <- .rapid_prototype_observations(
-    embeddings, labels, structures, attributes, control
+    embeddings, labels, structures, attributes, control, selection = FALSE
   )
   K <- nrow(state$embedding)
   expected_dims <- c(

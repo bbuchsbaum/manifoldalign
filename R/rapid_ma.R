@@ -226,13 +226,31 @@
   )
 }
 
-.rapid_blend_map <- function(old, new, step) {
+# Nearest orthogonal matrix in Frobenius norm (orthogonal polar factor).
+.rapid_polar_factor <- function(A) {
+  decomposition <- svd(A)
+  decomposition$u %*% t(decomposition$v)
+}
+
+# Damped map update. A convex blend of two orthogonal matrices is not
+# orthogonal (identity blended with a 90 degree rotation at step 0.75 has
+# A'A = 0.625 I), so orthogonal maps are retracted by their polar factor. The
+# map keeps the requested family as its type and records how it was updated.
+.rapid_blend_map <- function(old, new, step, map_type = new$type) {
+  coef <- (1 - step) * old$coef + step * new$coef
+  update <- if (step >= 1) "full" else "convex_blend"
+  if (identical(map_type, "orthogonal") && step < 1) {
+    coef <- .rapid_polar_factor(coef)
+    update <- "polar_retracted_blend"
+  }
   list(
-    coef = (1 - step) * old$coef + step * new$coef,
+    coef = coef,
     intercept = (1 - step) * old$intercept + step * new$intercept,
-    type = new$type,
+    type = map_type,
     status = new$status,
-    effective_rows = new$effective_rows
+    effective_rows = new$effective_rows,
+    step = step,
+    update = update
   )
 }
 
@@ -525,7 +543,7 @@
       prototype_step <- control$prototype_step * damping
       candidate_maps <- Map(
         .rapid_blend_map, maps, fitted_maps,
-        MoreArgs = list(step = map_step)
+        MoreArgs = list(step = map_step, map_type = control$map_type)
       )
       candidate_scores <- Map(.rapid_apply_latent_map, base_scores, candidate_maps)
       candidate_prototypes <- .rapid_update_prototypes(

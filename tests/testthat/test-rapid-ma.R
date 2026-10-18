@@ -337,3 +337,48 @@ test_that("sparse domain matrices stay sparse and match the dense fit", {
     "Domain `bad`: features contain non-finite values"
   )
 })
+
+test_that("damped orthogonal maps stay orthogonal (B3.22)", {
+  identity <- manifoldalign:::.rapid_identity_map(2L)
+  rotation <- list(
+    coef = matrix(c(0, 1, -1, 0), 2L), intercept = c(1, -1),
+    type = "orthogonal", status = "ok", effective_rows = 5L
+  )
+  blended <- manifoldalign:::.rapid_blend_map(
+    identity, rotation, step = 0.75, map_type = "orthogonal"
+  )
+  # The convex blend 0.25 I + 0.75 R(90) has A'A = 0.625 I; its polar factor
+  # is the rotation by atan2(0.75, 0.25).
+  angle <- atan2(0.75, 0.25)
+  oracle <- matrix(c(cos(angle), sin(angle), -sin(angle), cos(angle)), 2L)
+  expect_equal(blended$coef, oracle, tolerance = 1e-12)
+  expect_equal(crossprod(blended$coef), diag(2L), tolerance = 1e-12)
+  expect_equal(blended$intercept, c(0.75, -0.75))
+  expect_identical(blended$type, "orthogonal")
+  expect_identical(blended$update, "polar_retracted_blend")
+  expect_identical(blended$step, 0.75)
+
+  ridge <- manifoldalign:::.rapid_blend_map(
+    identity, utils::modifyList(rotation, list(type = "ridge")),
+    step = 0.75, map_type = "ridge"
+  )
+  expect_equal(ridge$coef, 0.25 * diag(2L) + 0.75 * rotation$coef)
+  expect_identical(ridge$update, "convex_blend")
+  full <- manifoldalign:::.rapid_blend_map(
+    identity, rotation, step = 1, map_type = "orthogonal"
+  )
+  expect_identical(full$coef, rotation$coef)
+  expect_identical(full$update, "full")
+
+  d1 <- make_rapid_domain(36L, 6L, 1607L)
+  d2 <- make_rapid_domain(33L, 7L, 1608L)
+  fit <- rapid_ma_fit_list(
+    list(a = d1$X, b = d2$X),
+    labels = list(sparse_labels(d1$truth, 3L), sparse_labels(d2$truth, 3L)),
+    ncomp = 4L,
+    control = list(max_iter = 3L, min_iter = 1L, map_type = "orthogonal")
+  )
+  for (map in fit$domain_maps) {
+    expect_equal(crossprod(map$coef), diag(4L), tolerance = 1e-10)
+  }
+})

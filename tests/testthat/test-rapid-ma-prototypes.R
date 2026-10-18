@@ -256,3 +256,62 @@ test_that("prototype validation rejects silent dimensional and class drift", {
     "collides"
   )
 })
+
+test_that("empty-prototype recovery standardizes prototypes with node statistics", {
+  nodes <- matrix(
+    c(-5.4, -3, 1.2, 4.5, 7.3, -0.1, -2.2, -0.3, 0.9, 0.7),
+    nrow = 5L
+  )
+  active <- c(4.1, -0.3)
+  empty <- c(7.1, 1.5)
+  control <- list(unknown_prototypes = 2L)
+  bank <- rapid_initialize_prototypes(list(nodes), control = control)
+  bank$embedding <- rbind(active, empty)
+  bank$mass <- c(1, 0)
+  observations <- manifoldalign:::.rapid_prototype_observations(
+    list(nodes), control = control, selection = FALSE
+  )
+  expect_null(observations$selection_view)
+  recovered <- manifoldalign:::.rapid_recover_empty_prototypes(
+    bank, observations, empty = 2L, control = bank$control
+  )
+
+  # Independent oracle: farthest node from the active prototype after both
+  # are standardized with the node mean and standard deviation.
+  z <- scale(nodes)
+  reference <- (active - attr(z, "scaled:center")) / attr(z, "scaled:scale")
+  oracle <- which.max(rowSums(sweep(z, 2L, reference)^2))
+  expect_identical(unname(oracle), 2L)
+  expect_identical(recovered$recovered, 2L)
+  expect_equal(unname(recovered$state$embedding[2L, ]), nodes[oracle, ])
+})
+
+test_that("ordinary prototype updates do not build the node selection view", {
+  set.seed(1207)
+  X <- matrix(rnorm(40L * 3L), nrow = 40L)
+  labels <- rep(c("a", "b", NA), length.out = 40L)
+  bank <- rapid_initialize_prototypes(X, labels)
+  Q <- matrix(1 / 40, nrow(X), nrow(bank$embedding))
+  calls <- 0L
+  trace_env <- environment()
+  suppressMessages(trace(
+    ".rapid_canonical_order",
+    tracer = bquote(assign("calls", get("calls", envir = .(trace_env)) + 1L,
+                           envir = .(trace_env))),
+    print = FALSE,
+    where = asNamespace("manifoldalign")
+  ))
+  on.exit(
+    suppressMessages(untrace(".rapid_canonical_order",
+                             where = asNamespace("manifoldalign"))),
+    add = TRUE
+  )
+  updated <- rapid_update_prototypes(bank, Q, X, labels)
+  expect_identical(calls, 0L)
+  expect_identical(updated$diagnostics$n_recovered, 0L)
+
+  Q[, 2L] <- 0
+  emptied <- rapid_update_prototypes(bank, Q, X, labels)
+  expect_identical(calls, 1L)
+  expect_identical(emptied$diagnostics$recovered, 2L)
+})
