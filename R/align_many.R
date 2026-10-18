@@ -7,15 +7,48 @@
 #'
 #' If the adapter reports native multi-view support, dispatches to fit_many().
 #'
+#' @section Orientation:
+#' All transforms follow the contract documented in [new_align_transform()]:
+#' the edge transform `g_ij = relative_transform(fit_ij, "i", "j")` maps
+#' domain `i` onto domain `j`, and the returned `transforms[[i]]` maps domain
+#' `i` onto the consensus space, so that `embeddings[[i]] =
+#' apply_transform(transforms[[i]], domains[[i]])` agree across domains.
+#' Synchronisation, the optional `sync$refine$gpa` refinement and the
+#' diagnostics all solve or measure the same relation
+#' `compose_transform(g_ij, T_j) = T_i`.
+#'
 #' @param domains list of domain objects (often matrices), one per dataset
 #' @param algo an aligner object created by new_aligner() with adapter methods
-#' @param graph "auto" | "mst" | "complete" | "star"
-#' @param consensus "auto" | "sync" | "star" | "tree" (currently: "sync"/"star")
-#' @param k target latent dimension (optional)
+#' @param graph "auto" | "mst" | "complete" | "star" | "knn". `"auto"` picks
+#'   `"complete"` for up to 5 domains, `"knn"` for up to 8 and `"mst"` beyond.
+#' @param consensus "auto" or "sync" (pairwise synchronisation). `"star"` and
+#'   `"tree"` are not implemented and are rejected; for permutation aligners a
+#'   hub consensus is selected with `sync = list(perm = list(mode = "star"))`.
+#' @param k target latent dimension (optional). Native multi-domain aligners
+#'   receive it as their number of components (`ncomp`).
 #' @param parallel logical; reserved for future parallel pair fits
-#' @param sync list of synchronization options (graph, refine, gl, perm settings)
+#' @param sync list of synchronization options (graph, refine, gl, perm settings).
+#'   `sync$gl` accepts `ridge`, `gauge`, `project` (`"none"` solves the
+#'   least-squares synchronisation exactly; `"orthogonal"` adds `iters`
+#'   projected sweeps). `sync$refine = list(gpa = TRUE)` adds one local O(k)
+#'   refinement sweep.
+#'   `sync$perm` accepts `mode` (`"star"`, `"global"`, `"spectral"`; default
+#'   `"spectral"` for more than four domains, else `"star"`), `hub` (the domain
+#'   whose rows form the consensus; default the largest domain, the first on
+#'   ties), `k` (number of spectral eigenvectors), `rounding` (`"sinkhorn"` or
+#'   `"hungarian"`), `maxit_sinkhorn`, `tol` and `max_iter`. Permutation
+#'   consensus transforms are `n_hub x n_i`; for hard (partial) permutations
+#'   every row of domain `i` maps to one consensus row and consensus rows
+#'   absent from domain `i` stay zero.
+#' @param links Optional correspondences for the pairwise fits. Either a list
+#'   named by edge keys `"i:j"` (each element is passed as `links` to
+#'   [fit_pair()] for the edge from domain `i` to domain `j`), or, for exactly
+#'   two domains, a single links object. Keys that do not name an edge of the
+#'   dataset graph are rejected. For native multi-domain aligners `links` is
+#'   forwarded to [fit_many()].
 #' @param ... forwarded to adapter methods
-#' @return list with transforms, embeddings (if apply_transform succeeds),
+#' @return list with transforms, embeddings (`NULL` for a domain whose
+#'   transform cannot be applied to its data, with a warning naming the cause),
 #'   dataset graph, pairwise fits, and diagnostics
 #' @examples
 #' \donttest{
@@ -29,17 +62,33 @@
 #' }
 #' @export
 align_many <- function(domains, algo,
-                       graph = c("auto", "mst", "complete", "star"),
+                       graph = c("auto", "mst", "complete", "star", "knn"),
                        consensus = c("auto", "sync", "star", "tree"),
                        k = NULL, parallel = TRUE,
-                       sync = NULL, ...) {
+                       sync = NULL, links = NULL, ...) {
 
   graph <- match.arg(graph)
   consensus <- match.arg(consensus)
+  if (consensus %in% c("star", "tree")) {
+    stop("align_many: consensus = \"", consensus, "\" is not implemented; ",
+         "use consensus = \"sync\" (for permutation aligners a hub consensus is ",
+         "available via sync = list(perm = list(mode = \"star\"))).", call. = FALSE)
+  }
 
   caps <- aligner_capabilities(algo)
   if (isTRUE(caps$supports_multi)) {
-    return(fit_many(algo, domains, k = k, ...))
+    if (is.null(links)) {
+      return(fit_many(algo, domains, k = k, ...))
+    }
+    return(fit_many(algo, domains, k = k, links = links, ...))
+  }
+
+  grp <- caps$group
+  if (!is.character(grp) || length(grp) != 1L || !grp %in% c("O", "GL", "perm")) {
+    stop("align_many: aligners of group '", paste(grp, collapse = ", "),
+         "' have no relative transform to synchronise pairwise; only groups ",
+         "'O', 'GL' and 'perm' are supported (native multi-domain aligners ",
+         "must declare supports_multi = TRUE).", call. = FALSE)
   }
 
   N <- length(domains)
@@ -52,8 +101,11 @@ align_many <- function(domains, algo,
   graph_opts <- tryCatch(sync$graph, error = function(e) NULL)
   E <- build_dataset_graph_(N, graph = graph, domains = domains, algo = algo, graph_opts = graph_opts, ...)
 
+  edge_links <- .align_many_edge_links(links, E, N)
+
   # Pairwise fits
-  fits <- fit_pairs_on_edges_(domains, E, algo, parallel = parallel, ...)
+  fits <- fit_pairs_on_edges_(domains, E, algo, parallel = parallel,
+                              edge_links = edge_links, ...)
 
   # Relative transforms and weights
   G <- lapply(fits, function(f) relative_transform(f, from = "i", to = "j"))
@@ -71,13 +123,12 @@ align_many <- function(domains, algo,
   }
 
   # Group-specific synchronization
-  grp <- caps$group
-  if (is.null(k)) {
+  if (is.null(k) && grp %in% c("O", "GL")) {
     k <- tryCatch({
       ks <- vapply(G, function(g) {
-        if (inherits(g, "align_transform") && !is.null(g$k)) return(g$k)
+        if (inherits(g, "align_transform") && !is.null(g$k)) return(as.numeric(g$k))
         op <- if (inherits(g, "align_transform")) g$op else as.matrix(g)
-        ncol(op)
+        as.numeric(ncol(op))
       }, numeric(1))
       if (length(ks)) min(ks) else NULL
     }, error = function(e) NULL)
@@ -99,31 +150,48 @@ align_many <- function(domains, algo,
       iters  <- if (is.list(gl_opts) && !is.null(gl_opts$iters)) gl_opts$iters else 20
       gauge  <- if (is.list(gl_opts) && !is.null(gl_opts$gauge)) gl_opts$gauge else 1L
       project<- if (is.list(gl_opts) && !is.null(gl_opts$project)) gl_opts$project else "none"
+      if (is.list(gl_opts) && !is.null(gl_opts$iters) && identical(project, "none")) {
+        stop("align_many: sync$gl$iters only applies with sync$gl$project = ",
+             "\"orthogonal\"; the unprojected GL synchronisation is solved exactly.",
+             call. = FALSE)
+      }
       gl_sync_least_squares(G, W, E, N = N, k = k, lambda = lambda, iters = iters, gauge_idx = gauge, project = project)
     },
     "perm" = {
       perm_opts <- tryCatch(sync$perm, error = function(e) NULL)
-      mode <- if (is.list(perm_opts) && !is.null(perm_opts$mode)) perm_opts$mode else if (N > 4) "spectral" else "star"
-      if (mode == "star") {
-        permutation_sync_star(G, W, E, N = N)
-      } else if (mode == "global") {
-        permutation_sync(G, W, E, N = N)
-      } else { # spectral
-        L <- if (is.list(perm_opts)) perm_opts$k else NULL
-        rounding <- if (is.list(perm_opts) && !is.null(perm_opts$rounding)) perm_opts$rounding else "sinkhorn"
-        max_sink <- if (is.list(perm_opts) && !is.null(perm_opts$maxit_sinkhorn)) perm_opts$maxit_sinkhorn else 200
-        tol_s    <- if (is.list(perm_opts) && !is.null(perm_opts$tol)) perm_opts$tol else 1e-6
-        permutation_sync_spectral(G, W, E, N = N, L = L, rounding = rounding, max_sinkhorn = max_sink, tol = tol_s)
+      if (!is.null(perm_opts) && !is.list(perm_opts)) {
+        stop("align_many: sync$perm must be a list.", call. = FALSE)
       }
-    },
-    "kernel" = rotation_sync(G, W, E, N = N, k = k),
-    stop("Unknown group: ", grp)
+      mode <- perm_opts$mode %||% (if (N > 4) "spectral" else "star")
+      mode <- match.arg(mode, c("star", "global", "spectral"))
+      if (mode == "star") {
+        permutation_sync_star(G, W, E, N = N, hub = perm_opts$hub)
+      } else if (mode == "global") {
+        permutation_sync(G, W, E, N = N,
+                         max_iter = perm_opts$max_iter %||% 100L,
+                         tol = perm_opts$tol %||% 1e-8,
+                         gauge = perm_opts$hub)
+      } else { # spectral
+        permutation_sync_spectral(G, W, E, N = N,
+                                  L = perm_opts$k,
+                                  rounding = perm_opts$rounding %||% "sinkhorn",
+                                  max_sinkhorn = perm_opts$maxit_sinkhorn %||% 200,
+                                  tol = perm_opts$tol %||% 1e-6,
+                                  ref = perm_opts$hub)
+      }
+    }
   )
 
-  # Try embedding via apply_transform; if adapter uses different return type,
-  # user can ignore 'embeddings'
+  # Embed each domain with its consensus transform. A transform that does not
+  # act on the raw domain data (for example a map between spectral bases)
+  # yields NULL with a warning naming the cause.
   Z <- lapply(seq_len(N), function(i) {
-    tryCatch(apply_transform(T_list[[i]], domains[[i]]), error = function(e) NULL)
+    tryCatch(apply_transform(T_list[[i]], domains[[i]]), error = function(e) {
+      warning("align_many: could not embed domain ", i,
+              " with its consensus transform: ", conditionMessage(e),
+              call. = FALSE)
+      NULL
+    })
   })
 
   diags <- compute_diagnostics_(grp, T_list, G, E, W)
@@ -138,11 +206,13 @@ align_many <- function(domains, algo,
 # -- Graph construction and pair fitting -----------------------------------
 
 # Build a dataset graph as a data.frame with columns i, j (1-based indices)
-# star: hub = 1; complete: all pairs; mst: TODO (falls back to complete)
+# star: hub = 1; complete: all pairs i < j; mst: Prim's tree on landmark
+# scores; knn: symmetrised k-nearest-neighbour graph on the same scores.
 build_dataset_graph_ <- function(N, graph = c("complete", "star", "mst", "knn"), domains = NULL, algo = NULL, graph_opts = NULL, ...) {
   graph <- match.arg(graph)
   if (graph == "complete") {
     ij <- which(upper.tri(matrix(0, N, N)), arr.ind = TRUE)
+    ij <- ij[order(ij[, 1], ij[, 2]), , drop = FALSE]
     return(data.frame(i = ij[, 1], j = ij[, 2]))
   }
   if (graph == "star") {
@@ -163,18 +233,19 @@ build_dataset_graph_ <- function(N, graph = c("complete", "star", "mst", "knn"),
 
 # Compute a symmetric matrix of dataset-pair scores using light landmarks
 compute_dataset_pair_scores_ <- function(domains, algo, n_landmarks = 200, q = 8, seed = 1L, ...) {
-  set.seed(seed)
+  .with_local_seed(seed, {
   N <- length(domains)
   S <- matrix(0, N, N)
   # Precompute PCA projections on small random subsets for speed
   pca_list <- vector("list", N)
   for (i in seq_len(N)) {
-    Xi <- as.matrix(domains[[i]])
-    if (!is.matrix(Xi)) Xi <- as.matrix(domains[[i]]$x)
+    Xi <- domains[[i]]
+    if (is.list(Xi) && !is.null(Xi$x)) Xi <- Xi$x
     ni <- nrow(Xi)
     li <- min(ni, n_landmarks)
     idx <- sample.int(ni, li)
-    Xs <- scale(Xi[idx, , drop = FALSE], center = TRUE, scale = FALSE)
+    # Subset before densifying so sparse domains are never copied whole
+    Xs <- scale(as.matrix(Xi[idx, , drop = FALSE]), center = TRUE, scale = FALSE)
     # Low-rank PCA
     qq <- min(q, ncol(Xs), nrow(Xs))
     pc <- tryCatch({
@@ -210,6 +281,7 @@ compute_dataset_pair_scores_ <- function(domains, algo, n_landmarks = 200, q = 8
     }
   }
   S
+  })
 }
 
 # Build MST edges from a symmetric score matrix
@@ -247,19 +319,99 @@ knn_edges_from_scores_ <- function(S, k = 2L) {
   data.frame(i = ij[, 1], j = ij[, 2])
 }
 
-fit_pairs_on_edges_ <- function(domains, E, algo, parallel = TRUE, ...) {
+# Resolve user-supplied links into one entry per edge of E.
+.align_many_edge_links <- function(links, E, N) {
+  out <- vector("list", nrow(E))
+  if (is.null(links)) return(out)
+  edge_keys <- paste(E$i, E$j, sep = ":")
+  nms <- names(links)
+  keyed <- is.list(links) && length(links) > 0L && !is.null(nms) &&
+    all(grepl("^[0-9]+:[0-9]+$", nms))
+  if (!keyed) {
+    if (N == 2L && nrow(E) == 1L) {
+      out[[1L]] <- links
+      return(out)
+    }
+    stop("align_many: `links` must be a list named by edge keys \"i:j\" ",
+         "(one entry per dataset-graph edge); a single links object is only ",
+         "accepted for two domains.", call. = FALSE)
+  }
+  unknown <- setdiff(nms, edge_keys)
+  if (length(unknown)) {
+    reversed <- unknown[vapply(strsplit(unknown, ":", fixed = TRUE), function(p) {
+      paste(p[2], p[1], sep = ":") %in% edge_keys
+    }, logical(1))]
+    msg <- paste0("align_many: `links` names pair(s) that are not edges of the ",
+                  "dataset graph: ", paste(unknown, collapse = ", "), ". Edges are: ",
+                  paste(edge_keys, collapse = ", "), ".")
+    if (length(reversed)) {
+      msg <- paste0(msg, " Links for ", paste(reversed, collapse = ", "),
+                    " are given in the opposite orientation to the edge.")
+    }
+    stop(msg, call. = FALSE)
+  }
+  for (nm in nms) out[[match(nm, edge_keys)]] <- links[[nm]]
+  out
+}
+
+fit_pairs_on_edges_ <- function(domains, E, algo, parallel = TRUE,
+                                edge_links = NULL, ...) {
+  if (is.null(edge_links)) edge_links <- vector("list", nrow(E))
   # For now, simple sequential fits; adapters decide how to use domains[[i/j]]
   lapply(seq_len(nrow(E)), function(idx) {
     ii <- E$i[idx]; jj <- E$j[idx]
-    fit_pair(algo, domains[[ii]], domains[[jj]], links = NULL, i = ii, j = jj, ...)
+    fit_pair(algo, domains[[ii]], domains[[jj]], links = edge_links[[idx]],
+             i = ii, j = jj, ...)
   })
+}
+
+# -- Shared helpers ----------------------------------------------------------
+
+# Operator of a transform given either as an align_transform or a raw matrix.
+.transform_op <- function(g) {
+  if (inherits(g, "align_transform")) g$op else g
+}
+
+# Coerce an edge transform to an align_transform oriented from -> to.
+.as_edge_transform <- function(g, group, from, to, k = NULL) {
+  if (inherits(g, "align_transform")) return(g)
+  new_align_transform(group, as.matrix(g), from = from, to = to, k = k)
+}
+
+# Top-k eigenvectors (largest algebraic eigenvalues) of a symmetric matrix.
+# Synchronisation matrices have highly degenerate leading eigenvalues, which
+# Krylov solvers can resolve incompletely, so moderate problems use a dense
+# decomposition. Larger problems use RSpectra, then PRIMME when installed.
+.sync_top_eigenvectors <- function(M, k, dense_max = 1000L) {
+  n <- nrow(M)
+  dense <- function() {
+    e <- eigen(as.matrix(M), symmetric = TRUE)
+    e$vectors[, seq_len(k), drop = FALSE]
+  }
+  if (k >= n || n <= dense_max) return(dense())
+  tryCatch({
+    if (requireNamespace("RSpectra", quietly = TRUE)) {
+      RSpectra::eigs_sym(M, k = k, which = "LA")$vectors
+    } else if (.primme_available()) {
+      PRIMME::eigs_sym(M, NEig = k, which = "LA")$vectors
+    } else {
+      dense()
+    }
+  }, error = function(e) dense())
 }
 
 # -- Synchronization backends ----------------------------------------------
 
 #' Rotation synchronization for orthogonal group O(k)
 #'
+#' Solves `T_i ~ g_ij %*% T_j` over all edges (the relation implied by the
+#' transform contract in [new_align_transform()]) by the spectral relaxation:
+#' the top-`k` eigenvectors of the degree-normalised block matrix with blocks
+#' `W_ij g_ij` (and `W_ij t(g_ij)` below the diagonal), projected blockwise to
+#' O(k).
+#'
 #' @param G list of align_transform objects (group="O"), each a relative g_ij
+#'   from domain `E$i` to domain `E$j`
 #' @param W numeric weights per edge in E
 #' @param E data.frame with columns i, j (1-based dataset indices)
 #' @param N number of datasets
@@ -278,7 +430,7 @@ fit_pairs_on_edges_ <- function(domains, E, algo, parallel = TRUE, ...) {
 #' @export
 rotation_sync <- function(G, W, E, N, k) {
   if (missing(N)) N <- max(c(E$i, E$j))
-  if (is.null(k)) {
+  if (missing(k) || is.null(k)) {
     k <- tryCatch({
       g1 <- G[[1]]; if (inherits(g1, "align_transform")) ncol(g1$op) else ncol(as.matrix(g1))
     }, error = function(e) NULL)
@@ -292,10 +444,7 @@ rotation_sync <- function(G, W, E, N, k) {
 
   for (idx in seq_len(nrow(E))) {
     i <- E$i[idx]; j <- E$j[idx]
-    gij <- G[[idx]]
-    if (!inherits(gij, "align_transform")) {
-      gij <- new_align_transform("O", as.matrix(gij), from = i, to = j, k = k)
-    }
+    gij <- .as_edge_transform(G[[idx]], "O", i, j, k = k)
     R <- as.matrix(gij$op)
     w <- as.numeric(W[idx] %||% 1)
     deg[i] <- deg[i] + w
@@ -334,17 +483,7 @@ rotation_sync <- function(G, W, E, N, k) {
   M <- Matrix::forceSymmetric(Dm %*% Matrix::forceSymmetric(S) %*% Dm)
 
   # Top-k eigenvectors
-  V <- tryCatch({
-    if (requireNamespace("RSpectra", quietly = TRUE) && k < nrow(M)) {
-      RSpectra::eigs_sym(M, k = k, which = "LA")$vectors
-    } else if (requireNamespace("PRIMME", quietly = TRUE) && k < nrow(M)) {
-      PRIMME::eigs_sym(M, NEig = k, which = "LA")$vectors
-    } else {
-      eigen(as.matrix(M), symmetric = TRUE)$vectors[, seq_len(k), drop = FALSE]
-    }
-  }, error = function(e) {
-    eigen(as.matrix(M), symmetric = TRUE)$vectors[, seq_len(k), drop = FALSE]
-  })
+  V <- .sync_top_eigenvectors(M, k)
 
   # Slice blocks and project to O(k)
   T_list <- vector("list", N)
@@ -363,42 +502,99 @@ rotation_sync <- function(G, W, E, N, k) {
   T_list
 }
 
-# Placeholders for other groups ------------------------------------------------
-
+# Least-squares synchronisation on GL(k):
+#   min sum_{(i,j) in E} w_ij || T_i - g_ij T_j ||_F^2 + lambda sum_i ||T_i||_F^2
+# with T_gauge = I fixed. The objective is quadratic, so with
+# project = "none" the joint normal equations are solved exactly. For domain i
+# the block row reads
+#   (sum_out w I + sum_in w g_ai' g_ai + lambda I) T_i
+#     - sum_out w g_ij T_j - sum_in w g_ai' T_a = 0,
+# where "out" are edges i -> j and "in" are edges a -> i; no edge operator is
+# inverted. With project = "orthogonal" the exact solution initialises `iters`
+# Gauss-Seidel sweeps of the projected block minimiser.
 gl_sync_least_squares <- function(G, W, E, N, k, lambda = 1e-6, iters = 20, gauge_idx = 1L, project = c("none","orthogonal")) {
   project <- match.arg(project)
   if (is.null(k)) {
-    for (g in G) { op <- if (inherits(g, "align_transform")) g$op else g; k <- nrow(as.matrix(op)); break }
+    for (g in G) { k <- nrow(as.matrix(.transform_op(g))); break }
+  }
+  gauge_idx <- as.integer(gauge_idx)
+  if (length(gauge_idx) != 1L || is.na(gauge_idx) || gauge_idx < 1L || gauge_idx > N) {
+    stop("gl_sync_least_squares: gauge must index one of the ", N, " domains.", call. = FALSE)
   }
   Tlist <- replicate(N, diag(k), simplify = FALSE)
-  Tlist[[gauge_idx]] <- diag(k)
 
-  # adjacency list with oriented ops g_ij mapping i->j
-  neigh <- vector("list", N)
-  for (i in seq_len(N)) neigh[[i]] <- list()
+  # Incident edges per domain, with the role of the domain on the edge
+  inc <- vector("list", N)
+  for (i in seq_len(N)) inc[[i]] <- list()
   for (idx in seq_len(nrow(E))) {
     i <- E$i[idx]; j <- E$j[idx]
-    gij <- G[[idx]]
-    if (!inherits(gij, "align_transform")) gij <- new_align_transform("GL", as.matrix(gij), from = i, to = j)
-    neigh[[i]][[length(neigh[[i]]) + 1L]] <- list(j = j, G = as.matrix(gij$op), w = as.numeric(W[idx] %||% 1))
-    # reverse direction
-    Gji <- tryCatch(solve(as.matrix(gij$op)), error = function(e) NULL)
-    if (!is.null(Gji)) {
-      neigh[[j]][[length(neigh[[j]]) + 1L]] <- list(j = i, G = Gji, w = as.numeric(W[idx] %||% 1))
+    Gij <- as.matrix(.transform_op(G[[idx]]))
+    if (!all(dim(Gij) == c(k, k))) {
+      stop("gl_sync_least_squares: edge ", i, "->", j, " operator is ",
+           nrow(Gij), "x", ncol(Gij), " but k = ", k, ".", call. = FALSE)
     }
+    w <- as.numeric(W[idx] %||% 1)
+    inc[[i]][[length(inc[[i]]) + 1L]] <- list(other = j, G = Gij, w = w, out = TRUE)
+    inc[[j]][[length(inc[[j]]) + 1L]] <- list(other = i, G = Gij, w = w, out = FALSE)
+  }
+
+  # Exact joint solve of the normal equations for the free domains
+  free <- setdiff(seq_len(N), gauge_idx)
+  pos <- match(seq_len(N), free)
+  nf <- length(free)
+  if (nf) {
+    A <- matrix(0, nf * k, nf * k)
+    B <- matrix(0, nf * k, k)
+    blk <- function(p) ((p - 1L) * k + 1L):(p * k)
+    for (i in free) {
+      ri <- blk(pos[i])
+      A[ri, ri] <- A[ri, ri] + lambda * diag(k)
+      for (nb in inc[[i]]) {
+        o <- nb$other
+        if (nb$out) {
+          A[ri, ri] <- A[ri, ri] + nb$w * diag(k)
+          C <- nb$w * nb$G
+        } else {
+          A[ri, ri] <- A[ri, ri] + nb$w * crossprod(nb$G)
+          C <- nb$w * t(nb$G)
+        }
+        if (o == gauge_idx) {
+          B[ri, ] <- B[ri, ] + C %*% Tlist[[o]]
+        } else {
+          ro <- blk(pos[o])
+          A[ri, ro] <- A[ri, ro] - C
+        }
+      }
+    }
+    sol <- tryCatch(solve(A, B), error = function(e) {
+      stop("gl_sync_least_squares: the synchronisation system is singular (",
+           conditionMessage(e), "); check that the dataset graph is connected ",
+           "or increase sync$gl$ridge.", call. = FALSE)
+    })
+    for (i in free) Tlist[[i]] <- sol[blk(pos[i]), , drop = FALSE]
+  }
+  if (project == "none") iters <- 0L
+  if (project == "orthogonal") {
+    for (i in free) { sv <- svd(Tlist[[i]]); Tlist[[i]] <- sv$u %*% t(sv$v) }
   }
 
   for (it in seq_len(iters)) {
     for (i in seq_len(N)) {
       if (i == gauge_idx) next
-      Ai <- matrix(0, k, k); Bi <- matrix(0, k, k)
-      for (nb in neigh[[i]]) {
-        Gij <- nb$G; w <- nb$w; j <- nb$j
-        Ai <- Ai + w * crossprod(Gij, Gij)
-        Bi <- Bi + w * crossprod(Gij, Tlist[[j]])
+      Ai <- lambda * diag(k); Bi <- matrix(0, k, k)
+      for (nb in inc[[i]]) {
+        To <- Tlist[[nb$other]]
+        if (nb$out) {
+          # edge i -> other: || T_i - G T_other ||^2
+          Ai <- Ai + nb$w * diag(k)
+          Bi <- Bi + nb$w * (nb$G %*% To)
+        } else {
+          # edge other -> i: || T_other - G T_i ||^2
+          Ai <- Ai + nb$w * crossprod(nb$G)
+          Bi <- Bi + nb$w * crossprod(nb$G, To)
+        }
       }
-      Ai <- Ai + lambda * diag(k)
-      Ti <- tryCatch(solve(Ai, Bi), error = function(e) diag(k))
+      Ti <- tryCatch(solve(Ai, Bi), error = function(e) Tlist[[i]])
       if (project == "orthogonal") { sv <- svd(Ti); Ti <- sv$u %*% t(sv$v) }
       Tlist[[i]] <- Ti
     }
@@ -406,203 +602,215 @@ gl_sync_least_squares <- function(G, W, E, N, k, lambda = 1e-6, iters = 20, gaug
   lapply(seq_len(N), function(i) new_align_transform("GL", Tlist[[i]], from = i, to = "consensus", k = k))
 }
 
-# Star/hub consensus for permutations (privileged domain 1)
-permutation_sync_star <- function(G, W, E, N) {
-  # Map each domain i to hub 1 using available edges; prefer direct (i,1), else invert (1,i)
-  # Build lookup for edges
-  key <- paste(E$i, E$j, sep = ":")
-  idx_by_pair <- setNames(seq_along(key), key)
-  get_map <- function(a, b) {
-    if (a == b) return(new_align_transform("perm", diag(1), from = a, to = b))
-    k1 <- paste(a, b, sep = ":"); k2 <- paste(b, a, sep = ":")
-    if (!is.null(idx_by_pair[[k1]])) {
-      gij <- G[[idx_by_pair[[k1]]]]
-      return(if (inherits(gij, "align_transform")) gij else new_align_transform("perm", as.matrix(gij), from = a, to = b))
+# Sizes n_i of each domain implied by the permutation edge operators
+# (g_ij is n_j x n_i). Conflicting or missing sizes are errors.
+.perm_domain_sizes <- function(G, E, N) {
+  n <- rep(NA_integer_, N)
+  set_size <- function(d, val, idx) {
+    if (is.na(n[d])) {
+      n[d] <<- as.integer(val)
+    } else if (n[d] != val) {
+      stop("permutation sync: edge ", E$i[idx], "->", E$j[idx], " implies ",
+           val, " rows for domain ", d, " but another edge implies ", n[d], ".",
+           call. = FALSE)
     }
-    if (!is.null(idx_by_pair[[k2]])) {
-      gji <- G[[idx_by_pair[[k2]]]]
-      if (inherits(gji, "align_transform")) return(invert_transform(gji))
-      op <- as.matrix(gji)
-      rs <- rowSums(t(op)); rs[!is.finite(rs) | rs == 0] <- 1
-      inv <- t(op) / rs
-      return(new_align_transform("perm", inv, from = a, to = b))
-    }
-    stop("No path between ", a, " and ", b, " for star consensus")
   }
-  # Infer hub size
-  n1 <- NULL
   for (idx in seq_len(nrow(E))) {
-    i <- E$i[idx]; j <- E$j[idx]
-    if (i == 1 || j == 1) {
-      gij <- G[[idx]]; op <- if (inherits(gij, "align_transform")) as.matrix(gij$op) else as.matrix(gij)
-      if (i == 1) { n1 <- ncol(op); break } else { n1 <- nrow(op); break }
-    }
+    op <- .transform_op(G[[idx]])
+    set_size(E$i[idx], ncol(op), idx)
+    set_size(E$j[idx], nrow(op), idx)
   }
-  if (is.null(n1)) n1 <- 1L
+  if (anyNA(n)) {
+    stop("permutation sync: domain(s) ", paste(which(is.na(n)), collapse = ", "),
+         " are not covered by any edge of the dataset graph.", call. = FALSE)
+  }
+  n
+}
+
+# Star/hub consensus for permutations: the hub's rows are the consensus and
+# every other domain is chained to the hub along a maximum-weight spanning
+# tree of the dataset graph, so no direct edge to the hub is required.
+permutation_sync_star <- function(G, W, E, N, hub = NULL) {
+  n <- .perm_domain_sizes(G, E, N)
+  if (is.null(hub)) hub <- which.max(n)
+  hub <- as.integer(hub)
+  if (length(hub) != 1L || is.na(hub) || hub < 1L || hub > N) {
+    stop("permutation_sync_star: hub must index one of the ", N, " domains.", call. = FALSE)
+  }
+  tr <- lapply(seq_len(nrow(E)), function(idx) {
+    .as_edge_transform(G[[idx]], "perm", E$i[idx], E$j[idx])
+  })
+  w <- as.numeric(W)
+  if (length(w) != nrow(E)) w <- rep(1, nrow(E))
+  w[!is.finite(w)] <- 0
+
   T_list <- vector("list", N)
-  T_list[[1]] <- new_align_transform("perm", diag(n1), from = 1, to = "consensus")
-  for (i in 2:N) {
-    g <- get_map(i, 1)
-    T_list[[i]] <- new_align_transform("perm", g$op, from = i, to = "consensus")
+  T_list[[hub]] <- new_align_transform("perm", diag(n[hub]), from = hub, to = "consensus")
+  visited <- rep(FALSE, N); visited[hub] <- TRUE
+  while (!all(visited)) {
+    cand <- which(xor(visited[E$i], visited[E$j]))
+    if (!length(cand)) {
+      stop("permutation_sync_star: domain(s) ", paste(which(!visited), collapse = ", "),
+           " are not connected to hub ", hub, " in the dataset graph.", call. = FALSE)
+    }
+    idx <- cand[which.max(w[cand])]
+    i <- E$i[idx]; j <- E$j[idx]
+    if (visited[i]) {
+      # j is new: T_j = T_i o g_ji with g_ji the pseudo-inverse of g_ij
+      child <- j; parent <- i
+      g_cp <- invert_transform(tr[[idx]])
+    } else {
+      child <- i; parent <- j
+      g_cp <- tr[[idx]]
+    }
+    Tc <- compose_transform(g_cp, T_list[[parent]])
+    T_list[[child]] <- new_align_transform("perm", Tc$op, from = child, to = "consensus")
+    visited[child] <- TRUE
   }
   T_list
 }
 
-# Spectral consensus for permutations (cycle-aware)
+# Column-stochastic rounding of a nonnegative affinity A (L x n): every
+# domain row (column of A) is assigned unit mass while no consensus row
+# receives more than unit mass (alternating Bregman projections).
+.perm_sinkhorn_round <- function(A, max_iter = 200, tol = 1e-6) {
+  Q <- pmax(A, 0)
+  for (it in seq_len(max_iter)) {
+    cs <- colSums(Q); cs[cs <= 0] <- 1
+    Q <- sweep(Q, 2, cs, "/")
+    rs <- rowSums(Q)
+    over <- rs > 1
+    if (any(over)) Q[over, ] <- Q[over, , drop = FALSE] / rs[over]
+    if (all(rs <= 1 + tol) && max(abs(colSums(Q)[colSums(A > 0) > 0] - 1)) < tol) break
+  }
+  Q
+}
+
+.perm_hungarian_round <- function(A) {
+  if (!requireNamespace("clue", quietly = TRUE)) {
+    stop("clue package required for Hungarian rounding", call. = FALSE)
+  }
+  L <- nrow(A); n <- ncol(A)
+  cost <- max(A) - A
+  Q <- matrix(0, L, n)
+  if (n <= L) {
+    m <- as.integer(clue::solve_LSAP(t(cost)))   # consensus row per domain row
+    idx <- cbind(m, seq_len(n))
+  } else {
+    m <- as.integer(clue::solve_LSAP(cost))      # domain row per consensus row
+    idx <- cbind(seq_len(L), m)
+  }
+  # Assignments forced onto zero affinity are not correspondences.
+  idx <- idx[A[idx] > 0, , drop = FALSE]
+  Q[idx] <- 1
+  Q
+}
+
+# Spectral consensus for permutations (cycle-aware). The block matrix with
+# blocks M[j, i] = w g_ij (n_j x n_i) equals T' T for consistent maps, so its
+# leading eigenvectors Y satisfy Y_ref Y_i' proportional to the map from
+# domain i to the reference domain. Rounding that product gives T_i, whose
+# rows are the reference domain's rows.
 permutation_sync_spectral <- function(G, W, E, N, L = NULL,
                                       rounding = c("sinkhorn", "hungarian"),
-                                      max_sinkhorn = 200, tol = 1e-6) {
+                                      max_sinkhorn = 200, tol = 1e-6,
+                                      ref = NULL) {
   rounding <- match.arg(rounding)
-  # Infer sizes n_i
-  n <- rep(NA_integer_, N)
-  for (idx in seq_len(nrow(E))) {
-    i <- E$i[idx]; j <- E$j[idx]
-    gij <- G[[idx]]
-    op <- if (inherits(gij, "align_transform")) as.matrix(gij$op) else as.matrix(gij)
-    n[i] <- n[i] %||% ncol(op)
-    n[j] <- n[j] %||% nrow(op)
-  }
-  if (any(is.na(n))) n[is.na(n)] <- min(n, na.rm = TRUE)
-  if (is.null(L)) L <- min(n)
-
+  n <- .perm_domain_sizes(G, E, N)
+  if (is.null(L)) L <- max(n)
+  L <- as.integer(L)
   offs <- c(0L, cumsum(n)); dim_big <- sum(n)
+  if (L < 1L || L > dim_big) {
+    stop("permutation_sync_spectral: L must lie in 1..", dim_big, ".", call. = FALSE)
+  }
+  if (is.null(ref)) ref <- which.max(n)
+  ref <- as.integer(ref)
+
   Ii <- integer(0); Jj <- integer(0); Xx <- numeric(0)
   add_block <- function(ri, rj, B) {
-    Ii <<- c(Ii, rep(ri, each = length(rj)))
-    Jj <<- c(Jj, rep(rj, times = length(ri)))
+    # as.vector(B) is column-major: row index varies fastest
+    Ii <<- c(Ii, rep(ri, times = length(rj)))
+    Jj <<- c(Jj, rep(rj, each = length(ri)))
     Xx <<- c(Xx, as.vector(B))
   }
-  # Assemble symmetric block matrix with P_ji and P_ij
   for (idx in seq_len(nrow(E))) {
     i <- E$i[idx]; j <- E$j[idx]
-    gij <- G[[idx]]
-    if (!inherits(gij, "align_transform")) gij <- new_align_transform("perm", as.matrix(gij), from = i, to = j)
-    Pij <- as.matrix(gij$op)  # n_j x n_i
-    Pji <- t(Pij)             # n_i x n_j
+    Pij <- as.matrix(.transform_op(G[[idx]]))  # n_j x n_i
     w <- as.numeric(W[idx] %||% 1)
     ri <- (offs[i] + 1):(offs[i + 1]); rj <- (offs[j] + 1):(offs[j + 1])
-    add_block(ri, rj, w * Pji)
     add_block(rj, ri, w * Pij)
+    add_block(ri, rj, w * t(Pij))
   }
   M <- Matrix::sparseMatrix(i = Ii, j = Jj, x = Xx, dims = c(dim_big, dim_big))
-  M <- Matrix::forceSymmetric(M)
+  M <- Matrix::forceSymmetric((M + Matrix::t(M)) / 2)
 
-  # Top-L eigenvectors
-  Y <- tryCatch({
-    if (requireNamespace("RSpectra", quietly = TRUE) && L < nrow(M)) {
-      RSpectra::eigs_sym(M, k = L, which = "LM")$vectors
-    } else if (requireNamespace("PRIMME", quietly = TRUE) && L < nrow(M)) {
-      PRIMME::eigs_sym(M, NEig = L, which = "LM")$vectors
-    } else {
-      eigen(as.matrix(M), symmetric = TRUE)$vectors[, seq_len(L), drop = FALSE]
-    }
-  }, error = function(e) {
-    eigen(as.matrix(M), symmetric = TRUE)$vectors[, seq_len(L), drop = FALSE]
-  })
-
-  # Rectangular Sinkhorn to match row/col marginals
-  sinkhorn_rect <- function(A, r, c, iters = max_sinkhorn, tol = tol) {
-    A[A < 0] <- 0
-    u <- rep(1, length(r)); v <- rep(1, length(c))
-    for (t in seq_len(iters)) {
-      Av <- A %*% v; u <- r / pmax(Av, .Machine$double.eps)
-      ATu <- t(A) %*% u; v <- c / pmax(ATu, .Machine$double.eps)
-      if (t %% 10 == 0) {
-        X <- (u * A) %*% diag(v)
-        if (max(abs(rowSums(X) - r)) < tol && max(abs(colSums(X) - c)) < tol) break
-      }
-    }
-    (u * A) %*% diag(v)
-  }
+  Y <- .sync_top_eigenvectors(M, L)
+  Y_ref <- Y[(offs[ref] + 1):(offs[ref + 1]), , drop = FALSE]
 
   T_list <- vector("list", N)
   for (i in seq_len(N)) {
     rows <- (offs[i] + 1):(offs[i + 1])
-    A <- abs(Y[rows, , drop = FALSE])
-    r <- rep(1 / n[i], n[i]); c <- rep(1 / L, L)
-    Q <- if (rounding == "hungarian" && n[i] == L) {
-      if (!requireNamespace("clue", quietly = TRUE)) stop("clue package required for Hungarian rounding")
-      cost <- 1 - A / (max(A) + 1e-12)
-      m <- clue::solve_LSAP(as.matrix(cost))
-      Mperm <- matrix(0, nrow = n[i], ncol = L); Mperm[cbind(seq_len(n[i]), m)] <- 1
-      Mperm
+    A <- Y_ref %*% t(Y[rows, , drop = FALSE])  # n_ref x n_i
+    # Entries at round-off level carry no correspondence; dropping them keeps
+    # domain rows without any path to the reference unassigned.
+    A[A <= 1e-8 * max(abs(A))] <- 0
+    Q <- if (rounding == "hungarian") {
+      .perm_hungarian_round(A)
     } else {
-      sinkhorn_rect(A, r, c)
+      .perm_sinkhorn_round(A, max_iter = max_sinkhorn, tol = tol)
     }
-    T_list[[i]] <- new_align_transform("perm", t(Q), from = i, to = "consensus")
+    T_list[[i]] <- new_align_transform("perm", Q, from = i, to = "consensus")
   }
   T_list
 }
 
-permutation_sync <- function(G, W, E, N, max_iter = 25, tol = 1e-6) {
-  # Synchronize soft maps without hard hub dependence using an averaging
-  # iteration: T_i ≈ average_j T_j %*% g_{ji}. Fix gauge with T_1 = I.
-
-  # Row-normalization helper
-  normalize_rows <- function(M) {
-    rs <- rowSums(M)
-    rs[!is.finite(rs) | rs == 0] <- 1
-    M / rs
+permutation_sync <- function(G, W, E, N, max_iter = 100, tol = 1e-8, gauge = NULL) {
+  # Synchronise soft maps without a hard hub path using Gauss-Seidel
+  # averaging of the consistency relations T_i ~ T_j g_ij (edge i -> j) and
+  # T_i ~ T_a g_ai^+ (edge a -> i, pseudo-inverse), with T_gauge = I fixed.
+  # After each update every domain row (column of T_i) carries unit mass and
+  # no consensus row more than unit mass, so exact (partial) permutations are
+  # fixed points even when domains have different sizes.
+  n <- .perm_domain_sizes(G, E, N)
+  if (is.null(gauge)) gauge <- which.max(n)
+  gauge <- as.integer(gauge)
+  if (length(gauge) != 1L || is.na(gauge) || gauge < 1L || gauge > N) {
+    stop("permutation_sync: gauge must index one of the ", N, " domains.", call. = FALSE)
   }
+  m <- n[gauge]
 
-  # Infer per-domain sizes n[i] from edge operators (g_ij: n_j x n_i)
-  n <- rep(NA_integer_, N)
-  for (idx in seq_len(nrow(E))) {
-    i <- E$i[idx]; j <- E$j[idx]
-    gij <- G[[idx]]
-    op <- if (inherits(gij, "align_transform")) as.matrix(gij$op) else as.matrix(gij)
-    n[j] <- n[j] %||% nrow(op)
-    n[i] <- n[i] %||% ncol(op)
-  }
-  # Fallback for any unresolved sizes
-  n[is.na(n)] <- n[which(!is.na(n))[1]] %||% 1L
-
-  # Consensus rows set to domain 1 size (gauge)
-  m <- n[1]
-  if (is.na(m) || m <= 0) m <- 1L
-
-  # Build neighbor list with oriented maps g_{ji}
+  # Neighbour list: for domain d, op maps d -> neighbour (n_nb x n_d)
   neighbors <- vector("list", N)
   for (i in seq_len(N)) neighbors[[i]] <- list()
   for (idx in seq_len(nrow(E))) {
     a <- E$i[idx]; b <- E$j[idx]
-    gij <- G[[idx]]
-    if (!inherits(gij, "align_transform")) {
-      gij <- new_align_transform("perm", as.matrix(gij), from = a, to = b)
-    }
-    # Store g_ab and its inverse g_ba
-    neighbors[[a]][[length(neighbors[[a]]) + 1L]] <- list(j = b, op = invert_transform(gij)$op, w = W[idx])
-    neighbors[[b]][[length(neighbors[[b]]) + 1L]] <- list(j = a, op = gij$op,                    w = W[idx])
+    gab <- .as_edge_transform(G[[idx]], "perm", a, b)
+    w <- as.numeric(W[idx] %||% 1)
+    neighbors[[a]][[length(neighbors[[a]]) + 1L]] <- list(j = b, op = as.matrix(gab$op), w = w)
+    neighbors[[b]][[length(neighbors[[b]]) + 1L]] <- list(j = a, op = as.matrix(invert_transform(gab)$op), w = w)
   }
 
-  # Initialize T_i: identity for i=1, uniform for others
+  # Initialize T_i: identity for the gauge, uniform for others
   T <- vector("list", N)
-  T[[1]] <- diag(m, n[1])
-  for (i in 2:N) {
-    T[[i]] <- matrix(1 / n[i], nrow = m, ncol = n[i])
-  }
+  for (i in seq_len(N)) T[[i]] <- matrix(1 / m, nrow = m, ncol = n[i])
+  T[[gauge]] <- diag(m)
 
-  # Iterative averaging
   for (iter in seq_len(max_iter)) {
-    T_new <- T
     max_diff <- 0
     for (i in seq_len(N)) {
-      if (i == 1) next  # gauge
+      if (i == gauge) next
       acc <- matrix(0, nrow = m, ncol = n[i])
       wsum <- 0
       for (nb in neighbors[[i]]) {
-        j <- nb$j
-        op_ji <- as.matrix(nb$op) # n_i x n_j
-        w <- as.numeric(nb$w %||% 1)
-        acc <- acc + w * (T[[j]] %*% op_ji)
-        wsum <- wsum + w
+        acc <- acc + nb$w * (T[[nb$j]] %*% nb$op)
+        wsum <- wsum + nb$w
       }
       if (wsum > 0) acc <- acc / wsum
-      T_new[[i]] <- normalize_rows(acc)
-      d <- max(abs(T_new[[i]] - T[[i]]))
+      new_i <- .perm_sinkhorn_round(acc, max_iter = 50, tol = tol)
+      d <- max(abs(new_i - T[[i]]))
       if (is.finite(d) && d > max_diff) max_diff <- d
+      T[[i]] <- new_i
     }
-    T <- T_new
     if (max_diff < tol) break
   }
 
@@ -612,25 +820,41 @@ permutation_sync <- function(G, W, E, N, max_iter = 25, tol = 1e-6) {
 
 # -- Diagnostics ------------------------------------------------------------
 
+# Edge residual: RMS entry of compose_transform(g_ij, T_j) - T_i (zero when the
+# consensus transforms reproduce the edge exactly). Cycle residual for a
+# triangle (i, j, k): RMS entry of compose_transform(g_ij, g_jk) - g_ik, with
+# edges stored in the opposite orientation inverted first. For "perm" a
+# partial map only constrains the rows of the source domain that it maps
+# (columns with nonzero mass), so the comparison is restricted to them.
 compute_diagnostics_ <- function(group, T_list, G, E, W) {
-  # Edge residuals: measure ||constraint|| under learned transforms
+  tr <- lapply(seq_len(nrow(E)), function(idx) {
+    .as_edge_transform(G[[idx]], group, E$i[idx], E$j[idx])
+  })
+  mapped_cols <- function(...) {
+    if (!identical(group, "perm")) return(NULL)
+    keep <- NULL
+    for (A in list(...)) {
+      k <- colSums(abs(as.matrix(A))) > 1e-12
+      keep <- if (is.null(keep)) k else keep & k
+    }
+    keep
+  }
+  rms_diff <- function(A, B, cols = NULL) {
+    A <- as.matrix(A); B <- as.matrix(B)
+    if (!all(dim(A) == dim(B))) return(NA_real_)
+    if (!is.null(cols)) {
+      if (!any(cols)) return(NA_real_)
+      A <- A[, cols, drop = FALSE]; B <- B[, cols, drop = FALSE]
+    }
+    sqrt(mean((A - B)^2))
+  }
+
   edge_res <- rep(NA_real_, nrow(E))
   for (idx in seq_len(nrow(E))) {
     i <- E$i[idx]; j <- E$j[idx]
     edge_res[idx] <- tryCatch({
-      if (group %in% c("O", "GL")) {
-        A <- as.matrix(T_list[[j]]$op)
-        B <- if (inherits(G[[idx]], "align_transform")) as.matrix(G[[idx]]$op) else as.matrix(G[[idx]])
-        C <- as.matrix(T_list[[i]]$op)
-        D <- A - B %*% C
-        sqrt(mean(D^2))
-      } else if (group == "perm") {
-        A <- as.matrix(T_list[[i]]$op) # L x n_i
-        B <- as.matrix(T_list[[j]]$op) # L x n_j
-        Gop <- if (inherits(G[[idx]], "align_transform")) as.matrix(G[[idx]]$op) else as.matrix(G[[idx]]) # n_j x n_i
-        D <- A - B %*% Gop
-        sqrt(mean(D^2))
-      } else NA_real_
+      pred_i <- compose_transform(tr[[idx]], T_list[[j]])
+      rms_diff(pred_i$op, T_list[[i]]$op, mapped_cols(tr[[idx]]$op))
     }, error = function(e) NA_real_)
   }
   edge_df <- data.frame(i = E$i, j = E$j, residual = edge_res)
@@ -638,22 +862,36 @@ compute_diagnostics_ <- function(group, T_list, G, E, W) {
 
   # Cycle residuals on triangles (if present)
   cyc_df <- NULL
-  if (nrow(E) >= 3) {
+  Nmax <- max(c(E$i, E$j, length(T_list)))
+  if (nrow(E) >= 3 && Nmax >= 3) {
     key <- paste(E$i, E$j, sep = ":")
-    idx_map <- setNames(seq_len(nrow(E)), key)
+    edge_between <- function(a, b) {
+      hit <- match(paste(a, b, sep = ":"), key)
+      if (!is.na(hit)) return(tr[[hit]])
+      hit <- match(paste(b, a, sep = ":"), key)
+      if (!is.na(hit)) {
+        return(tryCatch(invert_transform(tr[[hit]]), error = function(e) NULL))
+      }
+      NULL
+    }
+    adj <- matrix(FALSE, Nmax, Nmax)
+    adj[cbind(E$i, E$j)] <- TRUE
+    adj <- adj | t(adj)
     tri <- list(i = integer(0), j = integer(0), k = integer(0), residual = numeric(0))
-    Nmax <- max(c(E$i, E$j))
-    for (i in seq_len(Nmax - 2)) for (j in (i + 1):(Nmax - 1)) for (k in (j + 1):Nmax) {
-      kij <- idx_map[[paste(i, j, sep = ":")]]
-      kjk <- idx_map[[paste(j, k, sep = ":")]]
-      kik <- idx_map[[paste(i, k, sep = ":")]]
-      if (is.null(kij) || is.null(kjk) || is.null(kik)) next
-      Gij <- if (inherits(G[[kij]], "align_transform")) as.matrix(G[[kij]]$op) else as.matrix(G[[kij]])
-      Gjk <- if (inherits(G[[kjk]], "align_transform")) as.matrix(G[[kjk]]$op) else as.matrix(G[[kjk]])
-      Gik <- if (inherits(G[[kik]], "align_transform")) as.matrix(G[[kik]]$op) else as.matrix(G[[kik]])
-      D <- tryCatch(Gik - Gjk %*% Gij, error = function(e) NULL)
-      if (!is.null(D)) {
-        tri$i <- c(tri$i, i); tri$j <- c(tri$j, j); tri$k <- c(tri$k, k); tri$residual <- c(tri$residual, sqrt(mean(D^2)))
+    for (i in seq_len(Nmax - 2L)) {
+      for (j in which(adj[i, ])) {
+        if (j <= i) next
+        for (k in which(adj[i, ] & adj[j, ])) {
+          if (k <= j) next
+          gij <- edge_between(i, j); gjk <- edge_between(j, k); gik <- edge_between(i, k)
+          if (is.null(gij) || is.null(gjk) || is.null(gik)) next
+          res <- tryCatch({
+            path <- compose_transform(gij, gjk)$op
+            rms_diff(path, gik$op, mapped_cols(path, gik$op))
+          }, error = function(e) NA_real_)
+          tri$i <- c(tri$i, i); tri$j <- c(tri$j, j); tri$k <- c(tri$k, k)
+          tri$residual <- c(tri$residual, res)
+        }
       }
     }
     if (length(tri$residual)) cyc_df <- data.frame(i = tri$i, j = tri$j, k = tri$k, residual = tri$residual)
@@ -682,30 +920,31 @@ compute_diagnostics_ <- function(group, T_list, G, E, W) {
     edge_weights = edge_wt,
     mean_edge_residual = if (all(is.na(edge_res))) NA_real_ else mean(edge_res, na.rm = TRUE),
     cycle_residuals = cyc_df,
-    mean_cycle_residual = if (is.null(cyc_df)) NA_real_ else mean(cyc_df$residual, na.rm = TRUE),
+    mean_cycle_residual = if (is.null(cyc_df) || all(is.na(cyc_df$residual))) NA_real_ else mean(cyc_df$residual, na.rm = TRUE),
     entropy = entropy_df
   )
 }
 
-# One-pass local refinement for O(k) synchronization
+# One-pass local refinement for O(k) synchronization: Gauss-Seidel sweep of
+# the exact block minimiser of sum w || T_i - g_ij T_j ||^2 over T_i in O(k),
+# i.e. T_i = polar(sum_out w g_ij T_j + sum_in w g_ai' T_a).
 refine_orthogonal_local_ <- function(T_list, G, W, E, N) {
   k <- ncol(as.matrix(T_list[[1]]$op))
   out <- T_list
-  # Build neighbor list with oriented g_ij (i->j)
   neigh <- vector("list", N)
   for (i in seq_len(N)) neigh[[i]] <- list()
   for (idx in seq_len(nrow(E))) {
     i <- E$i[idx]; j <- E$j[idx]
-    gij <- G[[idx]]; Gij <- if (inherits(gij, "align_transform")) as.matrix(gij$op) else as.matrix(gij)
+    Gij <- as.matrix(.transform_op(G[[idx]]))
     w <- as.numeric(W[idx] %||% 1)
+    # T_i ~ g_ij T_j  and, for j, the least-squares term g_ij' T_i
     neigh[[i]][[length(neigh[[i]]) + 1L]] <- list(j = j, G = Gij, w = w)
-    neigh[[j]][[length(neigh[[j]]) + 1L]] <- list(j = i, G = t(Gij), w = w) # reverse for orthogonal
+    neigh[[j]][[length(neigh[[j]]) + 1L]] <- list(j = i, G = t(Gij), w = w)
   }
   for (i in seq_len(N)) {
     Mi <- matrix(0, k, k)
     for (nb in neigh[[i]]) {
-      j <- nb$j; Gij <- nb$G; w <- nb$w
-      Mi <- Mi + w * t(Gij) %*% as.matrix(out[[j]]$op)
+      Mi <- Mi + nb$w * nb$G %*% as.matrix(out[[nb$j]]$op)
     }
     sv <- tryCatch(svd(Mi), error = function(e) NULL)
     if (!is.null(sv)) {

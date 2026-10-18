@@ -20,7 +20,7 @@
 #' 
 #' Examples of good candidates:
 #' \itemize{
-#'   \item Eigenvalue computations: \code{safe_compute(PRIMME::eigs_sym(...), "Eigenvalue computation failed")}
+#'   \item Eigenvalue computations: \code{safe_compute(RSpectra::eigs_sym(...), "Eigenvalue computation failed")}
 #'   \item Graph construction: \code{safe_compute(adjoin::graph_weights(...), "Graph construction failed")}
 #'   \item Matrix operations: \code{safe_compute(solve(A), "Matrix solve failed")}
 #' }
@@ -62,9 +62,13 @@ safe_compute <- function(expr, error_msg, warning_fn = NULL) {
 #'
 #' @param data Hyperdesign object produced by multidesign::hyperdesign() or a
 #'   compatible structure used in tests.
+#' @param keep_sparse Logical; when `TRUE`, `Matrix` data blocks (for example
+#'   sparse `dgCMatrix`) are returned unchanged. The default `FALSE` coerces
+#'   every block to a base matrix for callers whose downstream code requires
+#'   dense input.
 #' @return List with `domains`, `domain_names`, and `n_domains`.
 #' @keywords internal
-resolve_hyperdesign <- function(data) {
+resolve_hyperdesign <- function(data, keep_sparse = FALSE) {
   if (!inherits(data, "hyperdesign")) {
     stop("Expected an object of class 'hyperdesign'", call. = FALSE)
   }
@@ -92,14 +96,15 @@ resolve_hyperdesign <- function(data) {
     } else if (is.list(dom) && !is.null(dom$x)) {
       x <- dom$x
       design <- dom$design
-    } else if (is.matrix(dom) || is.data.frame(dom)) {
+    } else if (is.matrix(dom) || is.data.frame(dom) || inherits(dom, "Matrix")) {
       x <- dom
       design <- NULL
     } else {
       stop("Unsupported domain format in hyperdesign", call. = FALSE)
     }
 
-    if (!is.null(x) && !is.matrix(x)) {
+    if (!is.null(x) && !is.matrix(x) &&
+        !(isTRUE(keep_sparse) && inherits(x, "Matrix"))) {
       x <- as.matrix(x)
     }
     if (is.null(x)) {

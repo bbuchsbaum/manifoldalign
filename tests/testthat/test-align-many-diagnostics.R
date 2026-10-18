@@ -14,18 +14,28 @@ test_that("diagnostics: orthogonal sync residuals are near zero on noiseless dat
     manifoldalign::new_align_transform("O", R3, from = 3, to = "consensus", k = k)
   )
   E <- data.frame(i = c(1,1,2), j = c(2,3,3))
+  # Row-action contract (?new_align_transform): X_i g_ij = X_j and
+  # X_i T_i = consensus, so consistency is T_i = g_ij T_j, g_ij = R_i R_j'.
   G <- list(
-    manifoldalign::new_align_transform("O", R2 %*% t(R1), from = 1, to = 2, k = k),
-    manifoldalign::new_align_transform("O", R3 %*% t(R1), from = 1, to = 3, k = k),
-    manifoldalign::new_align_transform("O", R3 %*% t(R2), from = 2, to = 3, k = k)
+    manifoldalign::new_align_transform("O", R1 %*% t(R2), from = 1, to = 2, k = k),
+    manifoldalign::new_align_transform("O", R1 %*% t(R3), from = 1, to = 3, k = k),
+    manifoldalign::new_align_transform("O", R2 %*% t(R3), from = 2, to = 3, k = k)
   )
   W <- rep(1, nrow(E))
   diags <- manifoldalign:::compute_diagnostics_("O", T_list, G, E, W)
   expect_true(is.numeric(diags$mean_edge_residual))
   expect_lt(diags$mean_edge_residual, 1e-10)
-  if (!is.null(diags$cycle_residuals)) {
-    expect_lt(diags$mean_cycle_residual, 1e-10)
-  }
+  expect_false(is.null(diags$cycle_residuals))
+  expect_lt(diags$mean_cycle_residual, 1e-10)
+
+  # The certified consensus really aligns the observations.
+  set.seed(1)
+  X <- matrix(rnorm(20), 10, 2)
+  X2 <- X %*% G[[1]]$op
+  X3 <- X %*% G[[2]]$op
+  Z1 <- manifoldalign::apply_transform(T_list[[1]], X)
+  expect_equal(manifoldalign::apply_transform(T_list[[2]], X2), Z1, tolerance = 1e-12)
+  expect_equal(manifoldalign::apply_transform(T_list[[3]], X3), Z1, tolerance = 1e-12)
 })
 
 test_that("diagnostics: permutation sync residuals and entropies on perfect maps", {
@@ -64,5 +74,11 @@ test_that("diagnostics: permutation sync residuals and entropies on perfect maps
   expect_true(is.data.frame(diags$entropy))
   expect_true(all(diags$entropy$mean_col_entropy <= 1e-12))
   expect_true(all(diags$entropy$mean_row_entropy <= 1e-12))
+
+  # Row action: X_j = G_ij X_i and every domain lands on the same consensus.
+  X1 <- matrix(c(1, 2, 3, 10, 20, 30), 3, 2)
+  Z1 <- manifoldalign::apply_transform(T_list[[1]], X1)
+  expect_equal(manifoldalign::apply_transform(T_list[[2]], G12 %*% X1), Z1)
+  expect_equal(manifoldalign::apply_transform(T_list[[3]], G13 %*% X1), Z1)
 })
 

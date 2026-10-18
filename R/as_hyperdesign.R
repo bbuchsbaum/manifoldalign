@@ -42,14 +42,22 @@ as_hyperdesign <- function(X_list, labels = NULL, label_name = "label", domain_n
 
   strata <- lapply(seq_len(n), function(i) {
     Xi <- X_list[[i]]
-    if (!is.matrix(Xi)) Xi <- as.matrix(Xi)
-    if (!is.numeric(Xi)) stop("All X_list elements must be numeric matrices", call. = FALSE)
+    # Sparse/dense `Matrix` blocks are kept as they are.
+    if (inherits(Xi, "Matrix")) {
+      if (!methods::is(Xi, "dMatrix")) {
+        stop("All X_list elements must be numeric matrices", call. = FALSE)
+      }
+    } else {
+      if (!is.matrix(Xi)) Xi <- as.matrix(Xi)
+      if (!is.numeric(Xi)) stop("All X_list elements must be numeric matrices", call. = FALSE)
+    }
     di <- if (!is.null(labels)) labels[[i]] else NULL
     if (!is.null(di)) {
       if (length(di) != nrow(Xi)) stop("labels[[", i, "]] length must match nrow(X_list[[", i, "]])", call. = FALSE)
       design <- data.frame(setNames(list(di), label_name))
     } else {
-      design <- data.frame()
+      # One (column-free) design row per sample keeps row identity.
+      design <- data.frame(row.names = seq_len(nrow(Xi)))
     }
     list(x = Xi, design = design)
   })

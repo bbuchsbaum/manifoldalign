@@ -11,7 +11,16 @@
 #' aligner_capabilities(algo)
 #' @export
 grasp_aligner <- function() {
-  new_aligner("grasp", group = "O", supports_multi = FALSE)
+  new_aligner(
+    "grasp", group = "O", supports_multi = FALSE,
+    # The relative transform acts on spectral-basis (descriptor) coordinates,
+    # not on the raw features, and there is no fitted encoder for new rows.
+    encoder = "none",
+    supports_predict = FALSE,
+    supports_calibration = FALSE,
+    requires_auxiliary_at_predict = FALSE,
+    invertible = TRUE
+  )
 }
 
 #' Fit GRASP on a pair of domains
@@ -30,9 +39,13 @@ grasp_aligner <- function() {
 #' @param use_laplacian Logical; if TRUE use graph Laplacian, else adjacency
 #' @param solver Assignment solver: "linear", "hungarian", or "auction"
 #' @param ... Additional arguments (unused)
-#' @return An object of class grasp_pair_fit containing rotation (kxk matrix),
+#' @return An object of class grasp_pair_fit containing rotation (kxk signed
+#'   permutation `M` with `C_j %*% M ~ C_i`), the descriptor coefficients
+#'   `coefficients = list(i = C_i, j = C_j)` (`C = t(F) %*% Phi`, q x k),
 #'   mapping_matrix (assignment matrix), assignment vector, loss (numeric),
-#'   and k (latent dimension).
+#'   and k (latent dimension). The rotation acts on spectral-basis
+#'   coordinates, not on the raw features, so `align_many()` cannot embed the
+#'   raw domains with it.
 #' @examples
 #' \donttest{
 #' set.seed(123)
@@ -68,12 +81,17 @@ fit_pair.grasp_aligner <- function(algo, X_i, X_j, links = NULL,
   phi2 <- bases[[2]]$vectors
   F_T_Phi1 <- Matrix::crossprod(descs[[1]], phi1)
   G_T_Phi2 <- Matrix::crossprod(descs[[2]], phi2)
-  resid <- F_T_Phi1 - G_T_Phi2 %*% align_res$rotation
-  loss <- as.numeric(Matrix::norm(resid, "F")^2)
-  k <- ncol(phi1)
+  k <- ncol(as.matrix(align_res$rotation))
+  F_T_Phi1 <- as.matrix(F_T_Phi1)[, seq_len(k), drop = FALSE]
+  G_T_Phi2 <- as.matrix(G_T_Phi2)[, seq_len(k), drop = FALSE]
+  # align_grasp_bases returns M with G'Phi2 M ~ F'Phi1, i.e. M maps the
+  # coordinates of domain j onto those of domain i.
+  resid <- F_T_Phi1 - G_T_Phi2 %*% as.matrix(align_res$rotation)
+  loss <- as.numeric(sum(resid^2))
 
   structure(list(
     rotation = as.matrix(align_res$rotation),
+    coefficients = list(i = F_T_Phi1, j = G_T_Phi2),
     mapping_matrix = as.matrix(assign_res$mapping_matrix),
     assignment = assign_res$assignment,
     loss = loss,
@@ -87,10 +105,12 @@ relative_transform.grasp_pair_fit <- function(fit, from = c("i", "j"), to = c("j
   from <- match.arg(from)
   to <- match.arg(to)
   if (from == to) stop("from and to must differ")
+  # fit$rotation maps j -> i (C_j M ~ C_i); under the row-action contract of
+  # new_align_transform() the i -> j operator is its inverse t(M).
   op <- if (from == "i" && to == "j") {
-    fit$rotation
+    t(fit$rotation)
   } else {
-    t(fit$rotation) # inverse for orthogonal
+    fit$rotation
   }
   new_align_transform("O", op, from = from, to = to, k = fit$k)
 }

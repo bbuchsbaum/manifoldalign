@@ -10,7 +10,10 @@
 #' @param name Character name of the algorithm
 #' @param group One of "O" (orthogonal), "GL" (linear), "perm" (assignment),
 #'   "kernel" (embedding-only), or "encoder" (a native multi-domain method that
-#'   learns per-domain encoders and is never synchronised pairwise)
+#'   learns per-domain encoders and is never synchronised pairwise). Only
+#'   "O", "GL" and "perm" have relative transforms that [align_many()] can
+#'   synchronise; "kernel" and "encoder" aligners must be native
+#'   (`supports_multi = TRUE`).
 #' @param supports_multi Logical; if TRUE, adapter should also implement
 #'   a native multi-domain entry point via fit_many()
 #' @param ... Additional fields stored on the object
@@ -33,7 +36,21 @@ new_aligner <- function(name, group, supports_multi = FALSE, ...) {
 #'   `encoder` (`"linear"`, `"nonlinear"`, or `"none"` for row transports),
 #'   `supports_predict`, `supports_calibration`,
 #'   `requires_auxiliary_at_predict`, and `invertible`. Fields an aligner does
-#'   not declare are omitted rather than guessed.
+#'   not declare are omitted rather than guessed. Their meaning:
+#'   \describe{
+#'     \item{`encoder`}{how a row of a fitted domain reaches the shared space:
+#'       a fixed `"linear"` map of its features, a `"nonlinear"` (for example
+#'       kernel) map, or `"none"` when the method only produces row
+#'       correspondences, transports or maps between derived coordinates.}
+#'     \item{`supports_predict`}{new rows of a fitted domain can be projected
+#'       with a validated out-of-sample method.}
+#'     \item{`supports_calibration`}{a new domain can be added to a frozen fit.}
+#'     \item{`requires_auxiliary_at_predict`}{prediction needs inputs beyond the
+#'       new rows' features (for example graphs, labels or training data that
+#'       the fit does not store).}
+#'     \item{`invertible`}{the map from a domain to the shared space can be
+#'       inverted to recover the domain's features.}
+#'   }
 #' @examples
 #' algo <- new_aligner("test", group = "O")
 #' caps <- aligner_capabilities(algo)
@@ -111,8 +128,12 @@ relative_transform.default <- function(fit, from = c("i", "j"), to = c("j", "i")
 #'   or new_align_transform)
 #' @param X A data matrix to transform (samples x features)
 #' @param ... Additional arguments passed to methods
-#' @return A transformed data matrix. For orthogonal/linear groups, returns X %*% op.
-#'   For permutation group, returns op %*% X.
+#' @return A transformed data matrix. For orthogonal/linear groups, returns
+#'   `X %*% op` (action on the feature axis); for the permutation group,
+#'   returns `op %*% X` (action on the sample axis). See the transform
+#'   contract in [new_align_transform()]. A `Matrix` input (for example a
+#'   sparse `dgCMatrix`) yields a `Matrix` result; base matrices yield base
+#'   matrices.
 #' @examples
 #' # Create a simple orthogonal transform
 #' R <- diag(3)
@@ -358,8 +379,37 @@ fit_many.default <- function(algo, domains, ...) {
 
 #' Construct an alignment transform object
 #'
+#' @section Transform contract:
+#' Every relative and per-domain transform in the package follows one
+#' contract, from which [apply_transform()], [compose_transform()],
+#' [invert_transform()], the synchronisation backends of [align_many()] and
+#' its diagnostics are all derived. A transform `T` from `from = a` to
+#' `to = b` maps observations of domain `a` onto observations of domain `b`:
+#' \describe{
+#'   \item{`"O"`, `"GL"` (action on columns)}{`op` is a `p_a x p_b` matrix
+#'     acting on the feature axis from the right: `apply_transform(T, X_a) =
+#'     X_a %*% op ~ X_b`, row by row.}
+#'   \item{`"perm"` (action on rows)}{`op` is an `n_b x n_a` (soft)
+#'     assignment acting on the sample axis from the left:
+#'     `apply_transform(T, X_a) = op %*% X_a ~ X_b`.}
+#' }
+#' Composition applies the first transform first:
+#' `apply_transform(compose_transform(T_ab, T_bc), X_a) =
+#' apply_transform(T_bc, apply_transform(T_ab, X_a))`, so the composed operator
+#' is `op_ab %*% op_bc` for `"O"`/`"GL"` and `op_bc %*% op_ab` for `"perm"`.
+#'
+#' In [align_many()] a pairwise edge transform `g_ij` goes from domain `i` to
+#' domain `j` (`X_i g_ij ~ X_j`), and each per-domain transform `T_i` goes from
+#' domain `i` to the shared consensus space (`Z ~ apply_transform(T_i, X_i)`
+#' for every `i`). Consistency of an edge with the consensus therefore reads
+#' `compose_transform(g_ij, T_j) = T_i`, that is `T_i = g_ij %*% T_j` for
+#' `"O"`/`"GL"` and `T_i = T_j %*% g_ij` for `"perm"`. Synchronisation solves
+#' these relations in the least-squares sense, and the reported edge residual
+#' is the root-mean-square entry of their difference. A triangle `(i, j, k)` is
+#' cycle-consistent when `compose_transform(g_ij, g_jk) = g_ik`.
+#'
 #' @param group Group identifier: "O", "GL", or "perm" (or "kernel" surrogate)
-#' @param op The underlying operator (e.g., kxk matrix, or assignment matrix)
+#' @param op The underlying operator (see section 'Transform contract').
 #' @param from Source index/label
 #' @param to Target index/label
 #' @param k Latent dimension (if applicable)
@@ -381,27 +431,30 @@ new_align_transform <- function(group, op, from, to, k = NULL, dim = NULL) {
 apply_transform.align_transform <- function(transform, X, ...) {
   grp <- transform$group
   op <- transform$op
+  # Sparse `Matrix` inputs are kept as `Matrix` objects; base inputs are
+  # returned as base matrices.
+  x_is_Matrix <- inherits(X, "Matrix")
+  if (!x_is_Matrix) X <- as.matrix(X)
   if (grp %in% c("O", "GL")) {
-    X <- as.matrix(X)
-    op <- as.matrix(op)
+    # Column action: X (n x p_from) %*% op (p_from x p_to)
+    if (!inherits(op, "Matrix")) op <- as.matrix(op)
     if (ncol(X) != nrow(op)) {
       stop("apply_transform: dimension mismatch: ncol(X) != nrow(op)")
     }
-    return(X %*% op)
+    out <- X %*% op
   } else if (grp == "perm") {
-    # Permutation/assignment acts on rows: op (n_to x n_from) times X (n_from x d)
-    X <- as.matrix(X)
-    op <- transform$op
+    # Row action: op (n_to x n_from) %*% X (n_from x d)
+    if (!inherits(op, "Matrix")) op <- as.matrix(op)
     if (ncol(op) != nrow(X)) {
       stop("apply_transform[perm]: dimension mismatch: ncol(op) != nrow(X)")
     }
-    if (inherits(op, "Matrix")) {
-      return(as.matrix(op %*% X))
-    }
-    op <- as.matrix(op)
-    return(op %*% X)
+    out <- op %*% X
+  } else {
+    stop("apply_transform: not implemented for group '", grp, "'")
   }
-  stop("apply_transform: not implemented for group '", grp, "'")
+  if (x_is_Matrix) return(out)
+  if (inherits(out, "Matrix")) out <- as.matrix(out)
+  out
 }
 
 #' @export
