@@ -142,6 +142,81 @@ test_that("out-of-fold safety validation removes a misleading relation", {
     ),
     "requires out-of-fold"
   )
+
+  # A single matrix is one fold over every row: same decision as before.
+  as_folds <- manifoldalign:::.rapid_semisup_validate_relations(
+    fit, list(list(list(rows = 1:6, probabilities = probability))),
+    labels, control
+  )
+  expect_identical(as_folds$diagnostics$d1$scores, selected$diagnostics$d1$scores)
+})
+
+test_that("the relation-safety gate scores each fold with its own matrix", {
+  labels <- list(c("a", "a", "b", "b"))
+  ring <- Matrix::sparseMatrix(
+    i = c(1L, 2L, 3L, 4L), j = c(2L, 1L, 4L, 3L), x = 1, dims = c(4L, 4L)
+  )
+  fit <- list(
+    domain_names = "d1",
+    domain_sizes = c(d1 = 4L),
+    prototypes = list(
+      class_levels = c("a", "b", ".unknown"),
+      control = list(unknown_level = ".unknown")
+    ),
+    relations = list(list(relations = list(ring = ring))),
+    diffusion = list(list(relation_weights = c(ring = 1)))
+  )
+  control <- rapid_ma_semisup_control(
+    rounds = 0L, propagation_steps = 1L, propagation_strength = 1,
+    relation_gate_min = 0, relation_validation = TRUE,
+    relation_validation_margin = 0.2
+  )
+  flat <- matrix(1 / 3, 4L, 3L, dimnames = list(NULL, c("a", "b", ".unknown")))
+  # Contaminated single matrix: every row's probability was computed with
+  # all labels, so through the relation each held-out row reads its
+  # neighbour's label-bearing value and the relation looks perfect.
+  neighbour_value <- rbind(
+    c(0.9, 0.05, 0.05), c(0.9, 0.05, 0.05),
+    c(0.05, 0.9, 0.05), c(0.05, 0.9, 0.05)
+  )
+  colnames(neighbour_value) <- colnames(flat)
+  contaminated <- neighbour_value
+  # Leave-one-out folds: fold r recomputes every row without row r's label;
+  # here that leaves row r's neighbour uninformative too.
+  folds <- lapply(1:4, function(r) {
+    probability <- neighbour_value
+    partner <- c(2L, 1L, 4L, 3L)[[r]]
+    probability[c(r, partner), ] <- rep(c(0.4, 0.4, 0.2), each = 2L)
+    list(rows = r, probabilities = probability)
+  })
+  with_folds <- manifoldalign:::.rapid_semisup_validate_relations(
+    fit, list(folds), labels, control
+  )
+  scores <- with_folds$diagnostics$d1$scores
+  expect_identical(with_folds$diagnostics$d1$validation_folds, 4L)
+  expect_identical(with_folds$diagnostics$d1$validation_rows, 4L)
+  # Neither candidate has any held-out information: accuracy 0.5 for both.
+  expect_equal(scores["full", "accuracy"], 0.5)
+  expect_equal(scores["none", "accuracy"], 0.5)
+
+  single <- manifoldalign:::.rapid_semisup_validate_relations(
+    fit, list(contaminated), labels, control
+  )
+  # The contaminated matrix makes the relation look perfect.
+  expect_equal(single$diagnostics$d1$scores["full", "accuracy"], 1)
+
+  expect_error(
+    manifoldalign:::.rapid_semisup_validate_relations(
+      fit, list(list(folds[[1L]], folds[[1L]])), labels, control
+    ),
+    "disjoint rows"
+  )
+  expect_error(
+    manifoldalign:::.rapid_semisup_validate_relations(
+      fit, list(list(list(rows = 9L, probabilities = flat))), labels, control
+    ),
+    "unique row indices"
+  )
 })
 
 test_that("sparse relation propagation corrects locally inconsistent probabilities", {
@@ -222,7 +297,7 @@ test_that("external supervised probabilities can seed propagation without new la
     propagated$semisup$provenance$probability_initialization,
     "external"
   )
-  expect_false(propagated$semisup$provenance$test_labels_read)
+  expect_true(all(propagated$semisup$provenance$ignored_labels == 0L))
   expect_equal(
     unlist(lapply(propagated$prediction_probabilities, rowSums),
            use.names = FALSE),
@@ -388,7 +463,6 @@ test_that("inductive masks make held-out label values observationally irrelevant
     mode = "inductive", control = control
   )
 
-  expect_false(first$semisup$provenance$test_labels_read)
   expect_identical(
     unname(first$semisup$provenance$ignored_labels),
     vapply(train_mask, function(x) sum(!x), integer(1))
@@ -421,5 +495,5 @@ test_that("fully unlabeled fits remain explicitly structural-only", {
 
   expect_identical(refined$semisup$status, "structural_only")
   expect_identical(refined$predictions, fit$predictions)
-  expect_false(refined$semisup$provenance$test_labels_read)
+  expect_true(all(refined$semisup$provenance$ignored_labels == 0L))
 })

@@ -287,6 +287,52 @@ rapid_ma_semisup_control <- function(
   })
 }
 
+# Validate one class-probability matrix for domain `m` and expand it to the
+# fit's class levels (absent classes get zero mass); rows are renormalized.
+.rapid_semisup_probability_matrix <- function(fit, m, probability) {
+  class_levels <- fit$prototypes$class_levels
+  if (!is.numeric(probability) || length(dim(probability)) != 2L ||
+      nrow(probability) != fit$domain_sizes[[m]]) {
+    stop(
+      "Domain `", fit$domain_names[[m]],
+      "`: initial probabilities must be a numeric matrix with one row per node.",
+      call. = FALSE
+    )
+  }
+  probability <- as.matrix(probability)
+  probability_classes <- colnames(probability)
+  if (is.null(probability_classes) || any(!nzchar(probability_classes)) ||
+      anyDuplicated(probability_classes)) {
+    stop("Initial probability matrices need unique class column names.",
+         call. = FALSE)
+  }
+  unknown <- setdiff(probability_classes, class_levels)
+  if (length(unknown)) {
+    stop(
+      "Initial probabilities contain class(es) absent from the fit: ",
+      paste(unknown, collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  if (any(!is.finite(probability)) || any(probability < 0)) {
+    stop("Initial probabilities must be finite and nonnegative.",
+         call. = FALSE)
+  }
+  output <- matrix(
+    0,
+    nrow(probability),
+    length(class_levels),
+    dimnames = list(NULL, class_levels)
+  )
+  output[, probability_classes] <- probability
+  mass <- rowSums(output)
+  if (any(mass <= 0)) {
+    stop("Every initial probability row must have positive mass.",
+         call. = FALSE)
+  }
+  output / mass
+}
+
 .rapid_semisup_initial_probabilities <- function(fit, initial_probabilities) {
   if (is.null(initial_probabilities)) {
     return(list(
@@ -301,52 +347,80 @@ rapid_ma_semisup_control <- function(
       call. = FALSE
     )
   }
-  class_levels <- fit$prototypes$class_levels
   probabilities <- lapply(seq_along(initial_probabilities), function(m) {
-    probability <- initial_probabilities[[m]]
-    if (!is.numeric(probability) || length(dim(probability)) != 2L ||
-        nrow(probability) != fit$domain_sizes[[m]]) {
-      stop(
-        "Domain `", fit$domain_names[[m]],
-        "`: initial probabilities must be a numeric matrix with one row per node.",
-        call. = FALSE
-      )
-    }
-    probability <- as.matrix(probability)
-    probability_classes <- colnames(probability)
-    if (is.null(probability_classes) || any(!nzchar(probability_classes)) ||
-        anyDuplicated(probability_classes)) {
-      stop("Initial probability matrices need unique class column names.",
-           call. = FALSE)
-    }
-    unknown <- setdiff(probability_classes, class_levels)
-    if (length(unknown)) {
-      stop(
-        "Initial probabilities contain class(es) absent from the fit: ",
-        paste(unknown, collapse = ", "), ".",
-        call. = FALSE
-      )
-    }
-    if (any(!is.finite(probability)) || any(probability < 0)) {
-      stop("Initial probabilities must be finite and nonnegative.",
-           call. = FALSE)
-    }
-    output <- matrix(
-      0,
-      nrow(probability),
-      length(class_levels),
-      dimnames = list(NULL, class_levels)
-    )
-    output[, probability_classes] <- probability
-    mass <- rowSums(output)
-    if (any(mass <= 0)) {
-      stop("Every initial probability row must have positive mass.",
-           call. = FALSE)
-    }
-    output / mass
+    .rapid_semisup_probability_matrix(fit, m, initial_probabilities[[m]])
   })
   names(probabilities) <- fit$domain_names
   list(probabilities = probabilities, source = "external")
+}
+
+# Normalize `validation_probabilities` to out-of-fold folds per domain. Each
+# domain entry is either one probability matrix (a single fold that scores
+# every observed label row; the caller guarantees that no row of it used any
+# scored label) or a list of folds `list(rows = <row indices>, probabilities =
+# <matrix>)`, where each fold's full matrix was computed without the labels
+# of its `rows`. Only fold rows are scored, after propagating that fold's own
+# matrix, so relation neighbours never carry a scored row's label.
+.rapid_semisup_validation_folds <- function(fit, validation_probabilities) {
+  if (!is.list(validation_probabilities) ||
+      length(validation_probabilities) != length(fit$domain_sizes)) {
+    stop(
+      "`validation_probabilities` must provide one matrix or fold list per ",
+      "domain.",
+      call. = FALSE
+    )
+  }
+  lapply(seq_along(validation_probabilities), function(m) {
+    value <- validation_probabilities[[m]]
+    n <- fit$domain_sizes[[m]]
+    if (length(dim(value)) == 2L) {
+      return(list(list(
+        rows = seq_len(n),
+        probabilities = .rapid_semisup_probability_matrix(fit, m, value)
+      )))
+    }
+    if (!is.list(value) || !length(value)) {
+      stop(
+        "Domain `", fit$domain_names[[m]], "`: validation probabilities must ",
+        "be a matrix or a non-empty list of folds.",
+        call. = FALSE
+      )
+    }
+    folds <- lapply(value, function(fold) {
+      if (!is.list(fold) || is.null(fold$rows) || is.null(fold$probabilities)) {
+        stop(
+          "Domain `", fit$domain_names[[m]], "`: every validation fold needs ",
+          "`rows` and `probabilities`.",
+          call. = FALSE
+        )
+      }
+      rows <- fold$rows
+      if (!is.numeric(rows) || !length(rows) || anyNA(rows) ||
+          any(abs(rows - round(rows)) > 1e-8) || any(rows < 1 | rows > n) ||
+          anyDuplicated(rows)) {
+        stop(
+          "Domain `", fit$domain_names[[m]], "`: fold rows must be unique ",
+          "row indices.",
+          call. = FALSE
+        )
+      }
+      list(
+        rows = as.integer(rows),
+        probabilities = .rapid_semisup_probability_matrix(
+          fit, m, fold$probabilities
+        )
+      )
+    })
+    scored <- unlist(lapply(folds, `[[`, "rows"), use.names = FALSE)
+    if (anyDuplicated(scored)) {
+      stop(
+        "Domain `", fit$domain_names[[m]], "`: validation folds must have ",
+        "disjoint rows.",
+        call. = FALSE
+      )
+    }
+    folds
+  })
 }
 
 .rapid_semisup_store_predictions <- function(fit, probabilities) {
@@ -425,11 +499,10 @@ rapid_ma_semisup_control <- function(
       call. = FALSE
     )
   }
-  validation <- .rapid_semisup_initial_probabilities(
-    fit, validation_probabilities
-  )$probabilities
+  folds <- .rapid_semisup_validation_folds(fit, validation_probabilities)
+  class_levels <- fit$prototypes$class_levels
   unknown <- fit$prototypes$control$unknown_level
-  classes <- setdiff(fit$prototypes$class_levels, unknown)
+  classes <- setdiff(class_levels, unknown)
 
   for (m in seq_along(fit$domain_names)) {
     relation_names <- names(fit$relations[[m]]$relations)
@@ -443,21 +516,32 @@ rapid_ma_semisup_control <- function(
       NA_real_, length(candidates), 2L,
       dimnames = list(names(candidates), c("accuracy", "log_loss"))
     )
+    n <- fit$domain_sizes[[m]]
+    scored <- rep(FALSE, n)
+    for (fold in folds[[m]]) scored[fold$rows] <- TRUE
+    scored_labels <- labels[[m]]
+    scored_labels[!scored] <- NA_character_
     for (candidate in names(candidates)) {
       keep <- intersect(candidates[[candidate]], relation_names)
       relation_state <- fit$relations[[m]]
       diffusion_fit <- fit$diffusion[[m]]
       relation_state$relations <- relation_state$relations[keep]
       diffusion_fit$relation_weights <- diffusion_fit$relation_weights[keep]
-      propagated <- .rapid_propagate_probabilities(
-        list(validation[[m]]),
-        list(rep(NA_character_, fit$domain_sizes[[m]])),
-        list(relation_state),
-        list(diffusion_fit),
-        control
-      )[[1L]]
+      assembled <- matrix(
+        0, n, length(class_levels), dimnames = list(NULL, class_levels)
+      )
+      for (fold in folds[[m]]) {
+        propagated <- .rapid_propagate_probabilities(
+          list(fold$probabilities),
+          list(rep(NA_character_, n)),
+          list(relation_state),
+          list(diffusion_fit),
+          control
+        )[[1L]]
+        assembled[fold$rows, ] <- propagated[fold$rows, , drop = FALSE]
+      }
       score[candidate, ] <- .rapid_semisup_validation_score(
-        propagated, labels[[m]], classes
+        assembled, scored_labels, classes
       )
     }
     full_index <- match("full", rownames(score))
@@ -492,7 +576,8 @@ rapid_ma_semisup_control <- function(
       margin = control$relation_validation_margin,
       scores = as.data.frame(score),
       candidate_relations = candidates,
-      validation_rows = sum(!is.na(labels[[m]]) & labels[[m]] %in% classes)
+      validation_rows = sum(!is.na(scored_labels) & scored_labels %in% classes),
+      validation_folds = length(folds[[m]])
     )
   }
   list(fit = fit, diagnostics = diagnostics, status = "validated")
@@ -709,8 +794,12 @@ rapid_ma_semisup_control <- function(
 #' class-balanced accuracy on the observed labels. The full relation set is
 #' replaced only when a subset improves on it by at least
 #' `control$relation_validation_margin`. Because propagation mixes each row with
-#' its relation neighbours, the validation probabilities of a labelled row's
-#' neighbours must also be computed without that row's label.
+#' its relation neighbours, replacing only a labelled row's own probability by a
+#' leave-one-out value is not out-of-fold: its neighbours' probabilities would
+#' still have used its label. Folds avoid this: each fold's whole matrix is
+#' propagated and only that fold's rows are scored, so per-row (leave-one-out)
+#' or grouped refits give genuinely out-of-fold scores. Rows outside every fold
+#' are not scored.
 #'
 #' @param fit A fitted `rapid_ma` object.
 #' @param labels Optional training-label vectors. In inductive mode, labels
@@ -720,11 +809,14 @@ rapid_ma_semisup_control <- function(
 #' @param initial_probabilities Optional named-class probability matrices, one
 #'   per domain. A supervised downstream classifier can seed the sparse relation
 #'   teacher without providing additional labels.
-#' @param validation_probabilities Optional out-of-fold probability matrices
-#'   used only when relation validation is enabled
-#'   (`control$relation_validation = TRUE`). Values at observed label rows, and
-#'   at the relation neighbours of those rows, must be produced without
-#'   training on those rows' labels (see Details).
+#' @param validation_probabilities Optional out-of-fold probabilities, used
+#'   only when relation validation is enabled
+#'   (`control$relation_validation = TRUE`). One entry per domain: either a
+#'   list of folds, each `list(rows = <row indices>, probabilities = <matrix>)`
+#'   whose full probability matrix was computed without the labels of its
+#'   `rows`, or a single probability matrix, which must then be out-of-fold for
+#'   every observed label row and all of its relation neighbours (see
+#'   Details).
 #' @param control Settings returned by [rapid_ma_semisup_control()].
 #' @return The updated `rapid_ma` object with refined probabilities and a
 #'   `semisup` provenance record.
@@ -756,9 +848,7 @@ rapid_ma_semisup <- function(
       history = data.frame(),
       pseudo_labels = lapply(true_labels, function(x) rep(NA_character_, length(x))),
       provenance = list(
-        test_labels_read = FALSE,
-        ignored_labels = masks$ignored_labels,
-        deterministic = TRUE
+        ignored_labels = masks$ignored_labels
       ),
       control = control
     )
@@ -917,14 +1007,12 @@ rapid_ma_semisup <- function(
     teacher_probabilities = teacher,
     class_thresholds = .rapid_class_thresholds(true_labels, known_classes, control),
     provenance = list(
-      test_labels_read = FALSE,
       ignored_labels = masks$ignored_labels,
       train_rows = vapply(masks$train_mask, sum, integer(1)),
       eligible_rows = vapply(masks$eligible, sum, integer(1)),
       true_label_counts = lapply(true_labels, function(x) table(x, useNA = "no")),
       probability_initialization = initialization$source,
-      relation_validation = relation_validation$diagnostics,
-      deterministic = TRUE
+      relation_validation = relation_validation$diagnostics
     ),
     control = control
   )

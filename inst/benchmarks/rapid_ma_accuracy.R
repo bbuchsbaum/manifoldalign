@@ -48,10 +48,11 @@ make_scenario <- function(seed, scenario) {
   fixture
 }
 
-failed_method_row <- function(method, elapsed, peak, peak_delta, message) {
+failed_method_row <- function(method, elapsed, peak, peak_delta, message,
+                              status = "failed") {
   data.frame(
     method = method,
-    status = "failed",
+    status = status,
     evaluation_mode = NA_character_,
     classifier = NA_character_,
     runtime_sec = elapsed,
@@ -112,7 +113,8 @@ run_isolated_method <- function(fixture, method, seed, timeout_sec) {
       delta <- if (is.finite(initial) && is.finite(peak)) peak - initial else NA_real_
       return(failed_method_row(
         method, elapsed, peak, delta,
-        paste0("method exceeded isolated ", timeout_sec, " second timeout")
+        paste0("method exceeded isolated ", timeout_sec, " second timeout"),
+        status = "timeout"
       ))
     }
     Sys.sleep(0.02)
@@ -150,13 +152,13 @@ for (scenario in c("structured", "degraded_target")) {
     block$n_source <- nrow(fixture$data[[1L]])
     block$n_target <- nrow(fixture$data[[2L]])
     block$labels_per_class <- 4L
-    block$test_labels_read_during_fit <- FALSE
     index <- index + 1L
     rows[[index]] <- block
     message(
       "completed scenario=", scenario,
       " seed=", seed,
-      " failures=", sum(block$status != "ok")
+      " failures=", sum(block$status == "failed"),
+      " timeouts=", sum(block$status == "timeout")
     )
   }
 }
@@ -185,7 +187,8 @@ summary_rows <- lapply(groups, function(rows) {
     },
     n_replicates = nrow(block),
     n_ok = sum(block$status == "ok"),
-    n_failed = sum(block$status != "ok"),
+    n_failed = sum(block$status == "failed"),
+    n_timeout = sum(block$status == "timeout"),
     stringsAsFactors = FALSE
   )
   for (metric in metric_names) {
@@ -224,6 +227,7 @@ metadata <- c(
   paste("profile", profile, sep = "="),
   paste("seeds", paste(seeds, collapse = ","), sep = "="),
   paste("method_timeout_sec", method_timeout_sec, sep = "="),
+  "status_values=ok,failed,timeout",
   "development_seeds=1:5,9,17,19,21,23,29,101:120,201:205,1001:1020",
   "test_label_tuning=false",
   "shared_embedding_classifier=nearest_centroid",
