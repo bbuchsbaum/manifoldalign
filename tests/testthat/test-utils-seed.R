@@ -1,0 +1,13 @@
+test_that(".with_local_seed fixes the seed and restores the caller's stream", {
+  with_local_seed <- get(".with_local_seed", envir = asNamespace("manifoldalign"))
+  set.seed(42)
+  expected_next <- runif(1)
+  set.seed(42)
+  a <- with_local_seed(7, runif(3))
+  b <- with_local_seed(7, runif(3))
+  expect_identical(a, b)
+  expect_identical(runif(1), expected_next)
+  set.seed(42)
+  expect_error(with_local_seed(1, stop("boom")), "boom")
+  expect_identical(runif(1), expected_next)
+})

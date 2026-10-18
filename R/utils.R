@@ -180,3 +180,27 @@ new_alignment_result <- function(scores,
 
   result
 }
+
+# Run `expr` with a fixed seed without disturbing the caller's RNG stream.
+# The previous `.Random.seed` (or its absence) is restored on exit, including
+# on error. `seed = NULL` evaluates `expr` without reseeding but still
+# restores the stream afterwards.
+.with_local_seed <- function(seed, expr) {
+  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  if (had_seed) old_seed <- get(".Random.seed", envir = globalenv())
+  on.exit({
+    if (had_seed) {
+      assign(".Random.seed", old_seed, envir = globalenv())
+    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
+      rm(".Random.seed", envir = globalenv())
+    }
+  }, add = TRUE)
+  if (!is.null(seed)) set.seed(seed)
+  expr
+}
+
+# PRIMME is optional: callers must fall back to RSpectra (or base eigen for
+# tiny problems) when it is not installed.
+.primme_available <- function() {
+  requireNamespace("PRIMME", quietly = TRUE)
+}
