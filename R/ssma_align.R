@@ -267,7 +267,12 @@ resolve_ssma_align_control <- function(control = NULL) {
 }
 
 .ssma_build_label_correspondences <- function(labels_list, max_pairs_per_label, weight, seed) {
-  set.seed(seed)
+  .with_local_seed(seed, .ssma_draw_label_correspondences(
+    labels_list, max_pairs_per_label, weight
+  ))
+}
+
+.ssma_draw_label_correspondences <- function(labels_list, max_pairs_per_label, weight) {
   m <- length(labels_list)
   rows <- vector("list", m * (m - 1L) / 2L)
   ptr <- 0L
@@ -285,8 +290,10 @@ resolve_ssma_align_control <- function(control = NULL) {
         n_take <- min(length(idx_i), length(idx_j), as.integer(max_pairs_per_label))
         if (n_take < 1L) next
 
-        ii <- sample(idx_i, size = n_take, replace = FALSE)
-        jj <- sample(idx_j, size = n_take, replace = FALSE)
+        # Index the candidate vectors: sample(x, n) on a length-one `x`
+        # would draw from seq_len(x) and pair an unrelated row.
+        ii <- idx_i[sample.int(length(idx_i), size = n_take, replace = FALSE)]
+        jj <- idx_j[sample.int(length(idx_j), size = n_take, replace = FALSE)]
 
         ptr <- ptr + 1L
         rows[[ptr]] <- data.frame(
@@ -572,7 +579,8 @@ resolve_ssma_align_control <- function(control = NULL) {
   )
 }
 
-.ssma_build_within_graph <- function(X, knn, sigma = NULL, serial_idx = NULL, serial_ctrl = ssma_serial_control()) {
+.ssma_build_within_graph <- function(X, knn, sigma = NULL, serial_idx = NULL, serial_ctrl = ssma_serial_control(),
+                                     seed = 1L) {
   X <- as.matrix(X)
   n <- nrow(X)
 
@@ -606,7 +614,9 @@ resolve_ssma_align_control <- function(control = NULL) {
   }
 
   k_use <- min(as.integer(knn), n - 1L)
-  sigma_use <- if (is.null(sigma)) choose_sigma(X_graph) else sigma
+  # choose_sigma() subsamples rows; draw them reproducibly without touching
+  # the caller's RNG stream.
+  sigma_use <- if (is.null(sigma)) .with_local_seed(seed, choose_sigma(X_graph)) else sigma
 
   gw <- safe_compute(
     adjoin::graph_weights(
@@ -666,6 +676,10 @@ resolve_ssma_align_control <- function(control = NULL) {
                                        assemble_dense = TRUE) {
   n_domains <- length(domains)
   domain_sizes <- vapply(domains, function(d) nrow(d$x), integer(1))
+  # Estimand: the constraint uses the block-diagonal WITHIN-domain degree
+  # matrix D_w (each domain's kNN graph), while the objective uses the joint
+  # Laplacian including correspondence edges. Correspondences therefore act
+  # only through the objective; see the roxygen of ssma_align().
   degree_list <- lapply(within_graphs, function(g) pmax(as.numeric(g$degree), 1e-12))
 
   basis <- vector("list", n_domains)
@@ -674,7 +688,7 @@ resolve_ssma_align_control <- function(control = NULL) {
   for (i in seq_len(n_domains)) {
     bi <- .ssma_domain_basis(
       X = domains[[i]]$x,
-      degree = within_graphs[[i]]$degree,
+      degree = degree_list[[i]],
       rank_per_domain = rank_per_domain,
       svd_tol = svd_tol
     )
@@ -761,28 +775,40 @@ resolve_ssma_align_control <- function(control = NULL) {
 
   k_req <- min(max(as.integer(ncomp) + 5L, as.integer(ncomp)), r)
 
+  dense_smallest <- function(k) {
+    # eigen() returns the spectrum in decreasing order: sort the full
+    # spectrum ascending before truncating to the k smallest pairs.
+    eig <- eigen(S, symmetric = TRUE)
+    ord <- order(eig$values, decreasing = FALSE)[seq_len(k)]
+    list(values = as.numeric(eig$values[ord]),
+         vectors = as.matrix(eig$vectors[, ord, drop = FALSE]))
+  }
+
+  complete <- FALSE
   if (requireNamespace("RSpectra", quietly = TRUE) && k_req < (r - 1L)) {
     eig <- RSpectra::eigs_sym(S, k = k_req, which = "SA")
     vals <- as.numeric(eig$values)
     vecs <- as.matrix(eig$vectors)
+    ord <- order(vals, decreasing = FALSE)
+    vals <- vals[ord]
+    vecs <- vecs[, ord, drop = FALSE]
+    n_ok <- sum(is.finite(vals) & vals > eig_tol)
+    if (n_ok < as.integer(ncomp) || length(vals) < k_req) {
+      # Too many trivial (or unconverged) pairs among the k_req smallest:
+      # the reduced matrix is dense and small, so use its full spectrum.
+      eig <- dense_smallest(r)
+      vals <- eig$values
+      vecs <- eig$vectors
+      complete <- TRUE
+    }
   } else {
-    eig <- eigen(S, symmetric = TRUE)
-    vals <- as.numeric(eig$values[seq_len(k_req)])
-    vecs <- as.matrix(eig$vectors[, seq_len(k_req), drop = FALSE])
+    eig <- dense_smallest(r)
+    vals <- eig$values
+    vecs <- eig$vectors
+    complete <- TRUE
   }
 
-  ord <- order(vals, decreasing = FALSE)
-  vals <- vals[ord]
-  vecs <- vecs[, ord, drop = FALSE]
-
-  keep <- which(is.finite(vals) & vals > eig_tol)
-  if (!length(keep)) {
-    keep <- seq_len(min(as.integer(ncomp), length(vals)))
-  }
-
-  k_out <- min(as.integer(ncomp), length(keep))
-  keep <- keep[seq_len(k_out)]
-
+  keep <- .ssma_select_components(vals, ncomp, eig_tol, complete = complete)
   alpha <- W %*% vecs[, keep, drop = FALSE]
 
   list(
@@ -791,6 +817,42 @@ resolve_ssma_align_control <- function(control = NULL) {
     eigenvalues_all = vals,
     ridge = ridge
   )
+}
+
+# Pick the `ncomp` smallest non-trivial generalized eigenpairs (eigenvalue >
+# eig_tol) from an ascending spectrum. Trivial (null-space) vectors are never
+# substituted. With fewer non-trivial pairs than requested the shortfall is
+# a warning (the result records requested and returned counts); with none it
+# is an error.
+.ssma_select_components <- function(vals, ncomp, eig_tol, complete = TRUE) {
+  ncomp <- as.integer(ncomp)
+  nontrivial <- which(is.finite(vals) & vals > eig_tol)
+  nontrivial <- nontrivial[order(vals[nontrivial])]
+  if (!length(nontrivial)) {
+    stop(
+      "SSMA found no non-trivial generalized eigenpairs: all ", length(vals),
+      " computed eigenvalues are <= eig_tol (", signif(eig_tol, 3), "). ",
+      "The joint graph or the per-domain bases are degenerate; check the ",
+      "correspondences, knn and rank_per_domain.",
+      call. = FALSE
+    )
+  }
+  if (length(nontrivial) < ncomp) {
+    warning(
+      "SSMA returned ", length(nontrivial), " of the ", ncomp,
+      " requested components: ",
+      if (isTRUE(complete)) {
+        paste0("the reduced problem has ", length(vals),
+               " generalized eigenpairs (its rank), of which ")
+      } else {
+        paste0("of the ", length(vals), " computed generalized eigenpairs ")
+      },
+      length(nontrivial), " exceed eig_tol (", signif(eig_tol, 3), "). See ",
+      "`ncomp_requested`/`ncomp_returned` in the result.",
+      call. = FALSE
+    )
+  }
+  nontrivial[seq_len(min(ncomp, length(nontrivial)))]
 }
 
 .ssma_as_matrix <- function(x, nrow) {
@@ -813,8 +875,7 @@ resolve_ssma_align_control <- function(control = NULL) {
 }
 
 .ssma_lambda_max_power <- function(op, n, n_iter = 30L, tol = 1e-6, seed = 1L) {
-  set.seed(seed)
-  v <- rnorm(n)
+  v <- .with_local_seed(seed, stats::rnorm(n))
   v <- v / sqrt(sum(v * v))
   lambda_prev <- 0
 
@@ -917,31 +978,55 @@ resolve_ssma_align_control <- function(control = NULL) {
   if (k_req < 1L) {
     stop("Insufficient reduced rank for operator eigendecomposition.", call. = FALSE)
   }
+  if (!requireNamespace("RSpectra", quietly = TRUE)) {
+    stop("solver='operator' requires RSpectra.", call. = FALSE)
+  }
 
-  if (requireNamespace("RSpectra", quietly = TRUE)) {
+  solve_dense <- function() {
+    # Full spectrum of the whitened operator (small problems only).
+    S_dense <- as.matrix(S_op(diag(r_total)))
+    S_dense <- 0.5 * (S_dense + t(S_dense))
+    eig <- eigen(S_dense, symmetric = TRUE)
+    ord <- order(eig$values, decreasing = FALSE)
+    list(values = as.numeric(eig$values[ord]),
+         vectors = as.matrix(eig$vectors[, ord, drop = FALSE]))
+  }
+  solve_iterative <- function(k) {
     eig <- RSpectra::eigs_sym(
       shifted_op,
-      k = k_req,
+      k = k,
       n = r_total,
       which = "LA",
       opts = list(maxitr = as.integer(operator_maxiter), tol = as.numeric(operator_tol))
     )
     vals <- c_shift * (1 - as.numeric(eig$values))
     vecs <- as.matrix(eig$vectors)
-  } else {
-    stop("solver='operator' requires RSpectra.", call. = FALSE)
+    ord <- order(vals, decreasing = FALSE)
+    list(values = vals[ord], vectors = vecs[, ord, drop = FALSE])
   }
 
-  ord <- order(vals, decreasing = FALSE)
-  vals <- vals[ord]
-  vecs <- vecs[, ord, drop = FALSE]
-
-  keep <- which(is.finite(vals) & vals > eig_tol)
-  if (!length(keep)) {
-    keep <- seq_len(min(as.integer(ncomp), length(vals)))
+  dense_max <- 2000L
+  complete <- r_total <= k_req + 1L
+  sol <- if (complete && r_total <= dense_max) solve_dense() else solve_iterative(k_req)
+  if (complete && r_total > dense_max) complete <- FALSE
+  repeat {
+    n_ok <- sum(is.finite(sol$values) & sol$values > eig_tol)
+    if (n_ok >= as.integer(ncomp) || complete) break
+    if (r_total <= dense_max) {
+      sol <- solve_dense()
+      complete <- TRUE
+      break
+    }
+    k_next <- min(r_total - 1L, max(2L * k_req, k_req + as.integer(ncomp)))
+    if (k_next <= k_req) break
+    k_req <- k_next
+    sol <- solve_iterative(k_req)
   }
-  k_out <- min(as.integer(ncomp), length(keep))
-  keep <- keep[seq_len(k_out)]
+  vals <- sol$values
+  vecs <- sol$vectors
+
+  keep <- .ssma_select_components(vals, ncomp, eig_tol, complete = complete)
+  k_out <- length(keep)
 
   q <- vecs[, keep, drop = FALSE]
   alpha <- apply_inv_half(q)
@@ -959,6 +1044,21 @@ resolve_ssma_align_control <- function(control = NULL) {
 #'
 #' Baseline SSMA implementation based on Wang et al. feature-level manifold
 #' alignment (`Z^T L Z f = λ Z^T D Z f`) solved in a reduced-rank space.
+#'
+#' Estimand: `L` is the Laplacian of the joint graph whose edges are the
+#' within-domain kNN edges plus the cross-domain correspondence edges
+#' (weight `corr_edge_weight`), while `D` is the block-diagonal
+#' *within-domain* degree matrix, i.e. the constraint is
+#' `f' Z' D_w Z f = 1` with `D_w = diag(D_1, ..., D_m)` from each domain's
+#' own kNN graph. Correspondence edges therefore enter only the objective;
+#' this differs from the formulation of Wang & Mahadevan, whose `D` is the
+#' degree matrix of the joint graph (it would add each row's incident
+#' correspondence weight to its degree). The result records this choice as
+#' `degree_matrix = "within_domain"`. The `ncomp` smallest generalized eigenpairs above
+#' `eig_tol` are returned; trivial (null-space) pairs are never substituted.
+#' If fewer than `ncomp` non-trivial pairs exist a warning is issued and the
+#' result records `ncomp_requested` and `ncomp_returned`; if none exist the
+#' fit errors.
 #'
 #' @param data A `hyperdesign` object or list of matrices.
 #' @param ... Additional arguments passed to methods.
@@ -1025,7 +1125,8 @@ ssma_align.hyperdesign <- function(
       knn = ctrl$knn,
       sigma = ctrl$sigma,
       serial_idx = serial_idx[[i]],
-      serial_ctrl = ctrl$serial_control
+      serial_ctrl = ctrl$serial_control,
+      seed = as.integer(ctrl$seed) + as.integer(i) * 1009L
     )
   })
 
@@ -1143,7 +1244,10 @@ ssma_align.hyperdesign <- function(
       domain_names = domain_names,
       solver = solver_used,
       control = ctrl,
-      regularization_applied = solved$ridge
+      regularization_applied = solved$ridge,
+      ncomp_requested = as.integer(ncomp),
+      ncomp_returned = ncol(scores),
+      degree_matrix = "within_domain"
     )
   )
 }
