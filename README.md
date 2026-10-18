@@ -25,7 +25,7 @@
 | **Spectral MNN** | `spectral_mnn_align()` | Mutual nearest neighbor spectral alignment |
 | **Token-OT Graph** | `token_ot_graph_align()` | Token-level OT with graph structure |
 | **SSMA** | `ssma_align()` | Semi-Supervised Manifold Alignment |
-| **Stimulus SUMCOR** | `stimulus_sumcor_align()`, `calibrate_domain()` | Stimulus-weighted multi-subject SUMCOR for repeated naturalistic data: explicit per-subject encoders, keyed event correspondence, frozen-reference calibration of new subjects |
+| **SUMCOR** | `sumcor_align()`, `calibrate_domain()` | Event-keyed multi-domain SUMCOR with repeated observations and an optional event-feature metric; explicit per-domain encoders and frozen-reference calibration of new domains |
 | **RAPID-MA** | `rapid_ma()`, `rapid_ma_feature_scores()` | Scalable structure-aware alignment of many unmatched domains with custom sparse relations; feature-side (dual) coordinates via barycentres |
 
 ## Installation
@@ -62,39 +62,41 @@ result <- kema(hd, ncomp = 5)
 result <- generalized_procrustes(hd, ncomp = 5)
 ```
 
-## Repeated naturalistic data: stimulus-weighted SUMCOR
+## Event-keyed SUMCOR alignment
 
-`stimulus_sumcor_align()` learns one linear encoder per subject from repeated
-presentations of shared stimuli. Correspondence is carried only by keyed
-`event_id` values, so subjects may have different voxel counts, missing
-events, or different row orders. Repetitions are averaged in the agreement
-term but enter each subject's normalisation individually. Optional stimulus
-features add a metric over events; `beta = 0` is the exact correspondence-only
-model, which makes the feature ablation direct.
+`sumcor_align()` learns one linear encoder per domain from observations of
+shared events: keyed items, conditions or time points that several domains
+observed, possibly more than once. Correspondence is carried only by
+`event_id` values, so domains may have different column counts, missing
+events, or different row orders. Repeated observations of an event are
+averaged in the agreement term but enter each domain's normalisation
+individually. Optional event features add a metric over events; `beta = 0`
+is the exact correspondence-only model, so the effect of the features can be
+tested directly.
 
 ```r
-fit <- stimulus_sumcor_align(
+fit <- sumcor_align(
   X_list, design = design_list,
-  event_id = "event_id", repeat_id = "repeat_id", modality = "modality",
-  stimulus_features = list(acoustic = F_acoustic, visual = F_visual),
-  ncomp = 32,
-  control = stimulus_sumcor_control(beta = 0.5, covariance_shrinkage = 0.1)
+  event_id = "event_id", repeat_id = "repeat_id",
+  event_features = list(f1 = F1, f2 = F2),
+  ncomp = 10,
+  control = sumcor_control(beta = 0.5, covariance_shrinkage = 0.1)
 )
 
-# Encode new observations (for example a working-memory task) per subject
-Z_wm <- oos_predict(fit, X_wm_subject3, side = "subject3")
+# Encode new observations of one domain
+Z_new <- oos_predict(fit, X_new, side = "domain3")
 
-# Add a held-out subject against the frozen reference
-fit2 <- calibrate_domain(fit, X_new, design = design_new, domain_name = "s17")
+# Add a held-out domain against the frozen reference
+fit2 <- calibrate_domain(fit, X_heldout, design = design_heldout,
+                         domain_name = "heldout")
 ```
 
 ## Dual (feature-side) coordinates
 
 Embedding methods place samples in the shared latent space. For RAPID-MA, which
 is not a linear projector and therefore has no loadings, `rapid_ma_feature_scores()`
-places each feature column (for example an activation map over voxels) at the
-weighted barycentre of the samples it loads on, so features from different domains
-can be compared in the same space:
+places each feature column at the weighted barycentre of the samples it loads
+on, so features from different domains can be compared in the same space:
 
 ```r
 fit  <- rapid_ma(X, relations = relations, ncomp = 16)

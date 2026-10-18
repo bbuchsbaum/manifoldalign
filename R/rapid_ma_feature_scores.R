@@ -83,11 +83,10 @@
 
 #' Feature-side (dual) coordinates for a RAPID-MA embedding
 #'
-#' RAPID-MA embeds samples (for example voxels) into a shared latent space but
-#' is not a linear projector, so it has no feature loadings. This function
-#' supplies the dual view instead: every feature column (for example an
-#' activation map over voxels) is placed at the weighted barycentre of the
-#' latent coordinates of the samples it loads on. Because the latent space is
+#' RAPID-MA embeds samples into a shared latent space but is not a linear
+#' projector, so it has no feature loadings. This function supplies the dual
+#' view instead: every feature column is placed at the weighted barycentre of
+#' the latent coordinates of the samples it loads on. Because the latent space is
 #' shared across domains, feature coordinates from different domains are
 #' directly comparable, and features that distribute similarly over similarly
 #' embedded samples land close together.

@@ -1,14 +1,12 @@
-# Stimulus-weighted SUMCOR: prediction, frozen calibration, adapter ----------
+# Event-keyed SUMCOR: prediction, frozen calibration, adapter -----------------
 
-.ssc_domain_index <- function(fit, side) {
+.sumcor_domain_index <- function(fit, side) {
   if (length(side) != 1L || is.na(side)) {
     stop("`side` must identify exactly one domain.", call. = FALSE)
   }
   if (is.character(side)) {
     idx <- match(side, fit$domain_names)
-    if (is.na(idx)) {
-      stop("Unknown domain `", side, "`.", call. = FALSE)
-    }
+    if (is.na(idx)) stop("Unknown domain `", side, "`.", call. = FALSE)
     return(idx)
   }
   if (!is.numeric(side) || abs(side - round(side)) > 1e-8 ||
@@ -18,7 +16,7 @@
   as.integer(side)
 }
 
-#' Encode new observations with a stimulus-weighted SUMCOR encoder
+#' Encode new observations with a SUMCOR encoder
 #'
 #' Applies the fitted encoder `f_s(x) = phi_s(x) A_s` of one domain to new
 #' rows. Training scores were produced by the same function, so re-encoding a
@@ -26,29 +24,29 @@
 #' encoded independently: the result for a row does not depend on the other
 #' rows in `newX`.
 #'
-#' @param fit_or_transform A `stimulus_sumcor` fit.
-#' @param newX New observations (rows) with the same features (columns) as the
-#'   domain's training data. Column names, when both are present, must match.
+#' @param fit_or_transform A `sumcor_align` fit.
+#' @param newX New observations (rows) with the same columns as the domain's
+#'   training data. Column names, when both are present, must match.
 #' @param side Domain name or index.
 #' @param ... Unused; unknown arguments are rejected.
 #' @return A numeric matrix with one row per row of `newX` and `ncomp` columns.
 #' @export
-oos_predict.stimulus_sumcor <- function(fit_or_transform, newX, side, ...) {
-  .ssc_reject_dots(...)
+oos_predict.sumcor_align <- function(fit_or_transform, newX, side, ...) {
+  .sumcor_reject_dots(...)
   fit <- fit_or_transform
-  m <- .ssc_domain_index(fit, side)
+  m <- .sumcor_domain_index(fit, side)
   enc <- fit$encoders[[m]]
-  X <- .ssc_as_numeric_matrix(newX, "newX")
-  if (ncol(X) != enc$n_features) {
+  X <- .sumcor_as_numeric_matrix(newX, "newX")
+  if (ncol(X) != enc$n_columns) {
     stop("`newX` has ", ncol(X), " columns; domain `", fit$domain_names[[m]],
-         "` was fitted with ", enc$n_features, ".", call. = FALSE)
+         "` was fitted with ", enc$n_columns, ".", call. = FALSE)
   }
-  if (!is.null(colnames(X)) && !is.null(enc$feature_names) &&
-      !identical(colnames(X), enc$feature_names)) {
-    stop("`newX` column names do not match the features of domain `",
+  if (!is.null(colnames(X)) && !is.null(enc$column_names) &&
+      !identical(colnames(X), enc$column_names)) {
+    stop("`newX` column names do not match those of domain `",
          fit$domain_names[[m]], "`.", call. = FALSE)
   }
-  Z <- .ssc_encode(enc, X)
+  Z <- .sumcor_encode(enc, X)
   rownames(Z) <- rownames(X)
   Z
 }
@@ -72,47 +70,43 @@ calibrate_domain.default <- function(fit, data, ...) {
        paste(class(fit), collapse = ", "), ".", call. = FALSE)
 }
 
-#' Calibrate a new subject for stimulus-weighted SUMCOR
+#' Calibrate a new domain for SUMCOR alignment
 #'
-#' Fits the new subject's brain basis and presentation covariance from its own
+#' Fits the new domain's basis and repeat-level covariance from its own
 #' calibration observations, then solves its encoder in one polar step against
 #' the frozen event scores of the reference domains: with the reference fixed
 #' this block subproblem is solved exactly. Existing encoders, scores and
 #' `reference_scores` are left unchanged. Events the fit never saw are
-#' excluded and counted. The same identifier columns as the original fit are
-#' used.
+#' excluded and counted. The identifier columns of the original fit are used.
 #'
-#' Calibrating a training subject's own data against the other training
-#' subjects reproduces that subject's fitted encoder whenever the fit
-#' converged, which makes this a direct stationarity check.
+#' Calibrating a training domain's own data against the other training
+#' domains reproduces that domain's fitted encoder whenever the fit converged,
+#' which makes this a direct stationarity check.
 #'
-#' @param fit A `stimulus_sumcor` fit.
-#' @param data The new subject's observation-by-feature matrix.
+#' @param fit A `sumcor_align` fit.
+#' @param data The new domain's observation-by-column matrix.
 #' @param design A data frame with the identifier columns used by the fit.
 #' @param domain_name Name for the new domain; must not already exist.
 #' @param reference_domains Fitted domains that form the frozen reference.
 #'   Defaults to every domain with role `"reference"`.
-#' @param parcels Parcel labels for the new subject when the fit used
-#'   `brain_basis = "parcel_pca"`.
+#' @param feature_groups Column groups for the new domain when the fit used
+#'   `basis = "grouped_pca"`.
 #' @param ... Unused; unknown arguments are rejected.
-#' @return The `stimulus_sumcor` fit with the new domain appended and its role
+#' @return The `sumcor_align` fit with the new domain appended and its role
 #'   recorded as `"calibrated"`. Calibration provenance is stored in
 #'   `fit$calibration[[domain_name]]`.
 #' @export
-calibrate_domain.stimulus_sumcor <- function(
+calibrate_domain.sumcor_align <- function(
   fit,
   data,
   design,
   domain_name,
   reference_domains = NULL,
-  parcels = NULL,
+  feature_groups = NULL,
   ...
 ) {
-  .ssc_reject_dots(...)
-  if (!is.character(domain_name) || length(domain_name) != 1L ||
-      is.na(domain_name) || !nzchar(domain_name)) {
-    stop("`domain_name` must be one non-empty string.", call. = FALSE)
-  }
+  .sumcor_reject_dots(...)
+  domain_name <- .sumcor_name(domain_name, "domain_name", allow_null = FALSE)
   if (domain_name %in% fit$domain_names) {
     stop("Domain `", domain_name, "` already exists in the fit.", call. = FALSE)
   }
@@ -120,12 +114,12 @@ calibrate_domain.stimulus_sumcor <- function(
     reference_domains <- fit$domain_names[fit$domain_roles == "reference"]
   }
   reference_domains <- as.character(reference_domains)
-  unknown <- setdiff(reference_domains, fit$domain_names)
-  if (length(unknown) || !length(reference_domains)) {
+  if (!length(reference_domains) ||
+      length(setdiff(reference_domains, fit$domain_names))) {
     stop("`reference_domains` must name fitted domains.", call. = FALSE)
   }
   control <- fit$control
-  dom <- .ssc_resolve_domain(data, design, fit$ids, domain_name)
+  dom <- .sumcor_resolve_domain(data, design, fit$ids, domain_name)
 
   universe <- fit$events$event_id
   obs <- dom$observations
@@ -144,14 +138,15 @@ calibrate_domain.stimulus_sumcor <- function(
   }
 
   w <- fit$events$weight
-  prep <- .ssc_prepare_domain(dom, fit$events, w, control, parcels, domain_name)
+  prep <- .sumcor_prepare_domain(dom, fit$events, w, control, feature_groups,
+                                 domain_name)
   if (fit$ncomp > prep$p) {
-    stop("Domain `", domain_name, "` has brain rank ", prep$p, ", below ",
+    stop("Domain `", domain_name, "` has basis rank ", prep$p, ", below ",
          "`ncomp = ", fit$ncomp, "`.", call. = FALSE)
   }
 
-  overlap <- numeric(length(reference_domains))
-  names(overlap) <- reference_domains
+  overlap <- stats::setNames(numeric(length(reference_domains)),
+                             reference_domains)
   acc <- NULL
   for (ref in reference_domains) {
     Z <- fit$event_scores[[ref]]
@@ -159,18 +154,16 @@ calibrate_domain.stimulus_sumcor <- function(
     m_st <- sum(w[prep$mask & mask_t])
     overlap[[ref]] <- m_st
     if (m_st <= 0 || m_st < control$min_overlap) next
-    Y <- Z
-    Y[!mask_t, ] <- 0
-    Y <- Y * sqrt(w)
-    term <- Y / m_st
+    Z[!mask_t, ] <- 0
+    term <- (Z * sqrt(w)) / m_st
     acc <- if (is.null(acc)) term else acc + term
   }
   if (is.null(acc)) {
     stop("Domain `", domain_name, "` shares less than `min_overlap` event ",
          "weight with every reference domain.", call. = FALSE)
   }
-  G <- crossprod(prep$Ut, .ssc_apply_H(fit$kernel$factor, unname(acc)))
-  pol <- .ssc_polar(G, NULL, control$rank_tol)
+  G <- crossprod(prep$Ut, .sumcor_apply_H(fit$kernel$factor, unname(acc)))
+  pol <- .sumcor_polar(G, NULL, control$rank_tol)
   A <- prep$C_inv_half %*% pol$Q
   if (pol$rank < fit$ncomp) {
     warning("Only ", pol$rank, " of ", fit$ncomp, " latent directions are ",
@@ -178,14 +171,14 @@ calibrate_domain.stimulus_sumcor <- function(
             call. = FALSE)
   }
 
-  enc <- .ssc_encoder(prep, A, colnames(dom$X), control)
-  scores <- .ssc_encode(enc, dom$X)
+  enc <- .sumcor_encoder(prep, A, colnames(dom$X), control)
+  scores <- .sumcor_encode(enc, dom$X)
   rownames(scores) <- obs$observation_id
 
   fit$domain_names <- c(fit$domain_names, domain_name)
   fit$domain_roles[[domain_name]] <- "calibrated"
   fit$scores[[domain_name]] <- scores
-  fit$event_scores[[domain_name]] <- .ssc_event_scores(prep, A, universe)
+  fit$event_scores[[domain_name]] <- .sumcor_event_scores(prep, A, universe)
   fit$encoders[[domain_name]] <- enc
   fit$observations[[domain_name]] <- obs
   fit$supported_rank[[domain_name]] <- pol$rank
@@ -202,19 +195,19 @@ calibrate_domain.stimulus_sumcor <- function(
   fit
 }
 
-#' Construct a stimulus-weighted SUMCOR aligner descriptor
+#' Construct a SUMCOR aligner descriptor
 #'
 #' The aligner is a native multi-domain encoder: [align_many()] and
-#' [fit_many()] call [stimulus_sumcor_align()] directly and never synchronise
-#' pairwise transforms. Its capability record declares a linear encoder with
+#' [fit_many()] call [sumcor_align()] directly and never synchronise pairwise
+#' transforms. Its capability record declares a linear encoder with
 #' prediction and new-domain calibration, no auxiliary inputs at prediction,
 #' and no inverse.
 #'
-#' @return An object of class `c("stimulus_sumcor_aligner", "aligner")`.
+#' @return An object of class `c("sumcor_aligner", "aligner")`.
 #' @export
-stimulus_sumcor_aligner <- function() {
+sumcor_aligner <- function() {
   new_aligner(
-    "stimulus_sumcor",
+    "sumcor",
     group = "encoder",
     supports_multi = TRUE,
     encoder = "linear",
@@ -226,8 +219,8 @@ stimulus_sumcor_aligner <- function() {
 }
 
 #' @export
-fit_many.stimulus_sumcor_aligner <- function(algo, domains, k = NULL,
-                                             ncomp = NULL, ...) {
+fit_many.sumcor_aligner <- function(algo, domains, k = NULL, ncomp = NULL,
+                                    ...) {
   if (is.null(ncomp)) ncomp <- if (is.null(k)) 10L else k
-  stimulus_sumcor_align(domains, ncomp = ncomp, ...)
+  sumcor_align(domains, ncomp = ncomp, ...)
 }
