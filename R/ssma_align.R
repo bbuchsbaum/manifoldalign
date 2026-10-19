@@ -117,6 +117,13 @@ resolve_ssma_serial_control <- function(serial_control = NULL) {
 #' @param verbose Logical progress toggle.
 #' @param serial_control Serial-correlation handling settings from
 #'   [ssma_serial_control()].
+#' @param degree_matrix Degree matrix `D` of the constraint
+#'   `f' Z' D Z f = 1`. `"joint"` (default) is the degree matrix of the joint
+#'   graph, as in Wang & Mahadevan: each row's within-domain degree plus the
+#'   weight of its incident correspondence edges. `"within_domain"` uses only
+#'   each domain's own kNN degrees, so correspondence edges enter the
+#'   objective but not the constraint; this was the behaviour of earlier
+#'   versions and is kept for reproduction.
 #'
 #' @return A list of class `ssma_align_control`.
 #' @export
@@ -137,9 +144,11 @@ ssma_align_control <- function(
   operator_power_iter = 25L,
   seed = 1L,
   verbose = FALSE,
-  serial_control = ssma_serial_control()
+  serial_control = ssma_serial_control(),
+  degree_matrix = c("joint", "within_domain")
 ) {
   solver <- match.arg(solver)
+  degree_matrix <- match.arg(degree_matrix)
 
   if (!is.numeric(knn) || length(knn) != 1L || is.na(knn) || knn < 1) {
     stop("`knn` must be >= 1.", call. = FALSE)
@@ -207,7 +216,8 @@ ssma_align_control <- function(
       operator_power_iter = as.integer(operator_power_iter),
       seed = as.integer(seed),
       verbose = verbose,
-      serial_control = serial_control
+      serial_control = serial_control,
+      degree_matrix = degree_matrix
     ),
     class = "ssma_align_control"
   )
@@ -444,6 +454,28 @@ resolve_ssma_align_control <- function(control = NULL) {
   methods::as(L_within + L_cross, "dgCMatrix")
 }
 
+.ssma_degree_list <- function(within_graphs, correspondences, domain_sizes,
+                              degree_matrix = c("joint", "within_domain")) {
+  degree_matrix <- match.arg(degree_matrix)
+  deg <- lapply(within_graphs, function(g) as.numeric(g$degree))
+  if (identical(degree_matrix, "within_domain") ||
+      is.null(correspondences) || !nrow(correspondences)) {
+    return(deg)
+  }
+  # Joint-graph degree: add each row's incident correspondence weight, the
+  # same edges (duplicates summed) that .ssma_build_joint_laplacian() adds.
+  for (k in seq_along(deg)) {
+    on_i <- correspondences$domain_i == k
+    on_j <- correspondences$domain_j == k
+    idx <- c(correspondences$index_i[on_i], correspondences$index_j[on_j])
+    if (!length(idx)) next
+    w <- c(correspondences$weight[on_i], correspondences$weight[on_j])
+    add <- rowsum(w, idx)
+    deg[[k]][as.integer(rownames(add))] <- deg[[k]][as.integer(rownames(add))] + add[, 1L]
+  }
+  deg
+}
+
 .ssma_resolve_serial_indices <- function(domains, serial_index = NULL) {
   n_domains <- length(domains)
 
@@ -672,15 +704,13 @@ resolve_ssma_align_control <- function(control = NULL) {
   list(P = P, T = T, s = as.numeric(sv$d[keep]))
 }
 
-.ssma_build_reduced_system <- function(domains, within_graphs, L_joint, rank_per_domain, svd_tol,
+.ssma_build_reduced_system <- function(domains, degree_list, L_joint, rank_per_domain, svd_tol,
                                        assemble_dense = TRUE) {
   n_domains <- length(domains)
   domain_sizes <- vapply(domains, function(d) nrow(d$x), integer(1))
-  # Estimand: the constraint uses the block-diagonal WITHIN-domain degree
-  # matrix D_w (each domain's kNN graph), while the objective uses the joint
-  # Laplacian including correspondence edges. Correspondences therefore act
-  # only through the objective; see the roxygen of ssma_align().
-  degree_list <- lapply(within_graphs, function(g) pmax(as.numeric(g$degree), 1e-12))
+  # The constraint degree matrix D (joint or within-domain, see
+  # .ssma_degree_list()) weights both the compression basis and B.
+  degree_list <- lapply(degree_list, function(d) pmax(as.numeric(d), 1e-12))
 
   basis <- vector("list", n_domains)
   ranks <- integer(n_domains)
@@ -1047,14 +1077,14 @@ resolve_ssma_align_control <- function(control = NULL) {
 #'
 #' Estimand: `L` is the Laplacian of the joint graph whose edges are the
 #' within-domain kNN edges plus the cross-domain correspondence edges
-#' (weight `corr_edge_weight`), while `D` is the block-diagonal
-#' *within-domain* degree matrix, i.e. the constraint is
-#' `f' Z' D_w Z f = 1` with `D_w = diag(D_1, ..., D_m)` from each domain's
-#' own kNN graph. Correspondence edges therefore enter only the objective;
-#' this differs from the formulation of Wang & Mahadevan, whose `D` is the
-#' degree matrix of the joint graph (it would add each row's incident
-#' correspondence weight to its degree). The result records this choice as
-#' `degree_matrix = "within_domain"`. The `ncomp` smallest generalized eigenpairs above
+#' (weight `corr_edge_weight`), and `D` is the degree matrix of the same joint
+#' graph, as in Wang & Mahadevan: the constraint is `f' Z' D Z f = 1`, where a
+#' row's degree is its within-domain kNN degree plus the weight of its
+#' incident correspondence edges. `ssma_align_control(degree_matrix =
+#' "within_domain")` instead uses the block-diagonal within-domain degrees
+#' `D_w = diag(D_1, ..., D_m)`, so correspondence edges enter only the
+#' objective (the behaviour of earlier versions). The result records the
+#' choice in `degree_matrix`. The `ncomp` smallest generalized eigenpairs above
 #' `eig_tol` are returned; trivial (null-space) pairs are never substituted.
 #' If fewer than `ncomp` non-trivial pairs exist a warning is issued and the
 #' result records `ncomp_requested` and `ncomp_returned`; if none exist the
@@ -1175,9 +1205,16 @@ ssma_align.hyperdesign <- function(
     solver_used <- ctrl$solver
   }
 
+  degree_list <- .ssma_degree_list(
+    within_graphs = within,
+    correspondences = corr_df,
+    domain_sizes = domain_sizes,
+    degree_matrix = ctrl$degree_matrix
+  )
+
   reduced <- .ssma_build_reduced_system(
     domains = domains,
-    within_graphs = within,
+    degree_list = degree_list,
     L_joint = L_joint,
     rank_per_domain = ctrl$rank_per_domain,
     svd_tol = ctrl$svd_tol,
@@ -1247,7 +1284,7 @@ ssma_align.hyperdesign <- function(
       regularization_applied = solved$ridge,
       ncomp_requested = as.integer(ncomp),
       ncomp_returned = ncol(scores),
-      degree_matrix = "within_domain"
+      degree_matrix = ctrl$degree_matrix
     )
   )
 }

@@ -1,5 +1,5 @@
 # SSMA numerical contract: generalized eigenpairs of a diagonal pencil, the
-# documented degree-matrix estimand, explicit component deficits, and sampling.
+# documented degree-matrix estimand (joint by default), explicit component deficits, and sampling.
 
 ssma_pencil_oracle <- function(a, b, ncomp, regularization) {
   r <- length(a)
@@ -75,7 +75,7 @@ test_that("ssma_align records requested and returned component counts", {
   )
   expect_identical(fit$ncomp_requested, 3L)
   expect_identical(fit$ncomp_returned, 3L)
-  expect_identical(fit$degree_matrix, "within_domain")
+  expect_identical(fit$degree_matrix, "joint")
 
   # Rank 2 per domain gives at most 4 reduced directions; asking for more
   # than exist is a recorded, warned deficit rather than a silent truncation.
@@ -91,16 +91,16 @@ test_that("ssma_align records requested and returned component counts", {
   expect_equal(ncol(fit_short$s), fit_short$ncomp_returned)
 })
 
-test_that("SSMA solves the documented estimand: joint Laplacian, within-domain degrees", {
+ssma_estimand_fixture <- function(degree_matrix) {
   set.seed(11)
   dat <- generate_identity_alignment(n = 25, d = 4, noise_sd = 0.05, seed = 11)
   corr <- data.frame(domain_i = 1L, index_i = 1:25, domain_j = 2L, index_j = 1:25,
                      weight = 5)
   ctrl <- ssma_align_control(knn = 6, sigma = 1, rank_per_domain = 4,
-                             regularization = 1e-12, corr_edge_weight = 5)
+                             regularization = 1e-12, corr_edge_weight = 5,
+                             degree_matrix = degree_matrix)
   fit <- ssma_align(list(d1 = dat$X1, d2 = dat$X2), correspondences = corr,
                     preproc = multivarious::center(), ncomp = 3, control = ctrl)
-  expect_identical(fit$degree_matrix, "within_domain")
 
   X <- list(scale(dat$X1, scale = FALSE), scale(dat$X2, scale = FALSE))
   within <- lapply(X, function(x) {
@@ -109,19 +109,59 @@ test_that("SSMA solves the documented estimand: joint Laplacian, within-domain d
   L_joint <- manifoldalign:::.ssma_build_joint_laplacian(
     within, fit$correspondences, domain_sizes = c(25L, 25L)
   )
-  D_within <- unlist(lapply(within, `[[`, "degree"))
-  D_joint <- as.numeric(Matrix::diag(L_joint))
-  S <- as.matrix(fit$s)
+  # Independent joint-degree oracle: row sums of the dense joint adjacency
+  # (within-domain kNN blocks plus symmetric correspondence edges).
+  W <- as.matrix(Matrix::bdiag(lapply(within, `[[`, "A")))
+  cr <- fit$correspondences
+  gi <- (cr$domain_i - 1L) * 25L + cr$index_i
+  gj <- (cr$domain_j - 1L) * 25L + cr$index_j
+  for (r in seq_along(gi)) {
+    W[gi[r], gj[r]] <- W[gi[r], gj[r]] + cr$weight[r]
+    W[gj[r], gi[r]] <- W[gj[r], gi[r]] + cr$weight[r]
+  }
+  list(
+    fit = fit, L_joint = L_joint,
+    D_within = unlist(lapply(within, `[[`, "degree")),
+    D_joint = rowSums(W)
+  )
+}
 
-  # Generalized eigenvectors are D_w-orthonormal (the documented constraint)...
-  G_within <- crossprod(S, S * D_within)
-  expect_lt(max(abs(G_within - diag(ncol(S)))), 1e-6)
-  # ...which is a different normalisation from the joint-degree one.
-  G_joint <- crossprod(S, S * D_joint)
-  expect_gt(max(abs(G_joint - diag(ncol(S)))), 1e-2)
+test_that("SSMA solves the documented estimand: joint Laplacian and joint degrees", {
+  fx <- ssma_estimand_fixture("joint")
+  expect_identical(fx$fit$degree_matrix, "joint")
+  S <- as.matrix(fx$fit$s)
+
+  # The joint degree used by the fit is the row sum of the joint adjacency.
+  deg <- manifoldalign:::.ssma_degree_list(
+    list(list(degree = fx$D_within[1:25]), list(degree = fx$D_within[26:50])),
+    fx$fit$correspondences, c(25L, 25L), "joint"
+  )
+  expect_equal(unlist(deg), fx$D_joint, tolerance = 1e-12)
+
+  # Generalized eigenvectors are D-orthonormal for the joint degree matrix...
+  G_joint <- crossprod(S, S * fx$D_joint)
+  expect_lt(max(abs(G_joint - diag(ncol(S)))), 1e-6)
+  # ...and not for the within-domain one.
+  G_within <- crossprod(S, S * fx$D_within)
+  expect_gt(max(abs(G_within - diag(ncol(S)))), 1e-2)
   # Rayleigh quotients with the joint Laplacian equal the eigenvalues.
-  rq <- diag(crossprod(S, as.matrix(L_joint %*% S)))
-  expect_equal(rq, fit$generalized_eigenvalues, tolerance = 1e-6)
+  rq <- diag(crossprod(S, as.matrix(fx$L_joint %*% S)))
+  expect_equal(rq, fx$fit$generalized_eigenvalues, tolerance = 1e-6)
+})
+
+test_that("degree_matrix = 'within_domain' reproduces the within-domain constraint", {
+  fx <- ssma_estimand_fixture("within_domain")
+  expect_identical(fx$fit$degree_matrix, "within_domain")
+  S <- as.matrix(fx$fit$s)
+
+  G_within <- crossprod(S, S * fx$D_within)
+  expect_lt(max(abs(G_within - diag(ncol(S)))), 1e-6)
+  G_joint <- crossprod(S, S * fx$D_joint)
+  expect_gt(max(abs(G_joint - diag(ncol(S)))), 1e-2)
+  rq <- diag(crossprod(S, as.matrix(fx$L_joint %*% S)))
+  expect_equal(rq, fx$fit$generalized_eigenvalues, tolerance = 1e-6)
+
+  expect_error(ssma_align_control(degree_matrix = "joint_graph"), "should be one of")
 })
 
 test_that("reduced and operator SSMA solvers agree", {

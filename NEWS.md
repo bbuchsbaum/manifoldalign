@@ -47,6 +47,12 @@ These fix defects found in a package review; several change fitted output.
   eigenvalues; returning fewer than `ncomp` components warns and is recorded,
   and trivial null-space vectors are never substituted. Label
   correspondences no longer pair a random row when a label has one member.
+  The constraint now uses the degree matrix of the joint graph (within-domain
+  degree plus incident correspondence weight), as in Wang & Mahadevan, so
+  correspondence edges enter both sides of the generalized eigenproblem;
+  this changes default embeddings. `ssma_align_control(degree_matrix =
+  "within_domain")` reproduces the previous constraint, and fits record the
+  choice in `degree_matrix`.
 * **Spectral MNN**: loadings are an explicit ridge regression bridge to the
   aligned scores (`bridge_ridge`); heat-kernel signatures use one time grid
   shared by all domains; the Procrustes step applies its translation.
