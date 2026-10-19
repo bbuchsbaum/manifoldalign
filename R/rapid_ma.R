@@ -719,6 +719,11 @@ rapid_ma.hyperdesign <- function(
   )
 }
 
+#' Print RAPID-MA fit
+#'
+#' @param x A `rapid_ma` object.
+#' @param ... Unused additional arguments.
+#' @return The input object, invisibly.
 #' @export
 print.rapid_ma <- function(x, ...) {
   cat("RAPID-MA structure-aware alignment\n")

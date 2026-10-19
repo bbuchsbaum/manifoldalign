@@ -387,7 +387,7 @@ utilities:
     required_fixtures:
     - noisy_labels
 
-# Enforced by test-alignment-oracle-ci.R and tools/run-alignment-test-tier.R.
+# Enforced by tools/tests/test-alignment-oracle-ci.R and tools/run-alignment-test-tier.R.
 # Inline lists keep this critical schema readable with base R, so validating
 # the test contract never depends on an optional YAML package.
 ci_contract:

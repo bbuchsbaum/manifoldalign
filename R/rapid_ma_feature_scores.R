@@ -241,6 +241,11 @@ rapid_ma_feature_scores <- function(
   )
 }
 
+#' Print RAPID-MA feature scores
+#'
+#' @param x A `rapid_ma_feature_scores` object.
+#' @param ... Unused additional arguments.
+#' @return The input object, invisibly.
 #' @export
 print.rapid_ma_feature_scores <- function(x, ...) {
   cat("RAPID-MA feature-side coordinates\n")

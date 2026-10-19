@@ -155,3 +155,13 @@ See `docs/ORACLE_CI_POLICY.md` for the enforcement and promotion rules,
 `docs/BENCHMARK_PROTOCOL.md` for the accuracy protocol, and
 `docs/ALIGNMENT_METHOD_SUNSET_REVIEW.md` for the evidence-backed decision on
 every exported aligner.
+
+## Source audits and installed-package tests
+
+`R CMD check` runs the runtime tests under `tests/testthat` against the installed
+package. Checkout-specific audits of the CI contract, tracked comparison table,
+and benchmark scripts live under `tools/tests`. The required
+`Rscript tools/run-alignment-test-tier.R pr` command runs both suites, records
+both in its evidence tables, and fails on either suite's errors. This separation
+does not skip source audits when the package is checked; they remain a required
+CI job alongside the installed-package check.

@@ -1,3 +1,15 @@
+# Development validation repairs
+
+- Resolve required PRIMME from a pinned CRAN-mirror source; declare optional
+  memory-profiling and preprocessing-test dependencies.
+- Run checkout-resource audits as an explicit mandatory PR-tier phase and
+  keep installed-package tests independent of checkout paths.
+- Repair the GPCA alignment fixture's per-coordinate means, vignette engine
+  metadata, withdrawn FPGW example, and exported print-method documentation.
+- ADAM now evaluates its objective at every iterate regardless of verbosity;
+  small descending steps are progress, and scheduled objectives are not
+  compared for convergence before the schedule finishes.
+
 # Development version
 
 * SSMA accepts generic weighted `linear_correspondence()` and `linear_penalty()`

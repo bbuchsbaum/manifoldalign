@@ -1,8 +1,10 @@
 ---
 title: Coupled Diagonalization across Modalities
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{Coupled Diagonalization across Modalities} %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Coupled Diagonalization across Modalities}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
   preset: homage

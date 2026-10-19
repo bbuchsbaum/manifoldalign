@@ -113,6 +113,7 @@ Key algorithmic features:
 \examples{
 \donttest{
 # Basic usage with automatic sigma_P selection
+set.seed(42)
 X <- matrix(rnorm(100 * 10), 100, 10)
 result <- linear_sim_embed(X, ncomp = 3, verbose = TRUE)
 

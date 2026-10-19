@@ -156,7 +156,7 @@ test_that("[FAST] Linear Similarity Embedding on linear data", {
 
   # Reduced iterations from 25 to 10
   result_R <- linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE,
-                              maxit = 10, verbose = FALSE)
+                              maxit = 500, verbose = FALSE)
 
   expect_s3_class(result_R, "simembed")
   expect_equal(nrow(result_R$scores), nrow(X1))
@@ -253,7 +253,7 @@ test_that("[FAST] Runtime performance (smoke check)", {
 
   runtime <- system.time({
     result <- linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE,
-                              maxit = 10, verbose = FALSE)
+                              maxit = 500, verbose = FALSE)
   })
 
   # Should be very fast with reduced size

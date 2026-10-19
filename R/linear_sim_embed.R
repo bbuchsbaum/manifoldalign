@@ -163,9 +163,6 @@ print.simembed <- function(x, ...) {
     if (verbose) cat("Using alpha_p scheduling: 1.0 -> ", alpha_p_orig, " over ", alpha_decay_steps, " steps\n")
   }
 
-  # Pre-calculate for efficiency
-  jp_denom <- 2 * m^2
-  if (jp_denom == 0) jp_denom <- 1
   upper_idx <- which(upper.tri(M, diag = FALSE) & M > 0, arr.ind = FALSE)
   
   # Add robustness checks for poorly scaled similarity matrices
@@ -184,9 +181,6 @@ print.simembed <- function(x, ...) {
     }
   }
   
-  # Track stalled optimization
-  stall_counter <- 0
-  stall_threshold <- 5  # Number of iterations with minimal change
   grad_norm_trace <- numeric(maxit)
   grad_norm <- Inf  # Initialize for first iteration
 
@@ -194,7 +188,7 @@ print.simembed <- function(x, ...) {
     
     # Alpha scheduling (linearly decay from 1 to target value)
     if (alpha_schedule && t <= alpha_decay_steps) {
-      current_alpha <- 1.0 - (1.0 - alpha_p_orig) * (t - 1) / (alpha_decay_steps - 1)
+      current_alpha <- 1.0 - (1.0 - alpha_p_orig) * (t - 1) / max(1, alpha_decay_steps - 1)
     } else {
       current_alpha <- alpha_p_orig
     }
@@ -217,30 +211,19 @@ print.simembed <- function(x, ...) {
     }
 
     # Calculate objective on full data
-    needs_recalc <- (t == 1 || batch < 1 || verbose)
-    if (needs_recalc) {
-        Y_full <- X %*% W
-        D2_full <- pairwise_sqdist(Y_full)
-        P_full <- exp(-D2_full / sigma)
-        P_full <- 0.5 * (P_full + t(P_full))
-        Js_full <- sum(M * (P_full - T)^2) / (2 * sum_M_full)
-
-        WtW_full <- crossprod(W)
-        diag(WtW_full) <- diag(WtW_full) - 1
-        Jp_full <- sum(WtW_full^2) / jp_denom
-
-        obj <- (1 - current_alpha) * Js_full + current_alpha * Jp_full
-        obj_trace[t] <- obj
-    } else {
-      obj <- obj_prev
-      obj_trace[t] <- obj
-    }
+    current <- .lse_objective_gradient(W, X, T, M, sigma, current_alpha)
+    obj <- current$value
+    Js_full <- current$similarity_loss
+    Jp_full <- current$orthogonality_loss
+    obj_trace[t] <- obj
+    grad_norm <- sqrt(sum(current$gradient^2))
+    grad_norm_trace[t] <- grad_norm
 
     # Enhanced convergence check
     obj_change <- if (t > 1 && !is.infinite(obj_prev)) abs(obj_prev - obj) else Inf
     
     # Check for multiple convergence criteria
-    if (t > 1) {
+    if (t > 1 && (!alpha_schedule || t > alpha_decay_steps)) {
       # Criterion 1: Objective change below tolerance
       if (obj_change < tol) {
         if (verbose) cat(sprintf("Converged at iteration %d (obj change < %.3e)\n", t, tol))
@@ -259,35 +242,18 @@ print.simembed <- function(x, ...) {
         break
       }
       
-      # Criterion 3: Stalled optimization detection
-      if (obj_change < tol * 100) {  # Less strict threshold for stall detection
-        stall_counter <- stall_counter + 1
-        if (stall_counter >= stall_threshold) {
-          warning(sprintf(
-            "Optimization stalled at iteration %d (objective unchanged for %d iterations). This often indicates poorly scaled input. Check similarity matrix scaling.",
-            t, stall_threshold
-          ))
-          obj_trace <- obj_trace[1:t]
-          grad_norm_trace <- grad_norm_trace[1:t]
-          convergence_info <- list(convergence = 2, message = "STALLED", iterations = t)
-          break
-        }
-      } else {
-        stall_counter <- 0  # Reset counter if making progress
-      }
+      # Momentum updates can temporarily increase the loss. Continue until a
+      # measured convergence criterion holds or the iteration budget expires;
+      # a short plateau is not evidence of optimizer failure.
     }
     obj_prev <- obj
 
-    # Compute gradient on batch
-    grad_js_b <- grad_Js(Xb, W, Tb, Mb, sigma, sum_M_batch = sum_Mb)
-    grad_jp_b <- grad_Jp(W)
-
-    # CORRECTED: Use (1-alpha)*grad_Js + alpha*grad_Jp
-    g <- (1 - current_alpha) * grad_js_b + current_alpha * grad_jp_b
-    
-    # Track gradient norm for convergence monitoring
-    grad_norm <- sqrt(sum(g^2))
-    grad_norm_trace[t] <- grad_norm
+    if (batch == 1) {
+      g <- current$gradient
+    } else {
+      grad_js_b <- grad_Js(Xb, W, Tb, Mb, sigma, sum_M_batch = sum_Mb)
+      g <- (1 - current_alpha) * grad_js_b + current_alpha * grad_Jp(W)
+    }
 
     # ADAM update
     up <- adam_update(W, g, mt, vt, t, lr)
@@ -647,6 +613,7 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 #' @examples
 #' \donttest{
 #' # Basic usage with automatic sigma_P selection
+#' set.seed(42)
 #' X <- matrix(rnorm(100 * 10), 100, 10)
 #' result <- linear_sim_embed(X, ncomp = 3, verbose = TRUE)
 #' 
