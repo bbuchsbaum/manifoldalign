@@ -123,109 +123,445 @@ fixtures:
     invariants:
     - structure
     - orthonormality
+  attributed_graph_v2_frozen:
+    generator: synthetic_graph_alignment_case_v2
+    params:
+      development_manifest: graph_alignment_v2_development_manifest.csv
+      final_manifest: graph_alignment_v2_final_manifest.csv
+      final_cases: 42
+      final_accuracy_cases: 30
+      overlap_regimes: [closed_world, partial_overlap]
+    applies_to:
+    - rapid_ma
+    - token_ot_graph_align
+    - spectral_mnn_align
+    - ssma_align
+    - global_geo_align
+    - kema
+    - gpca_align
+    - lowrank_align
+    - grasp
+    - cone_align
+    - parrot
+    - gromov_wasserstein
+    - fpgw
+    - linear_sim_embed
+    invariants:
+    - supplied_weighted_relations
+    - correspondence_truth
+    - overlap_private_masks
+    - perturbation_severity
+    - immutable_hashes
+    - no_final_tuning
+    - complete_method_case_grid
+    - typed_failures_and_applicability
+    - intent_to_run_denominators
+    - external_runtime_and_peak_rss
+    - paired_effects_and_pareto_fronts
+  governed_real_alignment_v1:
+    generator: governed_real_alignment_cases
+    params:
+      task_manifest: real_alignment_manifest.csv
+      artifact_manifest: real_alignment_artifacts.csv
+      remote_sensing_split: culture10-v4.2-blocked
+      ci_evidence_scope: ci_schema_only
+      release_evidence_scope: full_frozen_split
+    applies_to:
+    - rapid_ma
+    - token_ot_graph_align
+    - ssma_align
+    - gpca_align
+    - lowrank_align
+    - grasp
+    - cone_align
+    - parrot
+    - fpgw
+    invariants:
+    - source_license_and_checksum
+    - observed_weighted_relations
+    - exact_row_identity
+    - natural_partial_overlap
+    - unequal_domain_sizes
+    - blocked_inductive_split
+    - no_final_label_leakage
+    - dataset_algorithm_failure_separation
 methods:
-  gpca_align:
+  rapid_ma:
     capabilities:
-    - spectral_linear
+    - supplied_graph
+    - mixed_attributes
+    - spatial_positions
+    - partial_overlap
     - multiset
     required_fixtures:
-    - spiral_two_domain
-    - linear_maps
-    - high_dim_sparse
-    - singular_block
-  grasp:
+    - attributed_graph_v2_frozen
+    - governed_real_alignment_v1
+    coverage_status: frozen_tournament_complete
+  token_ot_graph_align:
     capabilities:
-    - spectral_graph
-    - multiset
+    - feature_derived_graph
+    - optimal_transport
+    - node_correspondence
     required_fixtures:
-    - spiral_two_domain
     - graph_cycle_mismatch
-  grasp_multiset:
+    - governed_real_alignment_v1
+    coverage_status: covered
+  spectral_mnn_align:
     capabilities:
-    - spectral_graph
+    - feature_derived_graph
+    - spectral
     - multiset
     required_fixtures:
-    - high_dim_sparse
+    - spiral_two_domain
+    coverage_status: partial
+  ssma_align:
+    capabilities:
+    - feature_derived_graph
+    - semi_supervised
+    - multiset
+    required_fixtures:
+    - linear_maps
+    - noisy_labels
+    coverage_status: partial
+  global_geo_align:
+    capabilities:
+    - feature_derived_graph
+    - correspondences
+    - multiset
+    required_fixtures:
+    - linear_maps
+    coverage_status: legacy_reference_connectivity_gate
   kema:
     capabilities:
+    - feature_derived_graph
     - kernel_spectral
     - multiset
     required_fixtures:
     - spiral_two_domain
     - anchor_partial_overlap
     - singular_block
+    coverage_status: covered
+  gpca_align:
+    capabilities:
+    - feature_manifold
+    - supervised_linear
+    - multiset
+    required_fixtures:
+    - spiral_two_domain
+    - linear_maps
+    - high_dim_sparse
+    - singular_block
+    coverage_status: covered
+  lowrank_align:
+    capabilities:
+    - feature_manifold
+    - supervised_linear
+    - multiset
+    required_fixtures:
+    - linear_maps
+    coverage_status: partial
+  linear_sim_embed:
+    capabilities:
+    - feature_manifold
+    - target_similarity
+    - single_domain
+    required_fixtures:
+    - linear_maps
+    coverage_status: partial
+  generalized_procrustes:
+    capabilities:
+    - feature_manifold
+    - orthogonal_alignment
+    - partial_tasks
+    required_fixtures:
+    - task_partial_observation
+    coverage_status: covered
+  grasp:
+    capabilities:
+    - feature_derived_graph
+    - spectral
+    - node_correspondence
+    required_fixtures:
+    - spiral_two_domain
+    - graph_cycle_mismatch
+    coverage_status: covered
+  grasp_multiset:
+    capabilities:
+    - feature_derived_graph
+    - spectral
+    - multiset
+    required_fixtures:
+    - high_dim_sparse
+    coverage_status: partial
   cone_align:
     capabilities:
-    - graph_alignment
+    - feature_derived_graph
+    - node_correspondence
+    required_fixtures:
+    - linear_maps
+    - anchor_partial_overlap
+    - noisy_labels
+    coverage_status: legacy_reference_dimension_gate
+  cone_align_multiple:
+    capabilities:
+    - feature_derived_graph
+    - node_correspondence
     - multiset
     required_fixtures:
     - linear_maps
     - anchor_partial_overlap
     - noisy_labels
-  lowrank_align:
-    capabilities:
-    - linear_manifold
-    - multiset
-    required_fixtures:
-    - linear_maps
+    coverage_status: legacy_reference_inherited_dimension_gate
   parrot:
     capabilities:
+    - feature_derived_graph
     - optimal_transport
     - anchors
     required_fixtures:
     - anchor_partial_overlap
     - graph_cycle_mismatch
     - large_ot_cost
-  token_ot_graph_align:
+    coverage_status: covered
+  gromov_wasserstein:
     capabilities:
+    - metric_measure
     - optimal_transport
-    - graph_alignment
-    - multiview
     required_fixtures:
-    - graph_cycle_mismatch
+    - large_ot_cost
+    - dual_graphs_structural
+    coverage_status: partial
+  fpgw:
+    capabilities:
+    - metric_measure
+    - optimal_transport
+    - partial_overlap
+    required_fixtures:
+    - large_ot_cost
+    - dual_graphs_structural
+    coverage_status: oracle_and_tournament_complete
+  coupled_diagonalization:
+    capabilities:
+    - feature_derived_graph
+    - spectral_joint
+    - multiset
+    required_fixtures:
+    - multi_modal_views
+    coverage_status: covered
+  mma_align_multiple:
+    capabilities:
+    - feature_derived_graph
+    - probabilistic_registration
+    - multiset
+    required_fixtures:
+    - multi_modal_views
+    coverage_status: partial
+  multiscale_manifold_align:
+    capabilities:
+    - feature_derived_graph
+    - deprecated
+    - multiset
+    required_fixtures: []
+    coverage_status: deprecated_failed_gate
+  multiset_uot_align:
+    capabilities:
+    - metric_measure
+    - unbalanced_transport
+    - partial_overlap
+    - multiset
+    required_fixtures:
+    - large_ot_cost
+    coverage_status: partial
+  sumcor_align:
+    capabilities:
+    - feature_manifold
+    - event_keyed_correspondence
+    - linear_encoder
+    - multiset
+    required_fixtures: []
+    coverage_status: partial
+  ot_procrustes:
+    capabilities:
+    - feature_manifold
+    - optimal_transport
+    - orthogonal_alignment
+    required_fixtures:
+    - linear_maps
+    coverage_status: partial
+utilities:
   pseudolabel:
     capabilities:
     - label_transfer
     - multiset
     required_fixtures:
     - noisy_labels
-  generalized_procrustes:
-    capabilities:
-    - orthogonal_alignment
-    - tasks
-    required_fixtures:
-    - task_partial_observation
-  gromov_wasserstein:
-    capabilities:
-    - optimal_transport
-    - structural
-    required_fixtures:
-    - large_ot_cost
-    - dual_graphs_structural
-  fpgw:
-    capabilities:
-    - optimal_transport
-    - structural
-    required_fixtures:
-    - large_ot_cost
-    - dual_graphs_structural
-  coupled_diagonalization:
-    capabilities:
-    - spectral_joint
-    - multiset
-    required_fixtures:
-    - multi_modal_views
-  linear_sim_embed:
-    capabilities:
-    - linear_similarity
-    - two_set
-    required_fixtures:
-    - linear_maps
-  cone_align_multiple:
-    capabilities:
-    - graph_alignment
-    - multiset
-    required_fixtures:
-    - linear_maps
-    - anchor_partial_overlap
-    - noisy_labels
+
+# Enforced by test-alignment-oracle-ci.R and tools/run-alignment-test-tier.R.
+# Inline lists keep this critical schema readable with base R, so validating
+# the test contract never depends on an optional YAML package.
+ci_contract:
+  schema_version: 1
+  allowed_families: [contract, oracle, invariant, metamorphic, adversarial, regression, approximation, benchmark, stress]
+  stable_required_families: [contract, oracle, invariant, metamorphic, adversarial, regression, approximation]
+  forbidden_tautologies: [nonnegative_correct_count, nonnegative_length, lower_bound_only_accuracy]
+  method_records:
+    - method: rapid_ma
+      families: [contract, oracle, invariant, metamorphic, adversarial, regression, approximation, benchmark, stress]
+      pr_files: [tests/testthat/test-rapid-ma.R, tests/testthat/test-rapid-ma-uot.R, tests/testthat/test-rapid-ma-relations.R, tests/testthat/test-graph-benchmark-registry.R, tests/testthat/test-real-alignment-benchmarks.R]
+      nightly_files: [tests/testthat/test-rapid-ma-benchmark.R]
+      mandatory_tests: ["tests/testthat/test-rapid-ma-uot.R::full-support sparse and dense UOT solutions agree", "tests/testthat/test-graph-benchmark-registry.R::supplied-edge mutations change only native topology adapter inputs", "tests/testthat/test-real-alignment-benchmarks.R::real network cases preserve observed structure and exact identities"]
+      release_evidence: [docs/rapid-ma-validation-summary.csv, docs/rapid-ma-scaling-summary.csv, docs/rapid-ma-matching-summary.csv, inst/benchmarks/graph_alignment_v2_final_manifest.csv, docs/evidence/alignment-tournament-v2/raw_results.csv, docs/evidence/alignment-tournament-v2/INTERPRETATION.md]
+      known_gaps: [position_gated_fusion_missing, blocked_inductive_gate_failed, million_node_gate_failed]
+    - method: token_ot_graph_align
+      families: [contract, oracle, invariant, metamorphic, adversarial, regression, approximation, benchmark]
+      pr_files: [tests/testthat/test-token-ot-graph-align-contracts.R, tests/testthat/test-real-alignment-benchmarks.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-token-ot-graph-align-contracts.R::sparse Sinkhorn matches dense Sinkhorn when fully connected (oracle test)"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [scale_evidence_stale]
+    - method: spectral_mnn_align
+      families: [contract, invariant, metamorphic, regression]
+      pr_files: [tests/testthat/test-spectral_mnn_align.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-spectral_mnn_align.R::spectral_mnn_align respects explicit correspondences"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [exact_oracle_missing, adversarial_coverage_missing, approximation_budget_missing]
+    - method: ssma_align
+      families: [contract, oracle, invariant, regression, approximation]
+      pr_files: [tests/testthat/test-ssma-align.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-ssma-align.R::ssma_align operator solver matches reduced-solver subspace on same fixture"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [metamorphic_coverage_missing, adversarial_coverage_missing]
+    - method: global_geo_align
+      families: [contract, oracle, invariant, metamorphic, adversarial, regression]
+      pr_files: [tests/testthat/test-global_geo_align.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-global_geo_align.R::anchor smoothness matches a tiny kNN Laplacian oracle"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv, docs/ALIGNMENT_METHOD_SUNSET_REVIEW.md]
+      known_gaps: [approximation_budget_missing, disconnected_landmark_graph_repair, scale_evidence_missing]
+    - method: kema
+      families: [contract, oracle, invariant, adversarial, regression, approximation, benchmark]
+      pr_files: [tests/testthat/test-kema-numerical-validation.R, tests/testthat/test-kema-scalable-smoke.R, tests/testthat/test-toy-manifold-benchmarks-fast.R]
+      nightly_files: [tests/testthat/test-toy-manifold-benchmarks.R]
+      mandatory_tests: ["tests/testthat/test-kema-scalable-smoke.R::operator KEMA matches the full matrix backend on a toy oracle"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [metamorphic_coverage_missing, scale_evidence_missing]
+    - method: gpca_align
+      families: [contract, invariant, adversarial, regression, approximation, benchmark]
+      pr_files: [tests/testthat/test-gpca_align.R]
+      nightly_files: [tests/testthat/test-toy-manifold-benchmarks.R]
+      mandatory_tests: ["tests/testthat/test-gpca_align.R::gpca_align correctly handles cross-domain alignment"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [independent_oracle_missing, metamorphic_coverage_missing, scale_evidence_missing]
+    - method: lowrank_align
+      families: [contract, oracle, invariant, regression, approximation]
+      pr_files: [tests/testthat/test-lowrank_align.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-lowrank_align.R::createSimFun preserves sparsity and symmetry"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [metamorphic_coverage_missing, adversarial_coverage_missing, scale_evidence_missing]
+    - method: linear_sim_embed
+      families: [contract, oracle, invariant, adversarial, regression, approximation, benchmark]
+      pr_files: [tests/testthat/test_linear_sim_embed_consistency.R, tests/testthat/test-lse-recovery.R, tests/testthat/test-lse-orthogonality.R, tests/testthat/test-lse-robustness.R, tests/testthat/test-toy-manifold-benchmarks-fast.R]
+      nightly_files: [tests/testthat/test-toy-manifold-benchmarks.R]
+      mandatory_tests: ["tests/testthat/test_linear_sim_embed_consistency.R::C++ LSE agrees with an independent R L-BFGS-B reference"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [metamorphic_coverage_missing, multi_seed_accuracy_missing, scale_evidence_missing]
+    - method: generalized_procrustes
+      families: [contract, oracle, invariant, metamorphic, adversarial, regression]
+      pr_files: [tests/testthat/test-generalized_procrustes.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-generalized_procrustes.R::generalized_procrustes recovers template up to global rotation"]
+      release_evidence: []
+      known_gaps: [approximation_budget_missing, comparative_accuracy_missing, scale_evidence_missing]
+    - method: grasp
+      families: [contract, oracle, invariant, adversarial, regression, approximation, benchmark]
+      pr_files: [tests/testthat/test-grasp.R, tests/testthat/test-grasp-regressions.R, tests/testthat/test-toy-manifold-benchmarks-fast.R]
+      nightly_files: [tests/testthat/test-toy-manifold-benchmarks.R]
+      mandatory_tests: ["tests/testthat/test-grasp.R::GRASP recovers identity mapping on identical graphs (fundamental correctness)"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [metamorphic_coverage_missing, scale_evidence_missing]
+    - method: grasp_multiset
+      families: [contract, invariant, adversarial, regression, approximation]
+      pr_files: [tests/testthat/test-grasp_multiset.R, tests/testthat/test-grasp-regressions.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-grasp_multiset.R::grasp_multiset produces reasonable alignment quality"]
+      release_evidence: []
+      known_gaps: [independent_oracle_missing, metamorphic_coverage_missing, scale_evidence_missing]
+    - method: cone_align
+      families: [contract, oracle, invariant, adversarial, regression, approximation, benchmark]
+      pr_files: [tests/testthat/test-cone_align.R]
+      nightly_files: [tests/testthat/test-toy-manifold-benchmarks.R]
+      mandatory_tests: ["tests/testthat/test-cone_align.R::solve_procrustes_cone returns the correct rotation"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv, docs/ALIGNMENT_METHOD_SUNSET_REVIEW.md]
+      known_gaps: [metamorphic_coverage_missing, latent_dimension_reconciliation, scale_evidence_missing]
+    - method: cone_align_multiple
+      families: [contract, oracle, invariant, adversarial, regression]
+      pr_files: [tests/testthat/test-cone_align_multiple.R, tests/testthat/test-multicone-performance.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-cone_align_multiple.R::cone_align_multiple rotations match pairwise alignment"]
+      release_evidence: [docs/ALIGNMENT_METHOD_SUNSET_REVIEW.md]
+      known_gaps: [metamorphic_coverage_missing, inherited_pairwise_dimension_gate, approximation_budget_missing, scale_evidence_missing]
+    - method: parrot
+      families: [contract, oracle, invariant, metamorphic, adversarial, regression, approximation, benchmark, stress]
+      pr_files: [tests/testthat/test-parrot-computational-contracts.R, tests/testthat/test-parrot-equivalence.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-parrot-computational-contracts.R::PARROT Sylvester solver matches analytic oracle on a small system"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [scale_evidence_missing]
+    - method: gromov_wasserstein
+      families: [contract, oracle, invariant, adversarial, regression, approximation]
+      pr_files: [tests/testthat/test-gromov_wasserstein.R]
+      nightly_files: [tests/testthat/test-toy-manifold-benchmarks.R]
+      mandatory_tests: []
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [dependency_independent_mandatory_check_missing, metamorphic_coverage_missing, scale_evidence_missing]
+    - method: fpgw
+      families: [contract, oracle, invariant, metamorphic, adversarial, regression]
+      pr_files: [tests/testthat/test-fpgw-oracle.R, tests/testthat/test-fpgw.R]
+      nightly_files: [tests/testthat/test-fpgw-validation.R, tests/testthat/test-fallback-lp.R, tests/testthat/test-toy-manifold-benchmarks.R]
+      mandatory_tests: ["tests/testthat/test-fpgw-oracle.R::compiled FPGW transport oracles match exhaustive weighted tiny problems"]
+      release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]
+      known_gaps: [optional_lpsolve_suite_nonmandatory, scale_evidence_missing]
+    - method: coupled_diagonalization
+      families: [contract, oracle, invariant, adversarial, regression, approximation]
+      pr_files: [tests/testthat/test-coupled-diagonalization-oracle.R, tests/testthat/test-coupled_diagonalization.R, tests/testthat/test-coupled_diag_mathematical.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-coupled-diagonalization-oracle.R::coupled diagonalization gradient matches finite differences without optional packages"]
+      release_evidence: []
+      known_gaps: [metamorphic_coverage_missing, comparative_accuracy_missing, scale_evidence_missing]
+    - method: mma_align_multiple
+      families: [contract, invariant, adversarial, regression, approximation]
+      pr_files: [tests/testthat/test-mma-align-multiple.R, tests/testthat/test-mma-eigengate.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-mma-align-multiple.R::mma_align_multiple reference mode works with equal sizes"]
+      release_evidence: []
+      known_gaps: [independent_oracle_missing, metamorphic_coverage_missing, scale_evidence_missing]
+    - method: multiscale_manifold_align
+      families: [contract, regression]
+      pr_files: [tests/testthat/test-multiscale-manifold-align-control.R]
+      nightly_files: []
+      mandatory_tests: []
+      release_evidence: []
+      known_gaps: [deprecated_failed_correctness_gate, removal_planned_for_1_0_0]
+    - method: multiset_uot_align
+      families: [contract, oracle, invariant, adversarial, regression, approximation, stress]
+      pr_files: [tests/testthat/test-uot-ti-sinkhorn.R, tests/testthat/test-uot-synthetic.R]
+      nightly_files: [tests/testthat/test-uot-stress.R]
+      mandatory_tests: ["tests/testthat/test-uot-ti-sinkhorn.R::TI-Sinkhorn dense and sparse agree on pi2 up to tolerance"]
+      release_evidence: []
+      known_gaps: [metamorphic_coverage_missing, comparative_accuracy_missing, scale_evidence_missing]
+    - method: sumcor_align
+      families: [contract, oracle, invariant, metamorphic, adversarial, regression]
+      pr_files: [tests/testthat/test-sumcor-align.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-sumcor-align.R::two-domain fit reaches the exact CCA optimum and its constraints", "tests/testthat/test-sumcor-align.R::calibrating a training domain against the others reproduces it"]
+      release_evidence: []
+      known_gaps: [comparative_accuracy_missing, approximation_budget_missing, scale_evidence_missing]
+    - method: ot_procrustes
+      families: [contract, oracle, invariant, regression, approximation]
+      pr_files: [tests/testthat/test-ot-procrustes-aligner.R]
+      nightly_files: []
+      mandatory_tests: ["tests/testthat/test-ot-procrustes-aligner.R::ot_procrustes_aligner recovers a known rotation on synthetic data"]
+      release_evidence: []
+      known_gaps: [metamorphic_coverage_missing, adversarial_coverage_missing, scale_evidence_missing]

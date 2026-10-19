@@ -26,10 +26,11 @@ Thumbs.db
 .omc/
 .claude/
 
-# Documentation build artifacts
-# pkgdown output (hand-authored evidence and policy files live in docs/)
+# pkgdown output goes to site/; docs/ holds hand-authored evidence and policy files
 site/
 vignettes/*.html
+# Resumable tournament checkpoints are local operational state
+docs/evidence/alignment-tournament-v2/checkpoints/
 _site/
 inst/doc/
 
@@ -48,7 +49,6 @@ inst/doc/
 # Development notes (not package documentation)
 notes/
 EXAMPLES_ADDED.md
-METHOD_COMPARISON_TABLE.md
 PRD_MultiSetUOTAlign_V2_Gaps.md
 ms_diffusion.md
 ruleset.md
@@ -62,5 +62,4 @@ repomix-output.txt
 
 # Test strategy docs (not test code)
 tests/TESTING_GUIDE.md
-tests/TESTING_STRATEGY.md
 tests/testthat/COUPLED_DIAG_MATH_TESTS.md

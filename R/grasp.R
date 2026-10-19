@@ -479,8 +479,18 @@ compute_grasp_assignment <- function(basis1, basis2, desc1, desc2, M,
   }
   
   # Block D: Functional correspondence with ridge regularization (your suggestion)
-  phi1 <- basis1$vectors
-  phi2_aligned <- basis2$vectors %*% M
+  # Disconnected or numerically singular graphs can yield different numbers of
+  # non-trivial modes in the two domains.  `align_grasp_bases()` constructs M
+  # on their common subspace, so use that same subspace here rather than
+  # multiplying a wider basis by M.
+  k <- nrow(M)
+  if (ncol(M) != k || k < 1L || ncol(basis1$vectors) < k ||
+      ncol(basis2$vectors) < k) {
+    stop("GRASP rotation is incompatible with the spectral bases", call. = FALSE)
+  }
+  phi1 <- basis1$vectors[, seq_len(k), drop = FALSE]
+  phi2 <- basis2$vectors[, seq_len(k), drop = FALSE]
+  phi2_aligned <- phi2 %*% M
   
   # Solve F^T*Phi1 ≈ G^T*Phi2_aligned * C for diagonal C
   A_prime <- Matrix::crossprod(desc2, phi2_aligned)  # (q, k)

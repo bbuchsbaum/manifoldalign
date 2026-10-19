@@ -140,28 +140,22 @@ print.simembed <- function(x, ...) {
 #'
 #' Evaluates the documented objective
 #' \eqn{(1-\alpha) J_s + \alpha J_p} with
-#' \eqn{J_s = \sum_{i<j} M_{ij}(P_{ij}-T_{ij})^2 / (2K)},
-#' \eqn{K = \#\{i<j: M_{ij} \ne 0\}} and
-#' \eqn{J_p = \|W^\top W - I\|_F^2 / (2m^2)}.
+#' \eqn{J_s = \sum_{ij} M_{ij}(P_{ij}-T_{ij})^2 / (2 \sum_{ij} M_{ij})} and
+#' \eqn{J_p = \|W^\top W - I\|_F^2 / (2m^2)}, the same objective as
+#' `.lse_objective_gradient()` and the compiled backend.
 #' @param X Preprocessed data matrix (n x d).
 #' @param W Weight matrix (d x m).
 #' @param T Target similarity matrix (n x n).
 #' @param M Mask matrix (n x n).
 #' @param sigma Gaussian scale sigma_P.
 #' @param alpha Orthogonality weight alpha_p.
-#' @param upper_idx Optional precomputed linear indices of the masked upper triangle.
 #' @return List with components `objective`, `Js` and `Jp`.
 #' @keywords internal
-.lse_objective <- function(X, W, T, M, sigma, alpha, upper_idx = NULL) {
-  if (is.null(upper_idx)) {
-    upper_idx <- which(upper.tri(M, diag = FALSE) & M != 0)
-  }
+.lse_objective <- function(X, W, T, M, sigma, alpha) {
   m <- ncol(W)
-  K <- if (length(upper_idx) > 0) length(upper_idx) else 1
-  Y <- X %*% W
-  D2 <- pairwise_sqdist(Y)
-  P_upper <- exp(-D2[upper_idx] / sigma)
-  Js <- sum(M[upper_idx] * (P_upper - T[upper_idx])^2) / (2 * K)
+  P <- exp(-pairwise_sqdist(X %*% W) / sigma)
+  P <- 0.5 * (P + t(P))
+  Js <- sum(M * (P - T)^2) / (2 * sum(M))
   WtWmI <- crossprod(W)
   diag(WtWmI) <- diag(WtWmI) - 1
   Jp <- if (m > 0) sum(WtWmI^2) / (2 * m^2) else 0
@@ -243,7 +237,7 @@ print.simembed <- function(x, ...) {
   patience <- 5L
 
   obj_trace <- rep(NA_real_, maxit + 1L)
-  cur <- .lse_objective(X, W, T, M, sigma, alpha_at(1L), upper_idx = upper_idx)
+  cur <- .lse_objective(X, W, T, M, sigma, alpha_at(1L))
   obj <- cur$objective
   obj_trace[1L] <- obj
   n_updates <- 0L
@@ -291,7 +285,7 @@ print.simembed <- function(x, ...) {
     # Full-data objective at the updated weights (always evaluated, so the
     # stopping rule does not depend on `verbose`).
     obj_prev <- obj
-    cur <- .lse_objective(X, W, T, M, sigma, current_alpha, upper_idx = upper_idx)
+    cur <- .lse_objective(X, W, T, M, sigma, current_alpha)
     obj <- cur$objective
     obj_trace[t + 1L] <- obj
 
@@ -466,23 +460,12 @@ grad_Js <- function(X, W, T, M, sigma, sum_M_batch) {
   P <- exp(-D2 / sigma)
   P <- 0.5 * (P + t(P))  # Ensure symmetry
   
-  # Step 1: Compute the coefficient matrix E
-  # Js = sum_{i<j} M_ij (P_ij - T_ij)^2 / (2K), K = #{i<j: M_ij != 0}
-  # (see .lse_objective). With the symmetric full-matrix form,
-  # E_ij = 2 * dJs/dD2_ij = M_ij (P_ij - T_ij) / (2K) * (-2 P_ij / sigma).
-  upper_idx <- which(upper.tri(M, diag = FALSE) & M != 0)
-  norm_factor <- if (length(upper_idx) > 0) length(upper_idx) else 1
-  
-  dJs_dP <- M * (P - T) / (2 * norm_factor)
-  E_matrix <- dJs_dP * P * (-2 / sigma)
-  
-  # Step 2: Form the graph Laplacian of the E_matrix
-  # L_E = D_E - E, where D_E is the diagonal matrix of row sums
-  L_E <- diag(rowSums(E_matrix), nrow = n) - E_matrix
-  
-  # Step 3: Compute the final gradient w.r.t W
-  # grad = 2 * X^T * L_E * Y (dense base matrix, so W stays a base matrix)
-  grad <- 2 * crossprod(X, L_E %*% Y)
+  # With a symmetric mask, both ordered entries (i, j) and (j, i)
+  # contribute to dD^2/dW. This factor of four is part of the derivative,
+  # not an optimizer tuning constant.
+  A <- M * (P - T) * P
+  L_A <- Matrix::Diagonal(x = rowSums(A)) - A
+  grad <- as.matrix((-4 / (sigma * sum_M_batch)) * crossprod(X, L_A %*% Y))
   
   return(grad)
 }
@@ -500,9 +483,57 @@ grad_Jp <- function(W) {
   WtWmI <- WtW
   diag(WtWmI) <- diag(WtWmI) - 1
 
-  # Jp = ||W'W - I||_F^2 / (2 m^2)  =>  dJp/dW = 4 W (W'W - I) / (2 m^2)
   gradient <- (2 / m^2) * (W %*% WtWmI)
   return(gradient)
+}
+
+.lse_objective_gradient <- function(W, X, T, M, sigma_P, alpha_p) {
+  Y <- X %*% W
+  D2 <- pairwise_sqdist(Y)
+  P <- exp(-D2 / sigma_P)
+  P <- 0.5 * (P + t(P))
+
+  Js <- sum(M * (P - T)^2) / (2 * sum(M))
+  WtWmI <- crossprod(W)
+  diag(WtWmI) <- diag(WtWmI) - 1
+  Jp <- sum(WtWmI^2) / (2 * ncol(W)^2)
+
+  gradient <- (1 - alpha_p) * grad_Js(
+    X, W, T, M, sigma_P, sum_M_batch = sum(M)
+  ) + alpha_p * grad_Jp(W)
+
+  list(
+    value = (1 - alpha_p) * Js + alpha_p * Jp,
+    gradient = as.matrix(gradient),
+    similarity_loss = Js,
+    orthogonality_loss = Jp
+  )
+}
+
+.optimize_W_reference <- function(X, T, M, W0, sigma_P, alpha_p, maxit, tol) {
+  dims <- dim(W0)
+  evaluate <- function(parameters) {
+    W <- matrix(parameters, nrow = dims[[1L]], ncol = dims[[2L]])
+    .lse_objective_gradient(W, X, T, M, sigma_P, alpha_p)
+  }
+  fit <- stats::optim(
+    par = as.numeric(W0),
+    fn = function(parameters) evaluate(parameters)$value,
+    gr = function(parameters) as.numeric(evaluate(parameters)$gradient),
+    method = "L-BFGS-B",
+    control = list(maxit = maxit, pgtol = tol)
+  )
+
+  list(
+    W = matrix(fit$par, nrow = dims[[1L]], ncol = dims[[2L]]),
+    trace = fit$value,
+    convergence = as.integer(fit$convergence),
+    message = fit$message %||% .lse_cpp_status(fit$convergence),
+    iterations = unname(fit$counts[["gradient"]]),
+    final_value = fit$value,
+    function_evaluations = unname(fit$counts[["function"]]),
+    gradient_evaluations = unname(fit$counts[["gradient"]])
+  )
 }
 
 #' Adam optimizer update step
@@ -547,26 +578,41 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 #' @noRd
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
+.lse_cpp_status <- function(code) {
+  switch(
+    as.character(as.integer(code)),
+    `0` = "converged",
+    `1` = "iteration_limit",
+    `51` = "optimizer_warning",
+    `52` = "optimizer_error",
+    "unknown_failure"
+  )
+}
+
 #' Linear Similarity Embedding using Optimal Transport
 #'
 #' @description
 #' Performs linear dimensionality reduction by optimizing a weight matrix W (d x m)
-#' such that the pairwise similarities P computed from the projected data (Y = X %*% W)
+#' such that the pairwise similarities P computed from the projected data
+#' (`Y = X %*% W`)
 #' match a target similarity matrix T as closely as possible, considering a mask M.
 #' The optimization balances similarity preservation (Js) with an orthogonality
 #' constraint (Jp) on W, minimizing (1-alpha_p)*Js + alpha_p*Jp.
 #'
 #' @details
 #' The algorithm follows the Linear Similarity Embedding Framework (SEF) from 
-#' Passalis & Tefas (2016). The optimization uses either ADAM (R implementation) 
+#' Passalis & Tefas (2016). The optimization uses either ADAM (R implementation)
 #' or L-BFGS-B (C++ implementation).
-#' 
+#'
+#' Compiled L-BFGS-B status codes are reported as `converged` (0),
+#' `iteration_limit` (1), `optimizer_warning` (51), `optimizer_error` (52), or
+#' `unknown_failure`. A nonzero compiled status triggers an exact-objective
+#' base-R L-BFGS-B retry. The function returns a fit only if one backend
+#' converges; otherwise it stops instead of returning unchecked weights.
+#'
 #' Similarities are computed using a Gaussian kernel: P_ij = exp(-||Y_i - Y_j||^2 / sigma_P).
-#' The similarity loss is Js = sum_{i<j} M_ij (P_ij - T_ij)^2 / (2K), with K the
-#' number of masked pairs i<j, and the orthogonality penalty is
-#' Jp = ||W'W - I||^2_F / (2*m^2). Both backends use the exact gradients of
-#' these terms.
-#' 
+#' The orthogonality penalty is Jp = ||W'W - I||^2_F / (2*m^2).
+#'
 #' Key algorithmic features:
 #' \itemize{
 #'   \item Automatic sigma_P selection using histogram-spread heuristic (Step 2, Fig. 2)
@@ -576,31 +622,25 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 #' }
 #'
 #' @param X Input data matrix (n x d), where n is samples, d is features.
-#' @param T Target similarity matrix (n x n). If NULL, will be computed from data.
-#' @param M Mask matrix (n x n), 1 to consider pair (i,j), 0 to ignore. If NULL, uses all pairs.
+#' @param T Symmetric target similarity matrix (n x n). If NULL, will be
+#'   computed from data.
+#' @param M Symmetric non-negative mask matrix (n x n), with positive entries
+#'   selecting or weighting pairs. If NULL, uses all off-diagonal pairs.
 #' @param sigma_P Numeric scalar > 0 or "auto". Scale parameter for Gaussian kernel. 
 #'   If "auto", uses log-space grid search with histogram-spread heuristic (default: "auto").
 #' @param ncomp Integer > 0. Number of dimensions for the embedding (m) (default: 2).
-#' @param alpha_p Numeric in `[0, 1]`. Weight for the orthogonality regularizer.
+#' @param alpha_p Numeric in [0,1]. Weight for the orthogonality regularizer. 
 #'   Uses convex combination: (1-alpha_p)*Js + alpha_p*Jp (default: 0.1).
 #' @param alpha_schedule Logical. If TRUE, linearly decay alpha_p from 1 to specified value 
 #'   over first 50 iterations to avoid early orthogonality trapping (default: FALSE).
-#' @param maxit Integer. Maximum number of iterations: ADAM updates (R) or
-#'   L-BFGS-B iterations (C++) (default: 500).
-#' @param tol Numeric. Convergence tolerance (default: 1e-6). For ADAM (R): the
-#'   run stops when the absolute change of the full-data objective between
-#'   updates stays below `tol` for five consecutive updates, or the gradient
-#'   norm falls below `10 * tol`; the objective is evaluated after every
-#'   update regardless of `verbose`. If
-#'   `maxit` updates are exhausted first, the result reports
-#'   `convergence = 1` (`"MAXITER_REACHED"`) and a warning is issued.
-#'   For L-BFGS-B (C++): passed as `pgtol`, the tolerance on the largest
-#'   projected-gradient component (L-BFGS-B ignores a relative objective
-#'   tolerance; its `factr` keeps the default of 1e7).
+#' @param maxit Integer. Maximum number of iterations (default: 500).
+#' @param tol Numeric. Convergence tolerance. For ADAM (R): change in objective function.
+#'   For L-BFGS-B (C++): gradient norm tolerance (default: 1e-6).
 #' @param batch_size Numeric in (0, 1]. Fraction of data for stochastic updates in ADAM (R only)
 #'   (default: 1, i.e., full batch).
 #' @param use_cpp Logical. If TRUE and C++ backend is available, use L-BFGS-B from C++.
-#'   Otherwise, use the R ADAM implementation (default: FALSE).
+#'   A failed compiled fit is retried with exact-objective base-R L-BFGS-B.
+#'   If FALSE, use the R ADAM implementation (default: FALSE).
 #' @param verbose Logical. Print optimization progress (default: FALSE).
 #' @param lr Numeric > 0. Learning rate for the ADAM optimizer (R only) (default: 5e-3).
 #' @param formula Optional formula interface for supervised targets (e.g., ~ label).
@@ -616,11 +656,10 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 #'   - \code{scale}: Scaling vector used in preprocessing.
 #'   - \code{sigma_P}: Final sigma_P value used (important if auto-selected).
 #'   - \code{alpha_p}: Final alpha_p value used.
-#'   - \code{objective_trace}: Objective values at the initial weights and after
-#'     each ADAM update (R backend only; \code{NULL} for the C++ backend).
-#'   - Metadata: \code{target_sim}, \code{mask}, \code{optimizer}, \code{convergence}
-#'     (a list with \code{convergence} code (0 = converged), \code{message},
-#'     \code{iterations} and \code{final_value}).
+#'   - \code{objective_trace}: Vector of objective function values during optimization.
+#'   - Metadata: \code{target_sim}, \code{mask}, \code{optimizer}, and
+#'     \code{convergence}; the latter records normalized status, backend,
+#'     objective, evaluation counts when available, and any fallback source.
 #'
 #' @examples
 #' \donttest{
@@ -702,14 +741,55 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
 
   if (!all(dim(T) == c(n, n))) stop("Target matrix T must be n x n, where n=nrow(X)")
   if (!all(dim(M) == c(n, n))) stop("Mask matrix M must be n x n, where n=nrow(X)")
-  if (anyNA(X) || anyNA(T) || anyNA(M)) stop("Input matrices X, T, M must not contain NA values")
-  if (!is.numeric(alpha_p) || alpha_p < 0 || alpha_p > 1) stop("alpha_p must be in [0, 1]")
-  if (!is.numeric(batch_size) || batch_size <= 0 || batch_size > 1) stop("batch_size must be in (0, 1]")
+  if (!is.numeric(X) || !is.numeric(T) || !(is.numeric(M) || is.logical(M))) {
+    stop("X, T, and M must be numeric matrices")
+  }
+  storage.mode(M) <- "double"
+  if (any(!is.finite(X)) || any(!is.finite(T)) || any(!is.finite(M))) {
+    stop("Input matrices X, T, M must contain only finite values")
+  }
+  if (!isTRUE(isSymmetric(T, tol = 1e-10))) {
+    stop("Target matrix T must be symmetric")
+  }
+  if (!isTRUE(isSymmetric(M, tol = 1e-10))) {
+    stop("Mask matrix M must be symmetric")
+  }
+  if (any(M < 0)) stop("Mask matrix M must contain non-negative weights")
+  M_offdiag <- M
+  diag(M_offdiag) <- 0
+  if (sum(M_offdiag) <= 0) stop("Mask matrix M sums to zero off the diagonal. Cannot optimize.")
+  if (!is.numeric(alpha_p) || length(alpha_p) != 1L || !is.finite(alpha_p) || alpha_p < 0 || alpha_p > 1) {
+    stop("alpha_p must be in [0, 1]")
+  }
+  if (!is.numeric(batch_size) || length(batch_size) != 1L || !is.finite(batch_size) || batch_size <= 0 || batch_size > 1) {
+    stop("batch_size must be in (0, 1]")
+  }
+  if (!is.numeric(maxit) || length(maxit) != 1L || !is.finite(maxit) || maxit < 1 || maxit != as.integer(maxit)) {
+    stop("maxit must be a positive integer")
+  }
+  if (!is.numeric(tol) || length(tol) != 1L || !is.finite(tol) || tol <= 0) {
+    stop("tol must be finite and positive")
+  }
+  if (!is.numeric(lr) || length(lr) != 1L || !is.finite(lr) || lr <= 0) {
+    stop("lr must be finite and positive")
+  }
+  if (!is.logical(use_cpp) || length(use_cpp) != 1L || is.na(use_cpp)) {
+    stop("use_cpp must be TRUE or FALSE")
+  }
+  if (!is.logical(alpha_schedule) || length(alpha_schedule) != 1L || is.na(alpha_schedule)) {
+    stop("alpha_schedule must be TRUE or FALSE")
+  }
+  if (!is.logical(verbose) || length(verbose) != 1L || is.na(verbose)) {
+    stop("verbose must be TRUE or FALSE")
+  }
   # -----------------------
 
   # Preprocess & PCA Initialization (following paper's Step 2-3)
   # Using base R standardization for z-normalization (Step 2, Fig. 2)
   Xs <- scale(X, center = TRUE, scale = TRUE)
+  if (any(!is.finite(Xs))) {
+    stop("X contains a constant column; remove constant features before fitting.")
+  }
   d  <- ncol(Xs)
   
   # Store preprocessing info for predict method
@@ -720,6 +800,11 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
   )
 
   # Ensure ncomp is valid
+  if (!is.numeric(ncomp) || length(ncomp) != 1L || !is.finite(ncomp) ||
+      ncomp < 1 || ncomp != as.integer(ncomp)) {
+    stop("ncomp must be a positive integer.")
+  }
+  ncomp <- as.integer(ncomp)
   max_comp <- min(n, d)
   if (ncomp > max_comp) {
       warning(sprintf("ncomp (%d) exceeds max possible (%d). Using %d components.", ncomp, max_comp, max_comp))
@@ -738,11 +823,14 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
     sigma_P <- .auto_select_sigma_P(Xs, W0, T, M, verbose = verbose)
     if (verbose) cat(sprintf("Selected sigma_P = %.6f\n", sigma_P))
   } else {
-    if (!is.numeric(sigma_P) || sigma_P <= 0) stop("sigma_P must be positive or 'auto'")
+    if (!is.numeric(sigma_P) || length(sigma_P) != 1L || !is.finite(sigma_P) || sigma_P <= 0) {
+      stop("sigma_P must be finite and positive or 'auto'")
+    }
   }
 
   # --- Optimization Path ---
   trace <- NULL
+  cpp_failure <- NULL
   if (use_cpp) {
     # Use C++ (L-BFGS-B)
     if (!exists("linear_sim_embed_cpp")) {
@@ -756,51 +844,109 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
     }
     
     # Call C++ function with proper initialization, fallback to R path on failure
-    ret <- tryCatch({
-        linear_sim_embed_cpp(Xs, T, M, sigma_P, ncomp, alpha_p, maxit, tol)
-      }, error = function(e) {
-        if (verbose) warning("C++ backend unavailable (", e$message, "). Falling back to R optimizer.")
+    ret <- tryCatch(
+      linear_sim_embed_cpp(Xs, T, M, sigma_P, ncomp, alpha_p, maxit, tol),
+      error = function(e) {
+        cpp_failure <<- list(
+          convergence = NA_integer_,
+          status = "backend_error",
+          message = conditionMessage(e)
+        )
         NULL
-      })
-
-    if (!is.null(ret)) {
-      if (ret$convergence != 0) {
-          warning("C++ optimization (L-BFGS-B) did not converge. Message: ", ret$message)
       }
+    )
+
+    if (!is.null(ret) && identical(as.integer(ret$convergence), 0L)) {
       W <- ret$W
       optimizer_name <- "L-BFGS-B (C++)"
       convergence_info <- list(
-        convergence = ret$convergence,
+        convergence = 0L,
+        status = .lse_cpp_status(ret$convergence),
         message = ret$message,
         iterations = ret$iterations %||% NA,
-        final_value = ret$value %||% NA
+        final_value = ret$value %||% NA,
+        gradient_norm = ret$gradient_norm %||% NA,
+        function_evaluations = ret$function_evaluations %||% NA,
+        gradient_evaluations = ret$gradient_evaluations %||% NA,
+        backend = "cpp"
       )
       use_cpp <- TRUE
     } else {
+      if (!is.null(ret)) {
+        cpp_failure <- list(
+          convergence = as.integer(ret$convergence),
+          status = .lse_cpp_status(ret$convergence),
+          message = ret$message
+        )
+      }
+      warning(
+        "C++ optimization (L-BFGS-B) did not converge [",
+        cpp_failure$status,
+        if (!is.na(cpp_failure$convergence)) paste0("; code ", cpp_failure$convergence) else "",
+        "]: ", cpp_failure$message,
+        ". Retrying with the R optimizer using the same objective."
+      )
       use_cpp <- FALSE
     }
 
   }
 
   if (!use_cpp) {
-     # Use R (ADAM) with enhanced features
-    res_opt <- .optimize_W_enhanced(Xs, T, M, W0,
-                                   sigma = sigma_P, alpha_p = alpha_p,
-                                   alpha_schedule = alpha_schedule,
-                                   lr = lr, batch = batch_size,
-                                   maxit = maxit, tol = tol,
-                                   verbose = verbose)
+    if (is.null(cpp_failure)) {
+      # User-selected R path: retain the stochastic/full-batch ADAM backend.
+      res_opt <- .optimize_W_enhanced(
+        Xs, T, M, W0,
+        sigma = sigma_P, alpha_p = alpha_p,
+        alpha_schedule = alpha_schedule,
+        lr = lr, batch = batch_size,
+        maxit = maxit, tol = tol,
+        verbose = verbose
+      )
+    } else {
+      # A failed compiled fit is retried only with an optimizer that evaluates
+      # the exact same objective and analytic gradient.
+      res_opt <- .optimize_W_reference(
+        Xs, T, M, W0,
+        sigma_P = sigma_P,
+        alpha_p = alpha_p,
+        maxit = maxit,
+        tol = tol
+      )
+    }
+
+    if (!identical(as.integer(res_opt$convergence), 0L)) {
+      fallback_context <- if (is.null(cpp_failure)) {
+        ""
+      } else {
+        paste0(
+          " after C++ ", cpp_failure$status,
+          if (!is.na(cpp_failure$convergence)) paste0(" (code ", cpp_failure$convergence, ")") else ""
+        )
+      }
+      stop(
+        "Linear Similarity Embedding failed to converge", fallback_context,
+        ": ", res_opt$message,
+        call. = FALSE
+      )
+    }
 
     W      <- res_opt$W
     trace  <- res_opt$trace
-    optimizer_name <- "ADAM (R)"
+    optimizer_name <- if (is.null(cpp_failure)) "ADAM (R)" else "L-BFGS-B (R fallback)"
     convergence_info <- list(
-      convergence = res_opt$convergence,
+      convergence = 0L,
+      status = if (is.null(cpp_failure)) "converged" else "fallback_converged",
       message = res_opt$message,
       iterations = res_opt$iterations,
-      final_value = tail(res_opt$trace, 1)
+      final_value = tail(res_opt$trace, 1),
+      backend = "r",
+      fallback_from = cpp_failure
     )
    }
+
+  if (any(!is.finite(W))) {
+    stop("Linear Similarity Embedding produced non-finite weights.", call. = FALSE)
+  }
 
   # --- Output ---
   scores <- Xs %*% W
@@ -829,5 +975,3 @@ linear_sim_embed <- function(X, T = NULL, M = NULL,
   
   return(result)
 }
-
-

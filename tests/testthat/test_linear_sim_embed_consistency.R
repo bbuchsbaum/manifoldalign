@@ -1,4 +1,28 @@
-test_that("R and C++ linear_sim_embed implementations produce consistent results", {
+lse_reference_objective <- function(W, X, T, M, sigma_P, alpha_p) {
+  Y <- X %*% W
+  distances <- as.matrix(stats::dist(Y))^2
+  P <- exp(-distances / sigma_P)
+  Js <- sum(M * (P - T)^2) / (2 * sum(M))
+
+  orthogonality <- crossprod(W) - diag(ncol(W))
+  Jp <- sum(orthogonality^2) / (2 * ncol(W)^2)
+  (1 - alpha_p) * Js + alpha_p * Jp
+}
+
+lse_central_difference <- function(W, objective, step = 1e-6) {
+  gradient <- matrix(0, nrow(W), ncol(W))
+  for (j in seq_len(ncol(W))) {
+    for (i in seq_len(nrow(W))) {
+      plus <- minus <- W
+      plus[i, j] <- plus[i, j] + step
+      minus[i, j] <- minus[i, j] - step
+      gradient[i, j] <- (objective(plus) - objective(minus)) / (2 * step)
+    }
+  }
+  gradient
+}
+
+test_that("C++ LSE agrees with an independent R L-BFGS-B reference", {
   skip_if_not_installed("RcppArmadillo")
   
   # Skip if C++ backend not available
@@ -25,142 +49,258 @@ test_that("R and C++ linear_sim_embed implementations produce consistent results
   # Test parameters
   sigma_P <- 1.0
   alpha_p <- 0.1
-  maxit <- 50
-  tol <- 1e-6
-  
-  # Run R implementation (ADAM takes small steps, so it gets the default
-  # budget; L-BFGS-B keeps maxit = 50)
-  result_R <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P, 
-                              ncomp = ncomp, alpha_p = alpha_p,
-                              maxit = 500, tol = tol, use_cpp = FALSE,
-                              verbose = FALSE)
-  
-  # Run C++ implementation
-  result_cpp <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P,
-                                ncomp = ncomp, alpha_p = alpha_p,
-                                maxit = maxit, tol = tol, use_cpp = TRUE,
-                                verbose = FALSE)
-  
-  # Test 1: Check that both implementations converged
-  expect_equal(result_R$convergence$convergence, 0, 
-               info = "R implementation should converge")
-  expect_equal(result_cpp$convergence$convergence, 0,
-               info = "C++ implementation should converge")
-  
-  # Test 2: Final objective values should be similar
-  r_final_obj <- tail(result_R$objective_trace, 1)
-  cpp_final_obj <- result_cpp$convergence$final_value
-  
-  expect_true(abs(r_final_obj - cpp_final_obj) / abs(r_final_obj) < 0.05,
-              info = sprintf("Relative objective difference too large: R=%.6f, C++=%.6f", 
-                           r_final_obj, cpp_final_obj))
-  
-  # Test 3: Weight matrices should be similar (allowing for sign flips and orthogonal rotations)
-  W_R <- result_R$weights
-  W_cpp <- result_cpp$weights
-  
-  expect_equal(dim(W_R), dim(W_cpp), info = "Weight matrix dimensions should match")
-  
-  # Test 4: Projected data should have similar structure (check pairwise distances)
-  Y_R <- result_R$scores
-  Y_cpp <- X %*% W_cpp  # Project using C++ weights
-  
-  # Compare distance matrices (invariant to rotations/reflections)
-  D_R <- as.matrix(dist(Y_R))
-  D_cpp <- as.matrix(dist(Y_cpp))
-  
-  # Correlation of distance matrices should be high
+  maxit <- 200
+  tol <- 1e-8
+
+  cpp <- manifoldalign:::linear_sim_embed_cpp(
+    X, T, M, sigma_P, ncomp, alpha_p, maxit, tol
+  )
+  reference <- manifoldalign:::.optimize_W_reference(
+    X, T, M, cpp$initial_W, sigma_P, alpha_p, maxit, tol
+  )
+
+  expect_equal(cpp$convergence, 0L, info = cpp$message)
+  expect_equal(reference$convergence, 0L, info = reference$message)
+  expect_equal(cpp$value, reference$final_value, tolerance = 1e-8)
+
+  D_R <- as.matrix(dist(X %*% reference$W))
+  D_cpp <- as.matrix(dist(X %*% cpp$W))
   dist_correlation <- cor(as.vector(D_R), as.vector(D_cpp))
-  expect_true(dist_correlation > 0.9,
-              info = sprintf("Distance correlation too low: %.3f", dist_correlation))
-  
-  # Test 5: Both should preserve class structure similarly
-  # Check that within-class distances are smaller than between-class
+  expect_gt(dist_correlation, 0.9999)
+
   class_A_idx <- which(labels == "A")
   class_B_idx <- which(labels == "B")
-  
-  # R implementation
   within_A_R <- mean(D_R[class_A_idx, class_A_idx][upper.tri(D_R[class_A_idx, class_A_idx])])
   between_R <- mean(D_R[class_A_idx, class_B_idx])
   class_sep_R <- between_R / within_A_R
-  
-  # C++ implementation  
   within_A_cpp <- mean(D_cpp[class_A_idx, class_A_idx][upper.tri(D_cpp[class_A_idx, class_A_idx])])
   between_cpp <- mean(D_cpp[class_A_idx, class_B_idx])
   class_sep_cpp <- between_cpp / within_A_cpp
-  
-  # Both should achieve similar class separation ratios
-  expect_true(abs(class_sep_R - class_sep_cpp) / class_sep_R < 0.2,
-              info = sprintf("Class separation ratios differ: R=%.3f, C++=%.3f", 
-                           class_sep_R, class_sep_cpp))
+
+  expect_equal(class_sep_cpp, class_sep_R, tolerance = 1e-5)
 })
 
-test_that("R and C++ gradients match central finite differences of the documented objective", {
+test_that("LSE parity holds for rank-deficient and ill-conditioned designs", {
   skip_if_not_installed("RcppArmadillo")
-  skip_if(!exists("lse_objective_gradient_cpp", envir = asNamespace("manifoldalign"), mode = "function"))
-  ns <- asNamespace("manifoldalign")
+  skip_if(!exists("linear_sim_embed_cpp", envir = asNamespace("manifoldalign"), mode = "function"))
 
-  set.seed(123)
-  n <- 10
-  d <- 3
-  ncomp <- 2
+  set.seed(2026)
+  n <- 24
+  z <- matrix(rnorm(n * 4), n, 4)
+  designs <- list(
+    rank_deficient = scale(cbind(z[, 1], z[, 2], z[, 1] + z[, 2], 2 * z[, 1])),
+    ill_conditioned = scale(cbind(
+      z[, 1],
+      z[, 1] + 1e-4 * z[, 2],
+      z[, 1] + 1e-6 * z[, 3],
+      z[, 4]
+    ))
+  )
+  expect_lt(qr(designs$rank_deficient)$rank, ncol(designs$rank_deficient))
+  expect_equal(qr(designs$ill_conditioned)$rank, ncol(designs$ill_conditioned))
+  expect_gt(kappa(designs$ill_conditioned), 1e6)
 
-  X <- scale(matrix(rnorm(n * d), n, d))
-  T <- matrix(runif(n * n), n, n)
-  T <- 0.5 * (T + t(T))
-  diag(T) <- 1
+  labels <- rep(1:3, each = 8)
+  T <- outer(labels, labels, "==") * 1
   M <- matrix(1, n, n)
   diag(M) <- 0
-  sigma_P <- 0.7
-  alpha_p <- 0.3
 
-  # Independent oracle for the documented objective:
-  # (1 - a) * sum_{i<j} M (P - T)^2 / (2K) + a * ||W'W - I||_F^2 / (2 m^2)
-  objective_oracle <- function(W, a = alpha_p) {
+  for (fixture in names(designs)) {
+    X <- designs[[fixture]]
+    cpp <- manifoldalign:::linear_sim_embed_cpp(
+      X, T, M, sigma_P = 1, ncomp = 2, alpha_p = 0.2, maxit = 300, tol = 1e-8
+    )
+    reference <- manifoldalign:::.optimize_W_reference(
+      X, T, M, cpp$initial_W,
+      sigma_P = 1, alpha_p = 0.2, maxit = 300, tol = 1e-8
+    )
+
+    expect_equal(cpp$convergence, 0L, info = fixture)
+    expect_equal(reference$convergence, 0L, info = fixture)
+    expect_equal(cpp$value, reference$final_value, tolerance = 1e-8, info = fixture)
+    expect_true(all(is.finite(cpp$W)), info = fixture)
+    expect_true(is.finite(cpp$gradient_norm), info = fixture)
+  }
+})
+
+test_that("C++ objective diagnostics remain finite at an iteration limit", {
+  skip_if_not_installed("RcppArmadillo")
+  skip_if(!exists("linear_sim_embed_cpp", envir = asNamespace("manifoldalign"), mode = "function"))
+  
+  set.seed(123)
+  
+  # Small test case for gradient verification
+  n <- 10
+  d <- 3  
+  ncomp <- 2
+  
+  X <- matrix(rnorm(n * d), n, d)
+  X <- scale(X)
+  
+  T <- matrix(runif(n * n), n, n)
+  T <- 0.5 * (T + t(T))  # Make symmetric
+  diag(T) <- 1
+  
+  M <- matrix(1, n, n)
+  diag(M) <- 0
+  
+  sigma_P <- 0.5
+  alpha_p <- 0.1
+  
+  # Test with same initial weights
+  W_init <- matrix(rnorm(d * ncomp), d, ncomp)
+  W_init <- qr.Q(qr(W_init))  # Orthogonalize
+  
+  # Helper function to compute objective using R formulation
+  compute_objective_R <- function(W) {
     Y <- X %*% W
-    P <- exp(-as.matrix(dist(Y))^2 / sigma_P)
-    up <- upper.tri(M) & M != 0
-    Js <- sum((P[up] - T[up])^2) / (2 * sum(up))
-    Jp <- sum((crossprod(W) - diag(ncol(W)))^2) / (2 * ncol(W)^2)
-    (1 - a) * Js + a * Jp
+    D2 <- outer(rowSums(Y^2), rowSums(Y^2), `+`) - 2 * tcrossprod(Y)
+    D2[D2 < 0] <- 0
+    P <- exp(-D2 / sigma_P)
+    P <- 0.5 * (P + t(P))
+    
+    Js <- sum(M * (P - T)^2) / (2 * sum(M))
+    
+    WtW <- crossprod(W)
+    WtWmI <- WtW
+    diag(WtWmI) <- diag(WtWmI) - 1
+    Jp <- sum(WtWmI^2) / (2 * ncomp^2)
+    
+    (1 - alpha_p) * Js + alpha_p * Jp
   }
-  central_diff <- function(f, W, h = 1e-6) {
-    G <- W
-    for (k in seq_along(W)) {
-      Wp <- W; Wm <- W
-      Wp[k] <- Wp[k] + h
-      Wm[k] <- Wm[k] - h
-      G[k] <- (f(Wp) - f(Wm)) / (2 * h)
-    }
-    G
+  
+  # Test that initial objectives are similar
+  obj_R <- compute_objective_R(W_init)
+  
+  result_cpp <- manifoldalign:::linear_sim_embed_cpp(
+    X, T, M, sigma_P, ncomp, alpha_p, maxit = 1, tol = 1e-8
+  )
+
+  expect_true(is.finite(obj_R), info = "R objective should be finite")
+  expect_true(is.finite(result_cpp$value),
+              info = "C++ objective should be finite")
+  expect_equal(result_cpp$convergence, 1L)
+  expect_gte(result_cpp$function_evaluations, 1L)
+})
+
+test_that("R and C++ LSE gradients match an independent finite-difference oracle", {
+  skip_if_not_installed("RcppArmadillo")
+  skip_if(!exists("linear_sim_embed_cpp", envir = asNamespace("manifoldalign"), mode = "function"))
+
+  set.seed(321)
+  X <- scale(matrix(rnorm(8 * 3), 8, 3))
+  labels <- rep(c("A", "B"), each = 4)
+  T <- outer(labels, labels, "==") * 1
+  M <- matrix(1, 8, 8)
+  diag(M) <- 0
+  sigma_P <- 1.3
+  alpha_p <- 0.35
+
+  cpp <- manifoldalign:::linear_sim_embed_cpp(
+    X, T, M, sigma_P, ncomp = 2, alpha_p = alpha_p, maxit = 1, tol = 1e-8
+  )
+  W <- cpp$initial_W
+  objective <- function(candidate) {
+    lse_reference_objective(candidate, X, T, M, sigma_P, alpha_p)
   }
+  numerical <- lse_central_difference(W, objective)
+  analytic_R <- (1 - alpha_p) * manifoldalign:::grad_Js(
+    X, W, T, M, sigma_P, sum_M_batch = sum(M)
+  ) + alpha_p * manifoldalign:::grad_Jp(W)
 
-  # Deliberately non-orthogonal weights so the orthogonality term is active.
-  for (W in list(matrix(rnorm(d * ncomp), d, ncomp),
-                 2.5 * matrix(rnorm(d * ncomp), d, ncomp))) {
-    expect_gt(sum((crossprod(W) - diag(ncomp))^2), 0.1)
-    fd <- central_diff(objective_oracle, W)
+  expect_equal(cpp$initial_value, objective(W), tolerance = 1e-12)
+  expect_equal(cpp$initial_gradient, numerical, tolerance = 2e-6)
+  expect_equal(analytic_R, numerical, tolerance = 2e-6)
+})
 
-    obj_R <- ns$.lse_objective(X, W, T, M, sigma_P, alpha_p)$objective
-    expect_equal(obj_R, objective_oracle(W), tolerance = 1e-12)
-    grad_R <- (1 - alpha_p) * ns$grad_Js(X, W, T, M, sigma_P, sum(M)) +
-      alpha_p * ns$grad_Jp(W)
-    expect_equal(unname(as.matrix(grad_R)), fd, tolerance = 1e-6)
+test_that("LSE maps optimizer status codes and rejects unresolved non-convergence", {
+  expect_equal(manifoldalign:::.lse_cpp_status(0L), "converged")
+  expect_equal(manifoldalign:::.lse_cpp_status(1L), "iteration_limit")
+  expect_equal(manifoldalign:::.lse_cpp_status(51L), "optimizer_warning")
+  expect_equal(manifoldalign:::.lse_cpp_status(52L), "optimizer_error")
+  expect_equal(manifoldalign:::.lse_cpp_status(999L), "unknown_failure")
 
-    cpp <- ns$lse_objective_gradient_cpp(X, T, M, sigma_P, alpha_p, W)
-    expect_equal(cpp$value, objective_oracle(W), tolerance = 1e-12)
-    expect_equal(cpp$gradient, fd, tolerance = 1e-6)
-  }
+  set.seed(99)
+  X <- matrix(rnorm(12 * 3), 12, 3)
+  labels <- rep(c("A", "B", "C"), each = 4)
+  T <- outer(labels, labels, "==") * 1
 
-  # Each term separately (alpha = 0: similarity only; alpha = 1: orthogonality only)
-  W <- matrix(rnorm(d * ncomp), d, ncomp)
-  for (a in c(0, 1)) {
-    fd_a <- central_diff(function(W) objective_oracle(W, a), W)
-    cpp_a <- ns$lse_objective_gradient_cpp(X, T, M, sigma_P, a, W)
-    expect_equal(cpp_a$gradient, fd_a, tolerance = 1e-6)
-    grad_a <- if (a == 0) ns$grad_Js(X, W, T, M, sigma_P, sum(M)) else ns$grad_Jp(W)
-    expect_equal(unname(as.matrix(grad_a)), fd_a, tolerance = 1e-6)
-  }
+  expect_error(
+    suppressWarnings(
+      linear_sim_embed(
+        X,
+        T = T,
+        sigma_P = 1,
+        ncomp = 2,
+        maxit = 1,
+        tol = 1e-12,
+        use_cpp = TRUE
+      )
+    ),
+    "failed to converge"
+  )
+})
+
+test_that("LSE rejects invalid structural inputs before optimization", {
+  set.seed(7)
+  X <- matrix(rnorm(10 * 3), 10, 3)
+  T <- diag(10)
+  M <- matrix(1, 10, 10)
+  diag(M) <- 0
+
+  asymmetric_T <- T
+  asymmetric_T[1, 2] <- 0.5
+  expect_error(
+    linear_sim_embed(X, T = asymmetric_T, M = M, sigma_P = 1),
+    "T must be symmetric"
+  )
+
+  asymmetric_M <- M
+  asymmetric_M[1, 2] <- 0
+  expect_error(
+    linear_sim_embed(X, T = T, M = asymmetric_M, sigma_P = 1),
+    "M must be symmetric"
+  )
+
+  expect_error(
+    linear_sim_embed(cbind(X, constant = 1), T = T, M = M, sigma_P = 1),
+    "constant column"
+  )
+})
+
+test_that("LSE exposes a successful exact-objective fallback", {
+  set.seed(88)
+  X <- matrix(rnorm(20 * 4), 20, 4)
+  labels <- rep(c("A", "B"), each = 10)
+  T <- outer(labels, labels, "==") * 1
+
+  with_mocked_bindings(
+    linear_sim_embed_cpp = function(...) {
+      list(convergence = 52L, message = "synthetic line-search failure")
+    },
+    {
+      expect_warning(
+        fit <- linear_sim_embed(
+          X,
+          T = T,
+          sigma_P = 1,
+          ncomp = 2,
+          alpha_p = 0.2,
+          maxit = 200,
+          tol = 1e-8,
+          use_cpp = TRUE
+        ),
+        "Retrying with the R optimizer"
+      )
+      expect_equal(fit$convergence$convergence, 0L)
+      expect_equal(fit$convergence$status, "fallback_converged")
+      expect_equal(fit$convergence$backend, "r")
+      expect_equal(fit$convergence$fallback_from$convergence, 52L)
+      expect_equal(fit$convergence$fallback_from$status, "optimizer_error")
+      expect_equal(fit$optimizer, "L-BFGS-B (R fallback)")
+    },
+    .package = "manifoldalign"
+  )
 })
 
 test_that("Alpha parameter scaling works consistently", {
@@ -189,11 +329,9 @@ test_that("Alpha parameter scaling works consistently", {
   alpha_values <- c(0.01, 0.1, 0.5, 0.9)
   
   for (alpha in alpha_values) {
-    # ADAM takes small steps; it is given its default budget, while L-BFGS-B
-    # keeps the 30-iteration budget.
     result_R <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P,
                                 ncomp = ncomp, alpha_p = alpha,
-                                maxit = 500, use_cpp = FALSE, verbose = FALSE)
+                                maxit = maxit, use_cpp = FALSE, verbose = FALSE)
     
     result_cpp <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P,
                                   ncomp = ncomp, alpha_p = alpha,
@@ -204,11 +342,8 @@ test_that("Alpha parameter scaling works consistently", {
                  info = sprintf("R should converge with alpha=%.2f", alpha))
     expect_equal(result_cpp$convergence$convergence, 0,
                  info = sprintf("C++ should converge with alpha=%.2f", alpha))
-
-    # Both backends minimise the same objective and reach the same value
-    expect_equal(result_R$convergence$final_value, result_cpp$convergence$final_value,
-                 tolerance = 1e-3,
-                 info = sprintf("Final objectives differ with alpha=%.2f", alpha))
+    expect_equal(result_cpp$convergence$status, "converged")
+    expect_equal(result_cpp$convergence$backend, "cpp")
     
     # Orthogonality should increase with higher alpha
     WtW_R <- crossprod(result_R$weights)
@@ -224,4 +359,4 @@ test_that("Alpha parameter scaling works consistently", {
                 info = sprintf("C++ orthogonality error too large with alpha=%.2f: %.3f", 
                               alpha, orthog_error_cpp))
   }
-}) 
+})

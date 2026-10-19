@@ -192,6 +192,15 @@ solver (\code{"linear"}) is available
 \item \code{knn}: Number of nearest neighbors for graph construction
 }
 }
+\section{Lifecycle}{
+
+CONE-Align and its multiple-domain wrapper are retained as legacy/reference
+methods. Pairwise CONE completed 10 of 12 intended frozen tournament cases;
+two equal-size closed-world cases stopped because domain embeddings exposed
+different latent dimensions to the Procrustes step. Restore experimental
+status only after dimension reconciliation passes all frozen cases.
+}
+
 \examples{
 \donttest{
 # Example with hyperdesign graph data

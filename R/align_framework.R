@@ -51,6 +51,9 @@ new_aligner <- function(name, group, supports_multi = FALSE, ...) {
 #'     \item{`invertible`}{the map from a domain to the shared space can be
 #'       inverted to recover the domain's features.}
 #'   }
+#'   Use [alignment_method_info()] for the complete capability and lifecycle
+#'   contract; registry meta-tests verify that these adapter fields agree with
+#'   that record.
 #' @examples
 #' algo <- new_aligner("test", group = "O")
 #' caps <- aligner_capabilities(algo)

@@ -5,18 +5,16 @@ library(testthat)
 library(Matrix)
 
 have_multidesign <- requireNamespace("multidesign", quietly = TRUE)
-have_lpSolve <- requireNamespace("lpSolve", quietly = TRUE)
 
 if (have_multidesign && !("package:multidesign" %in% search())) {
   suppressPackageStartupMessages(library(multidesign))
 }
 if (requireNamespace("tibble", quietly = TRUE) && !("package:tibble" %in% search())) {
-  suppressPackageStartupMessages(library(tibble))
+  suppressWarnings(suppressPackageStartupMessages(library(tibble)))
 }
 
 test_that("fpgw works with basic hyperdesign input", {
   skip_if_not(have_multidesign, "multidesign not installed")
-  skip_if_not(have_lpSolve, "lpSolve not installed")
   
   # Create simple test data
   set.seed(123)
@@ -59,7 +57,6 @@ test_that("fpgw works with basic hyperdesign input", {
 
 test_that("fpgw handles mass-constrained variant", {
   skip_if_not(have_multidesign, "multidesign not installed")
-  skip_if_not(have_lpSolve, "lpSolve not installed")
   
   set.seed(456)
   n <- 15
@@ -87,7 +84,7 @@ test_that("fpgw handles mass-constrained variant", {
   expect_equal(result$lambda, 0)  # Default lambda is 0, not NULL
 })
 
-test_that("fpgw handles TV-penalized variant", {
+test_that("fpgw rejects the withdrawn TV-penalized variant", {
   skip_if_not(have_multidesign, "multidesign not installed")
   
   set.seed(789)
@@ -100,29 +97,13 @@ test_that("fpgw handles TV-penalized variant", {
   md2 <- multidesign::multidesign(X2, design)
   hd <- hyperdesign(list(d1 = md1, d2 = md2))
   
-  # Run with TV penalty
-  lambda <- 0.1
-  expect_warning(
-    result <- fpgw(hd, omega1 = 0.3, lambda = lambda, verbose = FALSE),
-    "experimental"
+  expect_error(
+    fpgw(hd, omega1 = 0.3, lambda = 0.1, verbose = FALSE),
+    "lambda > 0.*withdrawn.*rho"
   )
-
-  # Check metadata
-  expect_equal(result$lambda, lambda)
-  expect_null(result$rho)
-
-  # The plan is a sub-coupling: non-negative with row/column sums bounded by
-  # the marginals. With this small lambda the mass penalty cannot pay for
-  # transporting everything, so mass is strictly partial.
-  P <- result$transport_plans[[1]]
-  expect_true(all(P >= 0))
-  expect_lte(max(rowSums(P) - 1/n), 1e-12)
-  expect_lte(max(colSums(P) - 1/n), 1e-12)
-  expect_lt(sum(P), 0.99)
-  expect_true(result$converged[1, 2])
 })
 
-test_that("fpgw validates mutually exclusive parameters", {
+test_that("fpgw rejects lambda even when rho is supplied", {
   skip_if_not(have_multidesign, "multidesign not installed")
   
   # Create dummy data
@@ -132,10 +113,9 @@ test_that("fpgw validates mutually exclusive parameters", {
   md <- multidesign::multidesign(X, design)
   hd <- hyperdesign(list(d1 = md, d2 = md))
   
-  # Should error if both rho and lambda are provided
   expect_error(
     fpgw(hd, omega1 = 0.5, rho = 0.8, lambda = 0.1),
-    "Choose.*either.*rho.*lambda.*not both"
+    "lambda > 0.*withdrawn.*rho"
   )
 })
 
@@ -217,7 +197,6 @@ test_that("fpgw print method works", {
 # Validation test against known solution
 test_that("fpgw produces expected results on toy problem", {
   skip_if_not(have_multidesign, "multidesign not installed")
-  skip_if_not(have_lpSolve, "lpSolve not installed")
   
   # Create a toy problem with known structure
   set.seed(42)
@@ -277,7 +256,6 @@ test_that("fpgw handles different dimensional data", {
 
 test_that("fpgw out-of-sample transport approximates target samples", {
   skip_if_not(have_multidesign, "multidesign not installed")
-  skip_if_not(have_lpSolve, "lpSolve not installed")
 
   set.seed(4242)
   n <- 12
@@ -310,7 +288,6 @@ test_that("fpgw out-of-sample transport approximates target samples", {
 
 test_that("fpgw recovers simple 1D permutation structure", {
   skip_if_not(have_multidesign, "multidesign not installed")
-  skip_if_not(have_lpSolve, "lpSolve not installed")
 
   set.seed(20240506)
   n <- 6

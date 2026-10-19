@@ -100,25 +100,6 @@ test_that("mass-constrained oracle is exact, respects bounds and mass", {
                "exceeds")
 })
 
-test_that("penalized-variant oracle solves the <= polytope LP exactly", {
-  skip_if_not_installed("lpSolve")
-  set.seed(31)
-  for (rep in 1:30) {
-    n <- sample(2:7, 1); m <- sample(2:7, 1)
-    C <- matrix(rnorm(n * m), n, m)  # mixed signs: only negative entries pay off
-    a <- rep(1 / n, n); b <- rep(1 / m, m)
-    G <- manifoldalign:::partial_ot_tv(C, a, b)
-    ref <- lp_reference(C, a, b, "<=", "<=")
-    expect_lte(abs(sum(C * G) - ref), 1e-9 * max(1, abs(ref)))
-    expect_true(all(G >= 0))
-    expect_lte(max(rowSums(G) - a), 1e-14)
-    expect_lte(max(colSums(G) - b), 1e-14)
-  }
-  # Non-negative costs: transporting nothing is optimal
-  G <- manifoldalign:::partial_ot_tv(matrix(runif(9) + 0.1, 3, 3), rep(1/3, 3), rep(1/3, 3))
-  expect_equal(sum(G), 0)
-})
-
 fw_problem <- function(seed, n1 = 6, n2 = 5) {
   set.seed(seed)
   X <- matrix(rnorm(n1 * 2), n1, 2)
@@ -135,8 +116,7 @@ test_that("Frank-Wolfe never increases the objective and stays feasible (all var
     P_bal <- outer(pr$p, pr$q)
     for (cfg in list(list(lambda = 0, rho = NULL, P0 = P_bal),
                      list(lambda = 0, rho = 0.6, P0 = 0.6 * P_bal),
-                     list(lambda = 0.2, rho = NULL, P0 = P_bal),
-                     list(lambda = 0.02, rho = NULL, P0 = 0.5 * P_bal))) {
+                     list(lambda = 0, rho = 0.3, P0 = 0.3 * P_bal))) {
       sol <- manifoldalign:::fw_fpgw(pr$C, pr$Cx, pr$Cy, pr$p, pr$q,
                                      omega1 = 0.3, lambda = cfg$lambda, rho = cfg$rho,
                                      P0 = cfg$P0, max_iter = 300, tol = 1e-10)
@@ -157,18 +137,18 @@ test_that("Frank-Wolfe never increases the objective and stays feasible (all var
   }
 })
 
-test_that("penalized variant: gradient and step use the correct mass-penalty terms", {
+test_that("mass-constrained variant: gradient and objective match the documented objective", {
   pr <- fw_problem(8)
-  lambda <- 0.3
+  rho <- 0.4
   omega1 <- 0.3
   obj <- function(P) {
     M <- outer(as.vector(pr$Cx^2 %*% rowSums(P)), as.vector(pr$Cy^2 %*% colSums(P)), "+") -
       2 * pr$Cx %*% P %*% t(pr$Cy)
-    omega1 * sum(pr$C * P) + (1 - omega1) * sum(M * P) + lambda * (2 - 2 * sum(P)^2)
+    omega1 * sum(pr$C * P) + (1 - omega1) * sum(M * P)
   }
-  P0 <- 0.4 * outer(pr$p, pr$q)
+  P0 <- rho * outer(pr$p, pr$q)
   sol <- manifoldalign:::fw_fpgw(pr$C, pr$Cx, pr$Cy, pr$p, pr$q, omega1 = omega1,
-                                 lambda = lambda, rho = NULL, P0 = P0, max_iter = 0)
+                                 lambda = 0, rho = rho, P0 = P0, max_iter = 0)
   # Gradient at P0 matches finite differences of the documented objective
   G <- sol$grad
   h <- 1e-6
@@ -180,10 +160,11 @@ test_that("penalized variant: gradient and step use the correct mass-penalty ter
   expect_equal(sol$objective, obj(P0), tolerance = 1e-12)
   # Full solve: objective at the returned plan is below the start
   sol2 <- manifoldalign:::fw_fpgw(pr$C, pr$Cx, pr$Cy, pr$p, pr$q, omega1 = omega1,
-                                  lambda = lambda, rho = NULL, P0 = P0, max_iter = 200,
+                                  lambda = 0, rho = rho, P0 = P0, max_iter = 200,
                                   tol = 1e-10)
   expect_equal(sol2$objective, obj(sol2$P), tolerance = 1e-12)
   expect_lt(sol2$objective, obj(P0))
+  expect_lt(abs(sum(sol2$P) - rho), 1e-12)
 })
 
 test_that("mass-constrained FPGW never reports convergence at an infeasible mass", {
@@ -239,7 +220,7 @@ test_that("fpgw validates its arguments", {
   expect_error(fpgw(hd, lambda = -1), "lambda")
   expect_error(fpgw(hd, metric = "chebyshev"), "metric")
   expect_error(fpgw(hd, omgea1 = 0.5), "unused argument")
-  expect_error(fpgw(hd, rho = 0.5, lambda = 0.1), "not both")
+  expect_error(fpgw(hd, rho = 0.5, lambda = 0.1), "withdrawn")
 })
 
 test_that("LP fallbacks guard their size and fail loudly", {

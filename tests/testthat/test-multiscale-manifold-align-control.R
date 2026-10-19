@@ -1,5 +1,20 @@
 library(testthat)
 
+test_that("multiscale alignment is deprecated with actionable migration", {
+  record <- manifoldalign:::.multiscale_lifecycle_record()
+  expect_equal(nrow(validate_alignment_lifecycle(record)), 0L)
+  expect_identical(record$state, "deprecated")
+  expect_false(record$recommended)
+
+  expect_warning(
+    expect_error(multiscale_manifold_align(1), "No applicable method"),
+    regexp = "rapid_ma.*1.0.0"
+  )
+  message <- manifoldalign:::.multiscale_deprecation_message()
+  expect_match(message, "ssma_align", fixed = TRUE)
+  expect_match(message, "spectral_mnn_align", fixed = TRUE)
+})
+
 test_that("multiscale_manifold_align_control validates core fields", {
   ctrl <- multiscale_manifold_align_control(
     enabled = TRUE,
@@ -215,20 +230,22 @@ test_that("multiscale_manifold_align accepts unquoted label columns", {
     label_name = "condition"
   )
 
-  fit <- multiscale_manifold_align(
-    hd,
-    y = condition,
-    preproc = NULL,
-    ncomp = 2,
-    control = multiscale_manifold_align_control(
-      enabled = TRUE,
-      backend = "spectral",
-      rank_per_domain = 12L,
-      knn = 8L,
-      max_pairs_per_label = 20L,
+  fit <- suppressWarnings(
+    multiscale_manifold_align(
+      hd,
+      y = condition,
+      preproc = NULL,
+      ncomp = 2,
+      control = multiscale_manifold_align_control(
+        enabled = TRUE,
+        backend = "spectral",
+        rank_per_domain = 12L,
+        knn = 8L,
+        max_pairs_per_label = 20L,
+        verbose = FALSE
+      ),
       verbose = FALSE
-    ),
-    verbose = FALSE
+    )
   )
 
   expect_s3_class(fit, c("multiscale_manifold_align", "multiblock_biprojector"))

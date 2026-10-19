@@ -1,0 +1,13 @@
+protocol_version,case_id,split,tier,family,n_shared,n_private_1,n_private_2,attr_dim,n_anchors,label_fraction,edge_delete,edge_add,edge_rewire,weight_noise,weight_scale,directed,heterophily,misleading_fraction,position_jitter,rigid_transform,missing_attribute_fraction,attribute_noise,class_imbalance,private_classes,preprocessing_id,tuning_budget,seed
+2.0.0,dev-oracle-sbm,development,oracle,sbm,12,0,0,4,4,0.5,0,0,0,0,1,FALSE,0,0,0,TRUE,0,0,0,FALSE,train_numeric_center_scale_v1,6,11001
+2.0.0,dev-oracle-geometric,development,oracle,geometric,12,0,0,4,4,0.5,0,0,0,0,1,FALSE,0,0,0,TRUE,0,0,0,FALSE,train_numeric_center_scale_v1,6,11002
+2.0.0,dev-oracle-scale_free,development,oracle,scale_free,12,0,0,4,4,0.5,0,0,0,0,1,TRUE,0,0,0,TRUE,0,0,0,FALSE,train_numeric_center_scale_v1,6,11003
+2.0.0,dev-small-accuracy-sbm,development,small_accuracy,sbm,120,6,9,8,8,0.15,0.08,0.05,0.05,0.1,1.1,FALSE,0.05,0.05,0.04,TRUE,0.05,0.08,0.2,TRUE,train_numeric_center_scale_v1,24,11004
+2.0.0,dev-small-accuracy-geometric,development,small_accuracy,geometric,120,6,9,8,8,0.15,0.08,0.05,0.05,0.1,1.1,FALSE,0.05,0.05,0.04,TRUE,0.05,0.08,0.2,TRUE,train_numeric_center_scale_v1,24,11005
+2.0.0,dev-small-accuracy-scale_free,development,small_accuracy,scale_free,120,6,9,8,8,0.15,0.08,0.05,0.05,0.1,1.1,TRUE,0.05,0.05,0.04,TRUE,0.05,0.08,0.2,TRUE,train_numeric_center_scale_v1,24,11006
+2.0.0,dev-medium-robustness-sbm,development,medium_robustness,sbm,800,80,120,12,12,0.08,0.25,0.15,0.2,0.35,1.4,TRUE,0.25,0.2,0.15,TRUE,0.25,0.25,0.55,TRUE,train_numeric_center_scale_v1,24,11007
+2.0.0,dev-medium-robustness-geometric,development,medium_robustness,geometric,800,80,120,12,12,0.08,0.25,0.15,0.2,0.35,1.4,FALSE,0.25,0.2,0.15,TRUE,0.25,0.25,0.55,TRUE,train_numeric_center_scale_v1,24,11008
+2.0.0,dev-medium-robustness-scale_free,development,medium_robustness,scale_free,800,80,120,12,12,0.08,0.25,0.15,0.2,0.35,1.4,TRUE,0.25,0.2,0.15,TRUE,0.25,0.25,0.55,TRUE,train_numeric_center_scale_v1,24,11009
+2.0.0,dev-large-scaling-sbm,development,large_scaling,sbm,5000,500,800,16,20,0.02,0.1,0.05,0.1,0.15,0.8,FALSE,0.1,0.05,0.08,TRUE,0.1,0.1,0.4,TRUE,train_numeric_center_scale_v1,8,11010
+2.0.0,dev-large-scaling-geometric,development,large_scaling,geometric,5000,500,800,16,20,0.02,0.1,0.05,0.1,0.15,0.8,FALSE,0.1,0.05,0.08,TRUE,0.1,0.1,0.4,TRUE,train_numeric_center_scale_v1,8,11011
+2.0.0,dev-large-scaling-scale_free,development,large_scaling,scale_free,5000,500,800,16,20,0.02,0.1,0.05,0.1,0.15,0.8,TRUE,0.1,0.05,0.08,TRUE,0.1,0.1,0.4,TRUE,train_numeric_center_scale_v1,8,11012

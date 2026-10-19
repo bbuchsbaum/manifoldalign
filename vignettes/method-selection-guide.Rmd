@@ -1,0 +1,511 @@
+---
+title: "Method Selection Guide"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Method Selection Guide}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+This package provides more than a dozen alignment methods. Choosing the right
+one depends on the structure of your problem, not on a single accuracy
+leaderboard. This article walks through the decision space and connects each
+branch to the method (or methods) that the current benchmarks support.
+
+## The four questions that matter
+
+Before looking at any method, answer these about your data:
+
+1. **Correspondences** -- Do you know which rows in domain A match which rows
+   in domain B?
+   - *Exact*: row IDs are shared across all domains (e.g. same subjects,
+     same voxels).
+   - *Partial anchors*: a subset of rows are matched; the rest are unmatched.
+   - *Labels only*: you know class/condition labels but not row-level
+     correspondences.
+   - *None*: fully unsupervised.
+
+2. **Overlap** -- Do all domains observe the same set of entities?
+   - *Full*: every entity appears in every domain.
+   - *Partial / open-set*: some entities are private to a single domain.
+
+3. **Number of domains** -- Two, or three-or-more?
+
+4. **Output needed** -- Do you need a shared latent embedding, a linear
+   transform you can apply to new data, or an explicit sample-to-sample
+   transport plan?
+
+The table and flowchart below map combinations of these answers to
+recommended methods.
+
+## Method families at a glance
+
+```{r method-table, echo = FALSE, results = "asis"}
+families <- data.frame(
+  Family = c(
+    "global_geo_align",
+    "spectral_mnn_align",
+    "ssma_align",
+    "gpca_align",
+    "lowrank_align",
+    "kema",
+    "generalized_procrustes",
+    "multiscale_manifold_align",
+    "coupled_diagonalization",
+    "mma_align_multiple",
+    "grasp / grasp_multiset",
+    "parrot",
+    "fpgw",
+    "gromov_wasserstein",
+    "token_ot_graph_align",
+    "cone_align / cone_align_multiple",
+    "multiset_uot_align"
+  ),
+  Correspondences = c(
+    "Exact row IDs",
+    "Exact row IDs",
+    "Exact row IDs",
+    "Labels",
+    "Labels",
+    "Labels",
+    "Exact row IDs",
+    "Exact row IDs",
+    "Exact row IDs (anchors)",
+    "None (unsupervised)",
+    "None or partial",
+    "Anchors (partial)",
+    "None (structural)",
+    "None (structural)",
+    "None or partial links",
+    "Exact row IDs",
+    "None (template geometry)"
+  ),
+  Overlap = c(
+    "Full",
+    "Full or partial",
+    "Full",
+    "Full",
+    "Full",
+    "Full",
+    "Full",
+    "Full",
+    "Full (via anchors)",
+    "Full",
+    "Full or partial",
+    "Full or partial",
+    "Full",
+    "Full",
+    "Full or partial",
+    "Full",
+    "Full"
+  ),
+  Domains = c(
+    "2+", "2+", "2+",
+    "2+", "2", "2",
+    "2+", "2+", "2+",
+    "3+",
+    "2 (multiset: 3+)",
+    "2", "2", "2", "2",
+    "2 (multiple: 3+)",
+    "3+"
+  ),
+  Output = c(
+    "Latent embedding",
+    "Latent embedding",
+    "Latent embedding",
+    "Latent embedding",
+    "Latent embedding",
+    "Kernel embedding",
+    "Rotation + embedding",
+    "Hierarchical embedding",
+    "Latent embedding",
+    "Consensus embedding",
+    "Embedding + transport",
+    "Rotation + permutation",
+    "Transport plan + embedding",
+    "Transport plan",
+    "Transport plan + embedding",
+    "Linear transform + embedding",
+    "Transport-based mapping"
+  ),
+  Feature_dims = c(
+    "Any", "Any", "Any",
+    "Any", "Any", "Any",
+    "Must match", "Any", "Any",
+    "Any",
+    "Any", "Any", "Any", "Any", "Any",
+    "Any",
+    "Shared geometry dim"
+  ),
+  Vignette = c(
+    "--",
+    "--",
+    "--",
+    "`gpca-align`",
+    "`lowrank-align`",
+    "`kema-overview`",
+    "--",
+    "--",
+    "`coupled-diagonalization`",
+    "`mma-align`",
+    "`grasp-align`",
+    "`parrot-align`",
+    "`fpgw_tutorial`",
+    "--",
+    "--",
+    "`cone-align`",
+    "--"
+  ),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(families, col.names = c(
+  "Method family", "Correspondences", "Overlap",
+  "Domains", "Output type", "Feature dims", "Vignette"
+))
+```
+
+## Decision flowchart
+
+The flowchart below is a text rendering of the decision tree. Start at the
+top and follow the branch that matches your problem.
+
+```
+Do you have exact row-level correspondences across domains?
+│
+├─ YES
+│  │
+│  ├─ Is overlap full (every entity in every domain)?
+│  │  │
+│  │  ├─ YES
+│  │  │  │
+│  │  │  ├─ Do feature dimensions match across domains?
+│  │  │  │  ├─ YES ──► generalized_procrustes (simple baseline)
+│  │  │  │  │         then try global_geo_align (benchmark leader)
+│  │  │  │  └─ NO ───► global_geo_align (benchmark leader)
+│  │  │  │             or ssma_align / spectral_mnn_align
+│  │  │  │
+│  │  │  └─ Do you want multiscale decomposition?
+│  │  │     ├─ YES ──► multiscale_manifold_align (research family)
+│  │  │     └─ NO ───► global_geo_align
+│  │  │
+│  │  └─ NO (partial / open-set overlap)
+│  │     └──────────► spectral_mnn_align (benchmark leader here)
+│  │
+│  └─ 3+ domains needing joint consensus?
+│     └──────────► coupled_diagonalization or cone_align_multiple
+│
+├─ PARTIAL ANCHORS (some rows matched, others not)
+│  │
+│  ├─ Are anchors sparse / noisy?
+│  │  ├─ YES ──► parrot (robust to anchor noise)
+│  │  └─ NO ───► token_ot_graph_align or grasp
+│  │
+│  └─ 3+ domains?
+│     └──────────► grasp_multiset
+│
+├─ LABELS ONLY (class/condition but no row IDs)
+│  │
+│  ├─ Labels clean?
+│  │  ├─ YES
+│  │  │  ├─ Want speed + simplicity? ──► gpca_align (safest baseline)
+│  │  │  ├─ Want latent geometry? ────► kema (linear kernel first)
+│  │  │  └─ Hard nonlinear regime? ──► lowrank_align (strongest here)
+│  │  │
+│  │  └─ NO (noisy / corrupted labels)
+│  │     └──────────► gpca_align (most robust to label noise)
+│  │
+│  └─ 2+ domains with labels?
+│     └──────────► gpca_align or lowrank_align via hyperdesign
+│
+└─ NO CORRESPONDENCES AT ALL (fully unsupervised)
+   │
+   ├─ Do domains share intrinsic geometry?
+   │  ├─ YES ──► gromov_wasserstein or fpgw (structure matching)
+   │  └─ NO ───► mma_align_multiple (3+ domains, consensus)
+   │
+   ├─ Do you have a shared geometry template?
+   │  └─ YES ──► multiset_uot_align
+   │
+   └─ 3+ domains?
+      └──────────► mma_align_multiple (consensus baseline)
+```
+
+## What the benchmarks say
+
+The package tracks synthetic benchmark results across five fast-profile
+scenarios that stress different problem axes. The `benchmark-guidance`
+vignette has full tables; here is the executive summary.
+
+### Exact correspondence, full overlap
+
+```{r exact-leaders, echo = FALSE}
+bench_dir <- tryCatch(
+  normalizePath(file.path("..", "dev-scripts", "benchmarks"), mustWork = TRUE),
+  error = function(e) NULL
+)
+
+if (!is.null(bench_dir)) {
+  rank_path <- file.path(bench_dir, "toy_feature_aligners_regime_ranks.csv")
+  if (file.exists(rank_path)) {
+    regime_ranks <- utils::read.csv(rank_path, stringsAsFactors = FALSE)
+    exact <- regime_ranks[
+      regime_ranks$supervision_regime == "exact_correspondence" &
+        regime_ranks$dimensionality_constraint == "unrestricted",
+    ]
+    # Show top 3 per scenario
+    exact <- exact[order(exact$scenario, exact$overall_rank), ]
+    top3 <- do.call(rbind, lapply(split(exact, exact$scenario), function(df) {
+      utils::head(df, 3)
+    }))
+    rownames(top3) <- NULL
+    knitr::kable(top3[, c(
+      "scenario", "method", "overall_rank",
+      "max_abs_latent_cor_mean", "centroid_acc_mean", "runtime_sec_mean"
+    )], col.names = c(
+      "Scenario", "Method", "Rank",
+      "Latent cor", "Centroid acc", "Runtime (s)"
+    ), digits = 3)
+  } else {
+    cat("Benchmark CSVs not found; run the benchmark to populate this table.")
+  }
+} else {
+  cat("Benchmark directory not found; this table requires building from source.")
+}
+```
+
+**Takeaways:**
+
+- `global_geo_align` leads on `linear_affine`, `isometric_curve`,
+  `hard_nonisometric`, and `noisy_label_shift` with the fastest runtimes.
+- `spectral_mnn_align` takes over on `partial_open_set` where it handles
+  unmatched rows gracefully.
+- `ssma_align` is a strong runner-up on curve and nonlinear regimes.
+
+### Label-supervised
+
+```{r label-leaders, echo = FALSE}
+if (!is.null(bench_dir) && file.exists(rank_path)) {
+  label <- regime_ranks[
+    regime_ranks$supervision_regime == "label_supervision",
+  ]
+  label <- label[order(label$scenario, label$overall_rank), ]
+  top3_label <- do.call(rbind, lapply(split(label, label$scenario), function(df) {
+    utils::head(df, 3)
+  }))
+  rownames(top3_label) <- NULL
+  knitr::kable(top3_label[, c(
+    "scenario", "method", "overall_rank",
+    "max_abs_latent_cor_mean", "centroid_acc_mean", "runtime_sec_mean"
+  )], col.names = c(
+    "Scenario", "Method", "Rank",
+    "Latent cor", "Centroid acc", "Runtime (s)"
+  ), digits = 3)
+} else {
+  cat("Benchmark CSVs not available.")
+}
+```
+
+**Takeaways:**
+
+- `gpca_align` is the safest label baseline: best on `noisy_label_shift`,
+  competitive everywhere, and has the lowest seed-to-seed variance.
+- `kema` with a linear kernel is fast and strong on latent correlation, but
+  more seed-sensitive on curved data. Validate with multiple seeds.
+- `lowrank_align` is the strongest on the hard nonlinear regime.
+- `kema` with an RBF kernel is slow and highly variable on these small
+  problems. Use it only when you have reason to believe the kernel is
+  well-calibrated.
+
+### Unsupervised multiset and transport
+
+- `mma_align_multiple` is the current baseline for 3+ domain consensus
+  alignment with no side information.
+- `multiset_uot_align` occupies a separate regime: it requires a shared
+  geometry template but achieves very high latent correlation when one is
+  available.
+
+### Unsupervised pairwise (no correspondences, 2 domains)
+
+```{r unsup-pairwise, echo = FALSE}
+if (!is.null(bench_dir) && file.exists(rank_path)) {
+  unsup <- regime_ranks[
+    regime_ranks$supervision_regime == "unsupervised_pairwise",
+  ]
+  if (nrow(unsup) > 0) {
+    unsup <- unsup[order(unsup$scenario, unsup$overall_rank), ]
+    knitr::kable(unsup[, c(
+      "scenario", "method", "overall_rank",
+      "max_abs_latent_cor_mean", "centroid_acc_mean", "runtime_sec_mean"
+    )], col.names = c(
+      "Scenario", "Method", "Rank",
+      "Latent cor", "Centroid acc", "Runtime (s)"
+    ), digits = 3)
+  } else {
+    cat("No unsupervised pairwise results in the current benchmark.")
+  }
+} else {
+  cat("Benchmark CSVs not available.")
+}
+```
+
+These methods receive **no correspondences at all** --- they discover
+alignment purely from graph structure. `cone_align` uses iterative
+Procrustes on spectral embeddings; `grasp` uses diffusion-based descriptors.
+Both run on the first two views of each scenario.
+
+### Partial anchor
+
+```{r partial-anchor, echo = FALSE}
+if (!is.null(bench_dir) && file.exists(rank_path)) {
+  anchor <- regime_ranks[
+    regime_ranks$supervision_regime == "partial_anchor",
+  ]
+  if (nrow(anchor) > 0) {
+    anchor <- anchor[order(anchor$scenario, anchor$overall_rank), ]
+    knitr::kable(anchor[, c(
+      "scenario", "method", "overall_rank",
+      "max_abs_latent_cor_mean", "centroid_acc_mean", "runtime_sec_mean"
+    )], col.names = c(
+      "Scenario", "Method", "Rank",
+      "Latent cor", "Centroid acc", "Runtime (s)"
+    ), digits = 3)
+  } else {
+    cat("No partial anchor results in the current benchmark.")
+  }
+} else {
+  cat("Benchmark CSVs not available.")
+}
+```
+
+`parrot` receives 50% of shared row IDs as anchors (the rest are hidden).
+This simulates the common real-world case where only a subset of
+correspondences are known.
+
+## Methods not yet in the synthetic benchmark
+
+The benchmark now covers the major method families. The remaining gaps are:
+
+```{r gap-table, echo = FALSE, results = "asis"}
+gaps <- data.frame(
+  Method = c(
+    "grasp_multiset",
+    "fpgw",
+    "gromov_wasserstein",
+    "token_ot_graph_align",
+    "cone_align_multiple"
+  ),
+  Why_missing = c(
+    "Multiset consensus; needs 3+ domain scenario integration",
+    "Pairwise OT; returns transport plan, needs embedding extraction",
+    "Returns transport plan / barycentric weights, not latent embedding",
+    "Pairwise graph OT; needs link specification in benchmark harness",
+    "Multiset; needs multi-domain scenario integration"
+  ),
+  Difficulty = c(
+    "Medium -- needs multiset scenario harness",
+    "Medium -- need to extract embedding from transport plan",
+    "High -- output is coupling matrix, not embedding",
+    "Medium -- need link specification and embedding extraction",
+    "Medium -- needs multiset scenario harness"
+  ),
+  stringsAsFactors = FALSE
+)
+
+knitr::kable(gaps, col.names = c("Method", "Why not benchmarked", "Integration difficulty"))
+```
+
+**Recommended next steps for benchmark coverage:**
+
+1. **Transport methods**: `fpgw` and `token_ot_graph_align` both return
+   `multiblock_biprojector` objects, so embedding extraction should work. The
+   main work is constructing the right input format (cost matrices for FPGW,
+   graph links for token OT).
+2. **Pure OT**: `gromov_wasserstein` returns couplings rather than
+   embeddings. Benchmarking it requires either a transport-plan quality
+   metric (e.g. fraction of correct correspondences recovered) or a
+   barycentric projection step to produce comparable embeddings.
+3. **Multiset extensions**: `grasp_multiset` and `cone_align_multiple` need
+   the full 3+ domain scenario infrastructure.
+
+## Practical considerations
+
+### Speed
+
+From the benchmark timing data on small problems (n = 20--25 per domain):
+
+- **Fastest** (< 0.02s): `global_geo_align`, `spectral_mnn_align`,
+  `ssma_align`, `kema` (linear), `mma_align_multiple`
+- **Moderate** (0.02--0.2s): `gpca_align`, `lowrank_align`, multiscale
+  variants
+- **Slow** (> 1s): `coupled_diagonalization` (~3--4s),
+  `kema` (RBF, full landmarks, 10--50s on n=25)
+
+For large problems (n > 1000), methods with O(n^3) kernel operations
+(`kema` with full landmarks, `gromov_wasserstein`) will become bottlenecks.
+Use landmarking / reduced representations where available.
+
+### Out-of-sample prediction
+
+Not all methods support applying the learned alignment to new data. Methods
+that return `multiblock_biprojector` or `projector` objects support
+`oos_predict()`:
+
+- `spectral_mnn_align`, `ssma_align`, `global_geo_align`
+- `gpca_align`, `lowrank_align`, `kema`
+- `grasp`, `parrot`, `fpgw`, `cone_align`, `token_ot_graph_align`
+
+Methods that produce point embeddings only (no projection operator):
+
+- `generalized_procrustes` (rotation matrices can be applied manually)
+- `mma_align_multiple` (consensus is fitted, no general OOS)
+- `coupled_diagonalization` (fitted embeddings only)
+- `gromov_wasserstein` (transport plan is sample-specific)
+- `multiset_uot_align` (template-based mapping via `multiset_uot_map`)
+
+### Interpretability
+
+- **Linear transforms** (`generalized_procrustes`, `cone_align`,
+  `lowrank_align`): the alignment is a matrix you can inspect.
+- **Spectral embeddings** (`global_geo_align`, `spectral_mnn_align`,
+  `ssma_align`, `gpca_align`): the latent dimensions are eigenvectors of a
+  graph Laplacian or generalized eigenvalue problem.
+- **Kernel methods** (`kema`): alignment lives in a kernel-induced feature
+  space; harder to interpret directly.
+- **Transport plans** (`fpgw`, `gromov_wasserstein`, `parrot`): you get an
+  explicit sample-to-sample correspondence matrix.
+
+## Quick-reference decision table
+
+For the impatient, here is the shortest path to a reasonable method:
+
+| Your situation | Start here | Then try |
+|:---|:---|:---|
+| Exact row IDs, full overlap | `global_geo_align` | `ssma_align` |
+| Exact row IDs, partial overlap | `spectral_mnn_align` | `grasp` |
+| Class labels, clean | `gpca_align` | `kema` (linear) |
+| Class labels, noisy | `gpca_align` | `lowrank_align` |
+| Hard nonlinear, labels | `lowrank_align` | `kema` (linear) |
+| No supervision, 3+ domains | `mma_align_multiple` | -- |
+| No supervision, 2 domains | `fpgw` or `gromov_wasserstein` | `grasp` |
+| Shared geometry template | `multiset_uot_align` | -- |
+| Need explicit correspondences | `parrot` or `fpgw` | `token_ot_graph_align` |
+| Feature dims must match | `generalized_procrustes` | `cone_align` |
+
+## Where to go next
+
+- `vignette("benchmark-guidance")` for the full regime-specific benchmark
+  tables and stability diagnostics.
+- Individual method vignettes (see the "Vignette" column in the table above)
+  for API details, parameter tuning, and worked examples.
+- `vignette("quickstart-hyperdesign")` for how to set up multi-domain data
+  as a hyperdesign object, which most methods accept.

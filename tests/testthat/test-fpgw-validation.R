@@ -28,8 +28,7 @@ set.seed(1234)
 # ---------------------------------------------------------------------------
 # 1. Helper - objective value that does not rely on package internals
 # ---------------------------------------------------------------------------
-objective_fpgw <- function(gamma, C_feat, Cx, Cy,
-                          omega1 = 0.5, lambda = 0, rho = NULL) {
+objective_fpgw <- function(gamma, C_feat, Cx, Cy, omega1 = 0.5) {
   
   struct_wt <- 1 - omega1
   # term 1 - feature
@@ -43,11 +42,7 @@ objective_fpgw <- function(gamma, C_feat, Cx, Cy,
   gw_term <- sum((const - 2 * Cx %*% gamma %*% t(Cy)) * gamma)
   strc <- struct_wt * gw_term
   
-  # term 3 - mass penalty lambda * (|p|^2 + |q|^2 - 2 |gamma|^2), with uniform
-  # marginals of total mass one
-  tv <- if (lambda > 0) lambda * (1 + 1 - 2 * sum(gamma)^2) else 0
-  
-  ftr + strc + tv
+  ftr + strc
 }
 
 # ---------------------------------------------------------------------------
@@ -243,7 +238,7 @@ test_that("FPGW distance is symmetric and satisfies triangle inequality", {
 # ---------------------------------------------------------------------------
 # 8. Limiting behavior: FPGW collapses to FGW
 # ---------------------------------------------------------------------------
-test_that("FPGW with rho=1 or huge lambda equals classical FGW", {
+test_that("FPGW with rho=1 equals classical FGW", {
   skip_on_cran()
   skip_if_missing_fpgw_deps()
   set.seed(42)  # Ensure deterministic test
@@ -274,13 +269,9 @@ test_that("FPGW with rho=1 or huge lambda equals classical FGW", {
 })
 
 # ---------------------------------------------------------------------------
-# 9. Mass penalty effect: lambda(|p|^2 + |q|^2 - 2|gamma|^2) charges for mass
-#    that is NOT transported, so transported mass grows with lambda.
-#    (This test previously asserted the opposite direction; it passed only
-#    because the old solver used the mass-preserving oracle and always
-#    returned mass 1.)
+# 9. Withdrawn penalized route is rejected
 # ---------------------------------------------------------------------------
-test_that("Mass penalty: transported mass grows with lambda", {
+test_that("Penalized FPGW is withdrawn in favor of exact rho", {
   skip_on_cran()
   skip_if_missing_fpgw_deps()
 
@@ -289,22 +280,14 @@ test_that("Mass penalty: transported mass grows with lambda", {
   X2 <- matrix(rnorm(20), 5, 4)
   hd <- create_test_hyperdesign(list(X1, X2))
 
-  masses <- vapply(c(1e-4, 0.05, 0.5, 50), function(lam) {
-    res <- suppressWarnings(fpgw(hd, omega1 = 0.4, lambda = lam, max_iter = 200))
-    P <- res$transport_plans[[1]]
-    expect_true(all(P >= 0))
-    expect_lte(max(rowSums(P) - 1/5), 1e-12)
-    expect_lte(max(colSums(P) - 1/5), 1e-12)
-    sum(P)
-  }, numeric(1))
-
-  # Tiny lambda: transporting anything costs more than the penalty saves.
-  expect_lt(masses[1], 1e-10)
-  # Huge lambda: everything is transported.
-  expect_gt(masses[4], 1 - 1e-10)
-  expect_true(all(diff(masses) >= -1e-10),
-              label = sprintf("masses %s should be non-decreasing in lambda",
-                              paste(signif(masses, 4), collapse = ", ")))
+  expect_error(
+    fpgw(hd, omega1 = 0.4, lambda = 0.5, max_iter = 60),
+    "lambda > 0.*withdrawn.*rho"
+  )
+  expect_error(
+    fpgw(hd, omega1 = 0.4, lambda = 2.0, rho = 0.6, max_iter = 60),
+    "lambda > 0.*withdrawn.*rho"
+  )
 })
 
 # ---------------------------------------------------------------------------
@@ -341,9 +324,7 @@ test_that("FPGW is numerically stable", {
   hd <- create_test_hyperdesign(list(X1, X2))
   
   expect_no_error({
-    result <- suppressWarnings(
-      fpgw(hd, omega1 = 0.5, lambda = 0.1)
-    )
+    result <- fpgw(hd, omega1 = 0.5, rho = 0.8)
   })
   
   # Check for valid output

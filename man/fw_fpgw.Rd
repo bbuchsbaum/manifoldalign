@@ -15,32 +15,20 @@ fw_fpgw(
   rho,
   P0,
   max_iter = 200,
+  inner_max_iter = 50,
   tol = 1e-06,
-  verbose = FALSE,
-  ...
+  verbose = FALSE
 )
 }
 \value{
-A list with transport plan P, distance, objective, convergence
-status, iterations, final Frank-Wolfe gap and final gradient. The
-objective trace is attached as attribute \code{"obj_trace"}.
+A list with transport plan P, distance, convergence status, iterations, and final gradient.
 }
 \description{
 Frank-Wolfe solver for FPGW
 }
 \details{
-Minimises
-\eqn{f(\gamma) = \omega_1\langle C,\gamma\rangle + \omega_2\langle M(\gamma),\gamma\rangle
-  [+ \lambda(|p|^2+|q|^2-2|\gamma|^2)]} where
-\eqn{M(\gamma) = C_X^2 \gamma 1 \oplus C_Y^2 \gamma^T 1 - 2 C_X \gamma C_Y^T}.
-The gradient is \eqn{\omega_1 C + 2\omega_2 M(\gamma) [- 4\lambda|\gamma|]}.
-The feasible set and linear oracle depend on the variant: \eqn{\Pi(p, q)}
-with \code{classical_ot_lp()} (\code{lambda = 0}, \code{rho = NULL}),
-\eqn{\{\gamma \le (p, q), |\gamma| = \rho\}} with \code{partial_ot_mass()}
-(\code{rho}), and \eqn{\{\gamma \le (p, q)\}} with \code{partial_ot_tv()}
-(\code{lambda > 0}). \code{P0} must lie in the feasible set. The step size
-minimises the quadratic \eqn{f(P + \alpha d)} exactly over \eqn{[0, 1]}, so
-the objective never increases. Convergence means a Frank-Wolfe gap
-\eqn{-\langle\nabla f(P), d\rangle} of at most \code{tol}.
+\code{lambda} is retained in this internal signature for
+compatibility and must be zero. Supply \code{rho} for the fixed-mass partial
+feasible set.
 }
 \keyword{internal}

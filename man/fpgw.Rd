@@ -26,120 +26,92 @@ fpgw(data, ...)
 
 \item{...}{Additional arguments passed to methods:
 \itemize{
-\item \code{omega1}: Weight of the feature term (0 ≤ omega1 ≤ 1).
-The structural term weight omega2 = 1 - omega1 is computed
-automatically (default: 0.001)
-\item \code{lambda}: Non-negative mass penalty for the penalized
-("TV") FPGW variant. Set \code{lambda = 0} to disable and use
-\code{rho} instead (default: 0). The penalized variant is
-experimental.
-\item \code{rho}: Mass budget in (0, min(|μ|,|ν|)] for the
-mass-constrained variant. If \code{rho} is supplied, the solver
-runs the mass-constrained variant; otherwise it uses the
-penalized variant (\eqn{\lambda > 0}) or classical FGW when both
-\eqn{\lambda = 0} and \code{rho} is \code{NULL}
-\item \code{epsilon}: Entropic regularization of the warm start
-(default: 0.01). Set to 0 to disable the warm start
-\item \code{metric}: Distance metric, one of \code{"euclidean"},
-\code{"manhattan"} or \code{"cosine"} (default: "euclidean")
-\item \code{max_iter}: Maximum iterations for Frank-Wolfe optimization
-(default: 200)
-\item \code{tol}: Convergence tolerance for the Frank-Wolfe gap
-(default: 1e-6)
-\item \code{inner_max_iter}: Number of Sinkhorn iterations of the
-entropic warm start (default: 50)
-\item \code{verbose}: Print convergence information (default: FALSE)
+  \item \code{omega1}: Weight of the feature term (0 ≤ omega1 ≤ 1).
+    The structural term weight omega2 = 1 - omega1 is computed
+    automatically (default: 0.001)
+  \item \code{lambda}: Retained for API compatibility and required to be
+    zero. The former \code{lambda > 0} route is withdrawn because it used
+    a balanced transport oracle and therefore could not produce a partial
+    coupling. Use \code{rho} instead (default: 0).
+  \item \code{rho}: Mass budget in (0, min(|μ|,|ν|)] for the
+    mass-constrained variant. If \code{rho} is supplied, the solver
+    transports exactly that mass; otherwise it uses classical balanced
+    FGW.
+  \item \code{epsilon}: Initial entropic regularization for warm-start
+    (default: 0.01). Set to 0 to disable warm-start
+  \item \code{metric}: Distance metric for within-domain distances (default: "euclidean")
+  \item \code{max_iter}: Maximum iterations for Frank-Wolfe optimization
+    (default: 200)
+  \item \code{tol}: Convergence tolerance for the Frank-Wolfe gap
+    (default: 1e-6)
+  \item \code{inner_max_iter}: Maximum iterations for inner optimization
+    (default: 50)
+  \item \code{verbose}: Print convergence information (default: FALSE)
 }}
 
 \item{omega1}{Weight of the feature term (0 ≤ omega1 ≤ 1). Default: 0.001}
 
-\item{lambda}{Non-negative mass penalty of the penalized variant. Default: 0}
+\item{lambda}{Compatibility parameter that must be zero. Use \code{rho} for
+partial transport. Default: 0}
 
 \item{rho}{Mass budget in (0, min(|μ|,|ν|)] for mass-constrained variant}
 
-\item{epsilon}{Entropic regularization of the warm start (>= 0; 0 disables
-it). Default: 0.01}
+\item{epsilon}{Initial entropic regularization for warm-start. Default: 0.01}
 
-\item{metric}{Distance metric: "euclidean", "manhattan" or "cosine".
-Default: "euclidean"}
+\item{metric}{Distance metric for within-domain distances. Default: "euclidean"}
 
-\item{max_iter}{Maximum iterations for Frank-Wolfe (>= 1). Default: 200}
+\item{max_iter}{Maximum iterations for Frank-Wolfe. Default: 200}
 
-\item{tol}{Convergence tolerance for Frank-Wolfe gap (> 0). Default: 1e-6}
+\item{tol}{Convergence tolerance for Frank-Wolfe gap. Default: 1e-6}
 
-\item{inner_max_iter}{Number of Sinkhorn iterations of the entropic warm
-start (>= 1). Default: 50}
+\item{inner_max_iter}{Maximum iterations for inner optimization. Default: 50}
 
 \item{verbose}{Print convergence information. Default: FALSE}
 }
 \value{
-An object of class \code{fpgw} containing:
+An fpgw object (inheriting from multiblock_biprojector) containing:
 \itemize{
-\item \code{transport_plans}: List of optimal transport plans between domains
-(upper-triangular pair order)
-\item \code{distances}: Matrix of pairwise FPGW distances between domains
-(square root of the minimised objective)
-\item \code{converged}: Convergence status for each optimization (Frank-Wolfe
-gap below \code{tol})
-\item \code{n_samples}: Number of samples per domain
-\item \code{omega1}: Feature weight used
-\item \code{lambda}: Mass penalty (if penalized variant)
-\item \code{rho}: Mass budget (if mass-constrained variant)
-\item \code{domain_names}: Names of the domains
-\item \code{training_data}: Original domain matrices for prediction
-\item \code{metric}: Distance metric used
+  \item \code{transport_plans}: List of optimal transport plans between domains
+  \item \code{distances}: Matrix of pairwise FPGW distances between domains
+  \item \code{converged}: Convergence status for each optimization
+  \item \code{n_samples}: Number of samples per domain
+  \item \code{omega1}: Feature weight used
+  \item \code{lambda}: Compatibility field; always zero for new fits
+  \item \code{rho}: Mass budget (if mass-constrained variant)
+  \item \code{domain_names}: Names of the domains
+  \item \code{training_data}: Original domain matrices for prediction
+  \item \code{metric}: Distance metric used
 }
-The object is not a projector: it has no scores, loadings or
-preprocessing pipeline, and it does not inherit from
-\code{multiblock_biprojector}.
 }
 \description{
 Computes the Fused-Partial Gromov-Wasserstein (FPGW) distance between domains
 in a hyperdesign object. This method extends Gromov-Wasserstein by combining
-feature and structural information, and supporting partial transport.
+feature and structural information. Partial transport is supported through
+an explicit transported-mass budget, \code{rho}.
 }
 \details{
-With uniform marginals \eqn{\mu, \nu} the FPGW objective is
-\deqn{L(\gamma) = \omega_1 \langle C, \gamma \rangle +
-      \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2 \gamma_{ij} \gamma_{i'j'} +
-      \lambda(|\mu|^2 + |\nu|^2 - 2|\gamma|^2)}
+The verified fixed-mass FPGW objective combines feature and structural
+information through:
+\deqn{L(\gamma) = \omega_1 \langle C, \gamma \rangle + 
+      \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2
+      \gamma_{ij} \gamma_{i'j'}}
 
-where C is the feature cost matrix, C_X, C_Y are within-domain distance
-matrices (scaled to a maximum of one) and \eqn{|\gamma|} is the total mass of
-\eqn{\gamma}.
+where C is the feature cost matrix and C_X, C_Y are within-domain distance
+matrices. With \code{rho}, the coupling has row and column marginals bounded
+by the input masses and satisfies \eqn{|\gamma| = \rho}. Without \code{rho},
+the coupling has the full balanced marginals.
 
-The algorithm supports three variants:
+The implementation supports two verified modes:
 \itemize{
-\item Classical FGW (\code{lambda = 0}, \code{rho = NULL}): \eqn{\gamma}
-has marginals exactly \eqn{\mu} and \eqn{\nu}; the penalty is absent.
-\item Mass-constrained (\code{rho}): \eqn{\gamma \ge 0} with row sums at
-most \eqn{\mu}, column sums at most \eqn{\nu} and total mass exactly
-\code{rho}; the penalty is absent.
-\item Penalized (\code{lambda > 0}): \eqn{\gamma \ge 0} with row sums at
-most \eqn{\mu} and column sums at most \eqn{\nu}; the term
-\eqn{\lambda(|\mu|^2 + |\nu|^2 - 2|\gamma|^2)} charges for mass that is
-not transported, so larger \code{lambda} transports more mass. Pairs whose
-structural discrepancy exceeds about \eqn{2\lambda} are left
-untransported.
+  \item Mass-constrained FPGW: transports exactly \code{rho} mass
+  \item Classical FGW: transports the full balanced mass
 }
 
-Each pair is solved by Frank-Wolfe started from a feasible plan (the
-rounded entropic warm start, scaled to mass \code{rho} for the
-mass-constrained variant). The linear minimisation oracle is an exact
-network-simplex LP over the variant's feasible set and the step size is the
-exact minimiser of the quadratic objective along the search direction. The
-returned plans are checked against the marginal bounds and total mass of
-their variant; a violation is an error.
+The former penalized mode selected balanced Frank-Wolfe vertices, fixing the
+transported mass at one and making \code{lambda} ineffective as a partial
+transport control. It is rejected rather than silently returning a balanced
+result. The Frank-Wolfe algorithm uses closed-form step sizes.
 }
-\section{Memory}{
-
-Every pair of domains stores a dense \eqn{n_i \times n_j} plan and the
-solver keeps dense within-domain distance matrices. The estimated size is
-checked against \code{getOption("manifoldalign.ot_max_dense_bytes")}
-(default 4e9 bytes) before any work starts; larger problems are refused with
-an error that reports the estimate.
-}
-
 \examples{
 \donttest{
 library(multidesign)
@@ -203,6 +175,6 @@ print(result_multi$distances)
 
 }
 \references{
-Bai et al. (2025). Fused-Partial Gromov-Wasserstein for Heterogeneous Domain
-Adaptation. arXiv preprint.
+Bai et al. (2025). Fused Partial Gromov-Wasserstein for Structured Objects.
+arXiv:2502.09934.
 }

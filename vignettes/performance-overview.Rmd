@@ -137,9 +137,9 @@ This vignette summarises the performance characteristics of the alignment algori
 | Aspect | Details |
 | --- | --- |
 | Complexity | Time ~ O(iter × n²); Memory ~ O(n²) |
-| Strengths | Mixes feature and structure costs; supports partial transport (`rho`) and TV penalties (`lambda`) |
-| Limitations | More hyperparameters (`omega1`, `lambda`, `rho`); TV penalty increases runtime |
-| Tips | Validate marginals (row/col sums ≤ inputs); check transported mass decreases as `lambda` grows; ensure dependencies (`multidesign`, `multivarious`, `lpSolve`) are available |
+| Strengths | Mixes feature and structure costs; supports exact-mass partial transport through `rho` |
+| Limitations | Dense quadratic costs; does not consume supplied graph edges; the former `lambda > 0` penalized route is withdrawn |
+| Tips | Validate marginals (row/col sums ≤ inputs) and exact transported mass; use `rho` for partial overlap; the compiled transport backend does not require `lpSolve` |
 
 ### `fpgw` vs `gromov_wasserstein`
 - Use `fpgw` when feature information should guide transport, or when only partial mass should be transported.
@@ -192,4 +192,3 @@ devtools::test_active_file("tests/testthat/test-toy-manifold-benchmarks.R")
 ```
 
 These benchmarks print progress messages and use reduced dataset sizes to keep runtime reasonable. Use them as a starting point for custom profiling in your environment.
-

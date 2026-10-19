@@ -9,6 +9,13 @@
 #' assignments via Procrustes analysis, and (2) updating assignments given
 #' current transformations via linear assignment.
 #'
+#' @section Lifecycle:
+#' CONE-Align and its multiple-domain wrapper are retained as legacy/reference
+#' methods. Pairwise CONE completed 10 of 12 intended frozen tournament cases;
+#' two equal-size closed-world cases stopped because domain embeddings exposed
+#' different latent dimensions to the Procrustes step. Restore experimental
+#' status only after dimension reconciliation passes all frozen cases.
+#'
 #' @param data Input data object containing graph domains
 #' @param ... Additional arguments passed to specific methods. See 
 #'   \code{\link{cone_align.hyperdesign}} for details on method-specific 

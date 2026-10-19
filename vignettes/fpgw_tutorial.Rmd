@@ -120,20 +120,13 @@ P_partial <- result_partial$transport_plans[[1]]
 cat("Total transported mass:", sum(P_partial), "\n")
 ```
 
-### TV-Penalized FPGW
+### Withdrawn TV penalty
 
-The total variation penalty provides a soft constraint on transported mass.
-Its term `lambda * (|mu|^2 + |nu|^2 - 2 |gamma|^2)` charges for mass that is
-left untransported, so larger `lambda` transports more mass; small `lambda`
-lets the plan drop mass that would be expensive to move:
-
-```{r tv-penalized}
-# Use TV penalty instead of hard mass constraint
-result_tv <- fpgw(hd_noisy, omega1 = 0.5, lambda = 0.1)
-
-P_tv <- result_tv$transport_plans[[1]]
-cat("Total transported mass with TV penalty:", sum(P_tv), "\n")
-```
+Earlier versions offered a total-variation mass penalty through `lambda > 0`.
+That route used a balanced transport oracle, so it always moved the full mass
+and could not produce a partial coupling. It is now rejected with an error;
+`lambda` must be zero and `rho` is the supported way to transport part of the
+mass.
 
 ## Controlling Feature vs Structure Weight
 

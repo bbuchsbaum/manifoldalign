@@ -29,22 +29,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// lse_objective_gradient_cpp
-Rcpp::List lse_objective_gradient_cpp(const arma::mat& X, const arma::mat& T, const arma::mat& M, double sigma_P, double alpha_p, const arma::mat& W);
-RcppExport SEXP _manifoldalign_lse_objective_gradient_cpp(SEXP XSEXP, SEXP TSEXP, SEXP MSEXP, SEXP sigma_PSEXP, SEXP alpha_pSEXP, SEXP WSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type T(TSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type M(MSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma_P(sigma_PSEXP);
-    Rcpp::traits::input_parameter< double >::type alpha_p(alpha_pSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type W(WSEXP);
-    rcpp_result_gen = Rcpp::wrap(lse_objective_gradient_cpp(X, T, M, sigma_P, alpha_p, W));
-    return rcpp_result_gen;
-END_RCPP
-}
 // network_simplex_ot_cpp
 Rcpp::NumericMatrix network_simplex_ot_cpp(Rcpp::NumericMatrix cost_r, Rcpp::NumericVector a_r, Rcpp::NumericVector b_r, double eps);
 RcppExport SEXP _manifoldalign_network_simplex_ot_cpp(SEXP cost_rSEXP, SEXP a_rSEXP, SEXP b_rSEXP, SEXP epsSEXP) {
@@ -559,7 +543,6 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_manifoldalign_linear_sim_embed_cpp", (DL_FUNC) &_manifoldalign_linear_sim_embed_cpp, 8},
-    {"_manifoldalign_lse_objective_gradient_cpp", (DL_FUNC) &_manifoldalign_lse_objective_gradient_cpp, 6},
     {"_manifoldalign_network_simplex_ot_cpp", (DL_FUNC) &_manifoldalign_network_simplex_ot_cpp, 4},
     {"_manifoldalign_fallback_network_simplex_ot_cpp", (DL_FUNC) &_manifoldalign_fallback_network_simplex_ot_cpp, 3},
     {"_manifoldalign_partial_ot_mass_rcpp", (DL_FUNC) &_manifoldalign_partial_ot_mass_rcpp, 5},

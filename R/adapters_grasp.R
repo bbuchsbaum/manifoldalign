@@ -78,13 +78,11 @@ fit_pair.grasp_aligner <- function(algo, X_i, X_j, links = NULL,
                                          solver_method = solver)
 
   # Pair loss: descriptor alignment residual
-  phi1 <- bases[[1]]$vectors
-  phi2 <- bases[[2]]$vectors
-  F_T_Phi1 <- Matrix::crossprod(descs[[1]], phi1)
-  G_T_Phi2 <- Matrix::crossprod(descs[[2]], phi2)
   k <- ncol(as.matrix(align_res$rotation))
-  F_T_Phi1 <- as.matrix(F_T_Phi1)[, seq_len(k), drop = FALSE]
-  G_T_Phi2 <- as.matrix(G_T_Phi2)[, seq_len(k), drop = FALSE]
+  phi1 <- bases[[1]]$vectors[, seq_len(k), drop = FALSE]
+  phi2 <- bases[[2]]$vectors[, seq_len(k), drop = FALSE]
+  F_T_Phi1 <- as.matrix(Matrix::crossprod(descs[[1]], phi1))
+  G_T_Phi2 <- as.matrix(Matrix::crossprod(descs[[2]], phi2))
   # align_grasp_bases returns M with G'Phi2 M ~ F'Phi1, i.e. M maps the
   # coordinates of domain j onto those of domain i.
   resid <- F_T_Phi1 - G_T_Phi2 %*% as.matrix(align_res$rotation)
@@ -125,4 +123,3 @@ pair_loss.grasp_pair_fit <- function(fit, X_i = NULL, X_j = NULL, ...) {
 #' @rdname latent_dim
 #' @export
 latent_dim.grasp_pair_fit <- function(fit, ...) fit$k
-

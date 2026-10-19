@@ -2,7 +2,8 @@
 #'
 #' Computes the Fused-Partial Gromov-Wasserstein (FPGW) distance between domains
 #' in a hyperdesign object. This method extends Gromov-Wasserstein by combining
-#' feature and structural information, and supporting partial transport.
+#' feature and structural information. Partial transport is supported through
+#' an explicit transported-mass budget, \code{rho}.
 #'
 #' @param data A hyperdesign object containing multiple data domains
 #' @param ... Additional arguments passed to methods:
@@ -10,15 +11,14 @@
 #'     \item \code{omega1}: Weight of the feature term (0 ≤ omega1 ≤ 1).
 #'       The structural term weight omega2 = 1 - omega1 is computed
 #'       automatically (default: 0.001)
-#'     \item \code{lambda}: Non-negative mass penalty for the penalized
-#'       ("TV") FPGW variant. Set \code{lambda = 0} to disable and use
-#'       \code{rho} instead (default: 0). The penalized variant is
-#'       experimental.
+#'     \item \code{lambda}: Retained for API compatibility and required to be
+#'       zero. The former \code{lambda > 0} route is withdrawn because it used
+#'       a balanced transport oracle and therefore could not produce a partial
+#'       coupling. Use \code{rho} instead (default: 0).
 #'     \item \code{rho}: Mass budget in (0, min(|μ|,|ν|)] for the
 #'       mass-constrained variant. If \code{rho} is supplied, the solver
-#'       runs the mass-constrained variant; otherwise it uses the
-#'       penalized variant (\eqn{\lambda > 0}) or classical FGW when both
-#'       \eqn{\lambda = 0} and \code{rho} is \code{NULL}
+#'       transports exactly that mass; otherwise it uses classical balanced
+#'       FGW.
 #'     \item \code{epsilon}: Entropic regularization of the warm start
 #'       (default: 0.01). Set to 0 to disable the warm start
 #'     \item \code{metric}: Distance metric, one of \code{"euclidean"},
@@ -42,7 +42,7 @@
 #'     gap below \code{tol})
 #'   \item \code{n_samples}: Number of samples per domain
 #'   \item \code{omega1}: Feature weight used
-#'   \item \code{lambda}: Mass penalty (if penalized variant)
+#'   \item \code{lambda}: Compatibility field; always zero for new fits
 #'   \item \code{rho}: Mass budget (if mass-constrained variant)
 #'   \item \code{domain_names}: Names of the domains
 #'   \item \code{training_data}: Original domain matrices for prediction
@@ -53,29 +53,27 @@
 #' \code{multiblock_biprojector}.
 #'
 #' @details
-#' With uniform marginals \eqn{\mu, \nu} the FPGW objective is
+#' With uniform marginals \eqn{\mu, \nu} the verified fixed-mass FPGW
+#' objective is
 #' \deqn{L(\gamma) = \omega_1 \langle C, \gamma \rangle +
-#'       \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2 \gamma_{ij} \gamma_{i'j'} +
-#'       \lambda(|\mu|^2 + |\nu|^2 - 2|\gamma|^2)}
+#'       \omega_2 \sum_{i,j,i',j'} |C_{X,ii'} - C_{Y,jj'}|^2 \gamma_{ij} \gamma_{i'j'}}
 #'
-#' where C is the feature cost matrix, C_X, C_Y are within-domain distance
-#' matrices (scaled to a maximum of one) and \eqn{|\gamma|} is the total mass of
-#' \eqn{\gamma}.
+#' where C is the feature cost matrix and C_X, C_Y are within-domain distance
+#' matrices (scaled to a maximum of one).
 #'
-#' The algorithm supports three variants:
+#' The implementation supports two verified modes:
 #' \itemize{
-#'   \item Classical FGW (\code{lambda = 0}, \code{rho = NULL}): \eqn{\gamma}
-#'     has marginals exactly \eqn{\mu} and \eqn{\nu}; the penalty is absent.
-#'   \item Mass-constrained (\code{rho}): \eqn{\gamma \ge 0} with row sums at
-#'     most \eqn{\mu}, column sums at most \eqn{\nu} and total mass exactly
-#'     \code{rho}; the penalty is absent.
-#'   \item Penalized (\code{lambda > 0}): \eqn{\gamma \ge 0} with row sums at
-#'     most \eqn{\mu} and column sums at most \eqn{\nu}; the term
-#'     \eqn{\lambda(|\mu|^2 + |\nu|^2 - 2|\gamma|^2)} charges for mass that is
-#'     not transported, so larger \code{lambda} transports more mass. Pairs whose
-#'     structural discrepancy exceeds about \eqn{2\lambda} are left
-#'     untransported.
+#'   \item Classical FGW (\code{rho = NULL}): \eqn{\gamma} has marginals
+#'     exactly \eqn{\mu} and \eqn{\nu}.
+#'   \item Mass-constrained FPGW (\code{rho}): \eqn{\gamma \ge 0} with row sums
+#'     at most \eqn{\mu}, column sums at most \eqn{\nu} and total mass exactly
+#'     \code{rho}.
 #' }
+#'
+#' The former penalized mode (\code{lambda > 0}) selected balanced Frank-Wolfe
+#' vertices, fixing the transported mass at one and making \code{lambda}
+#' ineffective as a partial transport control. It is rejected rather than
+#' silently returning a balanced result.
 #'
 #' Each pair is solved by Frank-Wolfe started from a feasible plan (the
 #' rounded entropic warm start, scaled to mass \code{rho} for the
@@ -86,8 +84,8 @@
 #' their variant; a violation is an error.
 #'
 #' @references
-#' Bai et al. (2025). Fused-Partial Gromov-Wasserstein for Heterogeneous Domain
-#' Adaptation. arXiv preprint.
+#' Bai et al. (2025). Fused Partial Gromov-Wasserstein for Structured Objects.
+#' arXiv:2502.09934.
 #'
 #' @examples
 #' \donttest{
@@ -155,10 +153,27 @@ fpgw <- function(data, ...) {
   UseMethod("fpgw")
 }
 
+validate_fpgw_lambda <- function(lambda) {
+  if (!is.numeric(lambda) || length(lambda) != 1L ||
+      is.na(lambda) || !is.finite(lambda) || lambda < 0) {
+    stop("`lambda` must be one finite non-negative number", call. = FALSE)
+  }
+  if (lambda > 0) {
+    stop(
+      "`lambda > 0` is withdrawn: the former solver used a balanced ",
+      "transport oracle and could not produce a partial coupling. Use `rho` ",
+      "for a fixed transported-mass budget.",
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
+}
+
 #' @rdname fpgw
 #' @method fpgw hyperdesign
 #' @param omega1 Weight of the feature term (0 ≤ omega1 ≤ 1). Default: 0.001
-#' @param lambda Non-negative mass penalty of the penalized variant. Default: 0
+#' @param lambda Compatibility parameter that must be zero. Use \code{rho} for
+#'   partial transport. Default: 0
 #' @param rho Mass budget in (0, min(|μ|,|ν|)] for mass-constrained variant
 #' @param epsilon Entropic regularization of the warm start (>= 0; 0 disables
 #'   it). Default: 0.01
@@ -196,10 +211,8 @@ fpgw.hyperdesign <- function(data,
                    epsilon = epsilon, metric = metric, max_iter = max_iter,
                    tol = tol, inner_max_iter = inner_max_iter,
                    verbose = verbose)
-
-  if (lambda > 0) {
-    warning("The penalized FPGW variant (lambda > 0) is experimental.",
-            call. = FALSE)
+  if (!is.null(rho) && rho > 1) {
+    stop("`rho` must be one finite number in (0, 1]", call. = FALSE)
   }
 
   # Prepare data using shared utilities
@@ -305,17 +318,9 @@ fpgw.hyperdesign <- function(data,
   if (!is_num1(omega1) || omega1 < 0 || omega1 > 1) {
     stop("omega1 must be a single number in [0, 1]", call. = FALSE)
   }
-  if (!is_num1(lambda) || lambda < 0) {
-    stop("lambda must be a single non-negative number", call. = FALSE)
-  }
-  if (!is.null(rho)) {
-    if (!is_num1(rho) || rho <= 0) {
-      stop("rho must be NULL or a single positive number", call. = FALSE)
-    }
-    if (lambda > 0) {
-      stop("Choose *either* rho (mass-constrained) or lambda (penalized), not both",
-           call. = FALSE)
-    }
+  validate_fpgw_lambda(lambda)
+  if (!is.null(rho) && (!is_num1(rho) || rho <= 0)) {
+    stop("rho must be NULL or a single positive number", call. = FALSE)
   }
   if (!is_num1(epsilon) || epsilon < 0) {
     stop("epsilon must be a single non-negative number (0 disables the warm start)",
@@ -386,18 +391,17 @@ fpgw.hyperdesign <- function(data,
 #'
 #' @details
 #' Minimises
-#' \eqn{f(\gamma) = \omega_1\langle C,\gamma\rangle + \omega_2\langle M(\gamma),\gamma\rangle
-#'   [+ \lambda(|p|^2+|q|^2-2|\gamma|^2)]} where
-#' \eqn{M(\gamma) = C_X^2 \gamma 1 \oplus C_Y^2 \gamma^T 1 - 2 C_X \gamma C_Y^T}.
-#' The gradient is \eqn{\omega_1 C + 2\omega_2 M(\gamma) [- 4\lambda|\gamma|]}.
+#' \eqn{f(\gamma) = \omega_1\langle C,\gamma\rangle + \omega_2\langle M(\gamma),\gamma\rangle}
+#' where \eqn{M(\gamma) = C_X^2 \gamma 1 \oplus C_Y^2 \gamma^T 1 - 2 C_X \gamma C_Y^T}.
+#' The gradient is \eqn{\omega_1 C + 2\omega_2 M(\gamma)}.
 #' The feasible set and linear oracle depend on the variant: \eqn{\Pi(p, q)}
-#' with \code{classical_ot_lp()} (\code{lambda = 0}, \code{rho = NULL}),
+#' with \code{classical_ot_lp()} (\code{rho = NULL}) and
 #' \eqn{\{\gamma \le (p, q), |\gamma| = \rho\}} with \code{partial_ot_mass()}
-#' (\code{rho}), and \eqn{\{\gamma \le (p, q)\}} with \code{partial_ot_tv()}
-#' (\code{lambda > 0}). \code{P0} must lie in the feasible set. The step size
-#' minimises the quadratic \eqn{f(P + \alpha d)} exactly over \eqn{[0, 1]}, so
-#' the objective never increases. Convergence means a Frank-Wolfe gap
-#' \eqn{-\langle\nabla f(P), d\rangle} of at most \code{tol}.
+#' (\code{rho}). \code{lambda} is retained in this internal signature for
+#' compatibility and must be zero. \code{P0} must lie in the feasible set. The
+#' step size minimises the quadratic \eqn{f(P + \alpha d)} exactly over
+#' \eqn{[0, 1]}, so the objective never increases. Convergence means a
+#' Frank-Wolfe gap \eqn{-\langle\nabla f(P), d\rangle} of at most \code{tol}.
 #'
 #' @keywords internal
 fw_fpgw <- function(C, Cx, Cy, p, q,
@@ -408,8 +412,9 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
                     verbose = FALSE,
                     ...) {
   .ot_reject_dots(list(...), "fw_fpgw")
+  validate_fpgw_lambda(lambda)
 
-  variant <- if (!is.null(rho)) "mass" else if (lambda > 0) "tv" else "balanced"
+  variant <- if (!is.null(rho)) "mass" else "balanced"
   n1 <- length(p)
   n2 <- length(q)
   P <- as.matrix(P0)
@@ -419,23 +424,18 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
   Cy2 <- Cy^2
   feature_weight <- omega1
   struct_weight <- 1 - omega1
-  pen_const <- if (variant == "tv") lambda * (sum(p)^2 + sum(q)^2) else 0
 
   gw_M <- function(P) {
     outer(as.vector(Cx2 %*% rowSums(P)), as.vector(Cy2 %*% colSums(P)), "+") -
       2 * (Cx %*% P %*% t(Cy))
   }
   objective <- function(P, M) {
-    val <- sum(P * (feature_weight * C + struct_weight * M))
-    if (variant == "tv") val <- val + pen_const - 2 * lambda * sum(P)^2
-    val
+    sum(P * (feature_weight * C + struct_weight * M))
   }
   oracle <- function(G) {
     switch(variant,
       balanced = classical_ot_lp(G - min(G), p, q),
-      mass = partial_ot_mass(G - min(G), p, q, rho),
-      # no shift: the <= polytope is not invariant to adding a constant
-      tv = partial_ot_tv(G, p, q)
+      mass = partial_ot_mass(G - min(G), p, q, rho)
     )
   }
 
@@ -449,7 +449,6 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
 
   while (TRUE) {
     grad <- feature_weight * C + struct_weight * 2 * M_P
-    if (variant == "tv") grad <- grad - 4 * lambda * sum(P)
 
     gamma_star <- oracle(grad)
     dP <- gamma_star - P
@@ -469,7 +468,6 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
     # f(P + alpha dP) = f(P) + b alpha + a alpha^2
     M_d <- gw_M(dP)
     a <- struct_weight * sum(M_d * dP)
-    if (variant == "tv") a <- a - 2 * lambda * sum(dP)^2
 
     candidates <- c(0, 1)
     if (a > 0) candidates <- c(candidates, min(1, max(0, -b / (2 * a))))
@@ -524,27 +522,6 @@ partial_ot_mass <- function(cost, p, q, rho) {
 #' @keywords internal
 classical_ot_lp <- function(cost, p, q) {
   network_simplex_ot_cpp(as.matrix(cost), as.numeric(p), as.numeric(q))
-}
-
-#' Partial OT oracle without a mass constraint (penalized FPGW variant)
-#'
-#' Exact solution of \eqn{\min \langle C, \gamma\rangle} over
-#' \eqn{\gamma \ge 0}, \eqn{\gamma 1 \le p}, \eqn{\gamma^T 1 \le q}. Only
-#' entries that lower the cost below zero carry mass, so \code{cost} must not
-#' be shifted. Solved as a balanced problem with a zero-cost dummy row
-#' (mass \eqn{|q|}) and dummy column (mass \eqn{|p|}); every
-#' \eqn{\gamma} in the polytope extends to a feasible balanced plan with the
-#' same cost and vice versa.
-#' @return A numeric matrix representing the optimal sub-coupling.
-#' @keywords internal
-partial_ot_tv <- function(cost, p, q) {
-  cost <- as.matrix(cost)
-  n <- length(p)
-  m <- length(q)
-  C_aug <- matrix(0, n + 1L, m + 1L)
-  C_aug[seq_len(n), seq_len(m)] <- cost
-  P_aug <- classical_ot_lp(C_aug, c(p, sum(q)), c(q, sum(p)))
-  P_aug[seq_len(n), seq_len(m), drop = FALSE]
 }
 
 # Dense LP size guard shared by the lpSolve reference implementations.
@@ -631,6 +608,18 @@ classical_ot_lp_r <- function(cost, p, q) {
   P
 }
 
+#' Withdrawn TV-penalized transport oracle
+#' @return This function always errors; use \code{partial_ot_mass()}.
+#' @keywords internal
+partial_ot_tv <- function(cost, p, q, lambda) {
+  stop(
+    "`partial_ot_tv()` is withdrawn because it did not implement the FPGW ",
+    "penalized subcoupling objective. Use `partial_ot_mass()` with an explicit ",
+    "`rho` budget.",
+    call. = FALSE
+  )
+}
+
 #' Warm-start with entropic OT on the feature cost
 #'
 #' Log-domain Sinkhorn on \code{omega1 * Cfeat} with regularisation \code{eps},
@@ -685,7 +674,7 @@ print.fpgw <- function(x, ...) {
   if (!is.null(x$rho)) {
     cat("Mode: Mass-constrained (rho =", x$rho, ")\n")
   } else if (x$lambda > 0) {
-    cat("Mode: TV-penalized (lambda =", x$lambda, ")\n")
+    cat("Mode: Withdrawn legacy TV-penalized result (lambda =", x$lambda, ")\n")
   } else {
     cat("Mode: Classical Fused GW\n")
   }

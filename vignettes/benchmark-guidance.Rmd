@@ -1,0 +1,221 @@
+---
+title: "Benchmark Guidance by Problem Regime"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Benchmark Guidance by Problem Regime}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+This package now tracks benchmark results in a regime-aware format rather than a
+single pooled leaderboard. That matters because the right method depends on the
+problem structure:
+
+- are rows matched exactly or only weakly supervised?
+- is overlap full or partial?
+- are labels clean, noisy, or absent?
+- do all domains share the same feature dimension?
+
+This article reads the tracked synthetic benchmark outputs and turns them into
+practical method guidance.
+
+## Load benchmark outputs
+
+```{r read-results}
+bench_dir <- normalizePath(file.path("..", "dev-scripts", "benchmarks"), mustWork = TRUE)
+
+rank_path <- file.path(bench_dir, "toy_feature_aligners_regime_ranks.csv")
+seed_path <- file.path(bench_dir, "toy_feature_seed_audit_summary.csv")
+
+stopifnot(file.exists(rank_path), file.exists(seed_path))
+
+regime_ranks <- utils::read.csv(rank_path, stringsAsFactors = FALSE)
+seed_audit <- utils::read.csv(seed_path, stringsAsFactors = FALSE)
+full_registry <- manifoldalign:::synthetic_alignment_scenarios(profile = "full")
+
+required_rank_cols <- c(
+  "scenario", "supervision_regime", "dimensionality_constraint",
+  "method", "method_family", "overall_rank",
+  "runtime_sec_mean", "max_abs_latent_cor_mean", "centroid_acc_mean"
+)
+required_seed_cols <- c(
+  "scenario", "method", "method_family", "supervision_regime",
+  "centroid_acc_mean", "centroid_acc_cv", "max_abs_latent_cor_mean"
+)
+
+stopifnot(all(required_rank_cols %in% names(regime_ranks)))
+stopifnot(all(required_seed_cols %in% names(seed_audit)))
+stopifnot(nrow(regime_ranks) > 0, nrow(seed_audit) > 0)
+```
+
+## Coverage
+
+The checked-in fast benchmark and the checked-in seed-audit summary do not have
+to cover exactly the same scenario set. The fast benchmark is where we broaden
+regime coverage; the seed audit is where we focus on stability diagnostics.
+
+```{r coverage}
+rank_scenarios <- sort(unique(regime_ranks$scenario))
+seed_scenarios <- sort(unique(seed_audit$scenario))
+full_scenarios <- sort(unique(full_registry$scenario))
+full_only_scenarios <- setdiff(full_scenarios, rank_scenarios)
+
+coverage <- data.frame(
+  source = c(
+    rep("fast_benchmark", length(rank_scenarios)),
+    rep("seed_audit", length(seed_scenarios)),
+    rep("full_registry_only", length(full_only_scenarios))
+  ),
+  scenario = c(rank_scenarios, seed_scenarios, full_only_scenarios),
+  stringsAsFactors = FALSE
+)
+
+stopifnot(all(seed_scenarios %in% rank_scenarios | seed_scenarios %in% full_scenarios))
+coverage
+```
+
+At the moment the checked-in fast benchmark covers the five lightweight feature
+regimes:
+
+- `linear_affine`
+- `isometric_curve`
+- `hard_nonisometric`
+- `partial_open_set`
+- `noisy_label_shift`
+
+The full registry also defines `many_domain_consensus` and `highdim_stress`,
+but those are kept in the `full` profile because they behave more like stress
+tests than routine dev-loop benchmarks.
+
+## Regime leaders
+
+For each scenario and supervision regime we keep the top-ranked method after
+combining runtime, latent correlation, and centroid recovery.
+
+```{r regime-leaders}
+leader_rows <- !duplicated(regime_ranks[c(
+  "scenario", "supervision_regime", "dimensionality_constraint"
+)])
+
+leaders <- regime_ranks[leader_rows, c(
+  "scenario", "supervision_regime", "dimensionality_constraint",
+  "method", "method_family", "overall_rank",
+  "runtime_sec_mean", "max_abs_latent_cor_mean", "centroid_acc_mean"
+)]
+
+leaders
+```
+
+Two patterns are immediate:
+
+- `global_geo_rowid_exact` is now the strongest unrestricted
+  exact-correspondence method on the full-overlap scenarios in the checked-in
+  fast benchmark: `linear_affine`, `isometric_curve`, `hard_nonisometric`, and
+  `noisy_label_shift`.
+- `spectral_mnn_exact` still matters because it is the current leader on the
+  partial/open-set exact-correspondence regime.
+- In label-supervised regimes there is still no single winner:
+  `kema_linear_label` leads on `linear_affine` and `isometric_curve`,
+  `lowrank_label` leads on `hard_nonisometric`, and `gpca_label` leads on
+  `noisy_label_shift`.
+- The new multiset regimes are intentionally separate from the exact and label
+  tables: `mma_consensus_unsupervised` leads the unsupervised-multiset blocks,
+  and `multiset_uot_side_geometry` leads the transport-side-geometry blocks.
+
+## Stability matters
+
+Mean score alone is not enough. The seed audit tracks how much a method moves
+across repeated random draws.
+
+```{r variability}
+seed_audit <- seed_audit[order(
+  -seed_audit$centroid_acc_cv,
+  -seed_audit$max_abs_latent_cor_mean,
+  seed_audit$method
+), ]
+
+most_variable <- seed_audit[seq_len(min(10L, nrow(seed_audit))), c(
+  "scenario", "method", "method_family", "supervision_regime",
+  "centroid_acc_mean", "centroid_acc_cv",
+  "max_abs_latent_cor_mean"
+)]
+
+stopifnot(all(is.finite(most_variable$centroid_acc_cv)))
+most_variable
+```
+
+These tracked runs show:
+
+- `gpca_label` is the safest label-supervised baseline in the audited core
+  trio.
+- `kema_linear_label` is fast and often strong on latent correlation, but its
+  centroid recovery is materially more seed-sensitive on the nonlinear curve
+  case.
+- The multiscale family is still clearly more variable than the best exact and
+  label-supervised baselines.
+- The checked-in seed audit is intentionally narrower than the fast benchmark,
+  so it should be read as a stability diagnostic for the core trio rather than
+  as a full coverage table for every benchmarked regime.
+
+## Practical guidance
+
+The current toy benchmark supports these rules of thumb:
+
+- Start with `global_geo_rowid_exact` when exact row correspondences are
+  available and the problem has full overlap with shared global geometry.
+- Reach for `spectral_mnn_exact` earlier when overlap is partial/open-set,
+  because that is where it overtakes the other exact-correspondence methods in
+  the checked-in fast benchmark.
+- Use `gpca_label` as the safest label-supervised baseline and
+  `lowrank_label` as the strongest current label baseline on the harder
+  nonlinear regime.
+- Use `kema_linear_label` when you care about latent geometry and speed, but
+  validate it with repeated seeds or resamples rather than trusting a single
+  run.
+- Treat `mma_consensus_unsupervised` as the current multiset baseline when you
+  want a 3+ domain method without explicit side information.
+- Treat `multiset_uot_side_geometry` as a different regime entirely: it is the
+  right comparison point when a shared geometry/template is part of the problem
+  specification.
+- Treat generalized Procrustes as a useful exact-ID baseline only when feature
+  dimensions match across domains.
+- Treat coupled diagonalization and the multiscale methods as active research
+  families rather than the current default recommendation on these synthetic
+  tasks.
+- Use `cone_align` as the unsupervised pairwise baseline when no
+  correspondences are available between two domains. It leads the
+  `unsupervised_pairwise` regime on most scenarios via iterative Procrustes
+  on spectral embeddings.
+- Use `grasp` when the unsupervised pairwise problem involves hard nonlinear
+  distortion, where its diffusion descriptors provide an advantage.
+- Use `parrot` when you have partial anchor correspondences (a subset of
+  matched rows). It is the only method currently benchmarked in the
+  `partial_anchor` regime.
+- See `vignette(“method-selection-guide”)` for the full decision flowchart
+  across all method families.
+
+## What to benchmark next
+
+The benchmark registry now separates lightweight fast scenarios from heavier
+stress scenarios. The next high-value comparisons are:
+
+- check in full-profile summaries for `many_domain_consensus` and
+  `highdim_stress`,
+- add truly adversarial side-information settings rather than only noisy labels,
+- integrate `fpgw` and `token_ot_graph_align` into the benchmark (both return
+  `multiblock_biprojector` objects but need input format adapters),
+- add `gromov_wasserstein` with a transport-plan quality metric or barycentric
+  projection step,
+- track runtime and failure rates explicitly as first-class outputs.
+
+Those settings are exactly where pooled “best method” tables tend to be wrong.
+Use regime-specific summaries instead.

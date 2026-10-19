@@ -11,25 +11,9 @@ aligner_capabilities(algo)
 }
 \value{
 A list with elements group (character) and supports_multi (logical).
-Aligners that declare a fuller contract also report, in this order,
-\code{encoder} (\code{"linear"}, \code{"nonlinear"}, or \code{"none"} for row transports),
-\code{supports_predict}, \code{supports_calibration},
-\code{requires_auxiliary_at_predict}, and \code{invertible}. Fields an aligner does
-not declare are omitted rather than guessed. Their meaning:
-\describe{
-\item{\code{encoder}}{how a row of a fitted domain reaches the shared space:
-a fixed \code{"linear"} map of its features, a \code{"nonlinear"} (for example
-kernel) map, or \code{"none"} when the method only produces row
-correspondences, transports or maps between derived coordinates.}
-\item{\code{supports_predict}}{new rows of a fitted domain can be projected
-with a validated out-of-sample method.}
-\item{\code{supports_calibration}}{a new domain can be added to a frozen fit.}
-\item{\code{requires_auxiliary_at_predict}}{prediction needs inputs beyond the
-new rows' features (for example graphs, labels or training data that
-the fit does not store).}
-\item{\code{invertible}}{the map from a domain to the shared space can be
-inverted to recover the domain's features.}
-}
+  Use [alignment_method_info()] for the complete capability and lifecycle
+  contract; registry meta-tests verify that these adapter fields agree with
+  that record.
 }
 \description{
 Capabilities for an aligner

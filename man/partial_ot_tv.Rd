@@ -2,20 +2,14 @@
 % Please edit documentation in R/fpgw.R
 \name{partial_ot_tv}
 \alias{partial_ot_tv}
-\title{Partial OT oracle without a mass constraint (penalized FPGW variant)}
+\title{Withdrawn TV-penalized transport oracle}
 \usage{
-partial_ot_tv(cost, p, q)
+partial_ot_tv(cost, p, q, lambda)
 }
 \value{
-A numeric matrix representing the optimal sub-coupling.
+This function always errors; use \code{partial_ot_mass()}.
 }
 \description{
-Exact solution of \eqn{\min \langle C, \gamma\rangle} over
-\eqn{\gamma \ge 0}, \eqn{\gamma 1 \le p}, \eqn{\gamma^T 1 \le q}. Only
-entries that lower the cost below zero carry mass, so \code{cost} must not
-be shifted. Solved as a balanced problem with a zero-cost dummy row
-(mass \eqn{|q|}) and dummy column (mass \eqn{|p|}); every
-\eqn{\gamma} in the polytope extends to a feasible balanced plan with the
-same cost and vice versa.
+Withdrawn TV-penalized transport oracle
 }
 \keyword{internal}

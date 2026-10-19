@@ -49,7 +49,6 @@ create_test_hyperdesign <- function(n_per_domain = 20, n_domains = 2, n_features
 # Test 1: Basic functionality and parameter handling
 test_that("gpca_align performs basic alignment with proper structure", {
   skip_if_not_installed("genpca")
-  skip_if_not_installed("PRIMME")
   
   # Create test data with 3 domains
   test_data <- create_test_hyperdesign(n_per_domain = 30, n_domains = 3, n_features = 4)
@@ -107,7 +106,6 @@ test_that("gpca_align performs basic alignment with proper structure", {
 
 test_that("gpca_align control argument customises advanced settings", {
   skip_if_not_installed("genpca")
-  skip_if_not_installed("PRIMME")
 
   test_data <- create_test_hyperdesign(n_per_domain = 24, n_domains = 2, n_features = 3)
   hd <- test_data$hd
@@ -129,7 +127,6 @@ test_that("gpca_align control argument customises advanced settings", {
 # Test 2: Multi-domain alignment quality and cross-domain relationships
 test_that("gpca_align correctly handles cross-domain alignment", {
   skip_if_not_installed("genpca")
-  skip_if_not_installed("PRIMME")
   
   # Create test data where domains have clear correspondence
   # Domain 1: Original data
@@ -224,7 +221,6 @@ test_that("gpca_align correctly handles cross-domain alignment", {
 # Test 3: Robustness to edge cases and numerical stability
 test_that("gpca_align handles edge cases and maintains numerical stability", {
   skip_if_not_installed("genpca")
-  skip_if_not_installed("PRIMME")
   
   # Test 1: Small dataset with more components than samples per domain
   small_data <- create_test_hyperdesign(n_per_domain = 5, n_domains = 2, n_features = 10)
@@ -337,7 +333,6 @@ test_that("gpca_align handles edge cases and maintains numerical stability", {
 
 test_that("gpca_align supports mixed feature dimensions with stateful preprocessing", {
   skip_if_not_installed("genpca")
-  skip_if_not_installed("PRIMME")
 
   set.seed(20260402)
   n <- 24L

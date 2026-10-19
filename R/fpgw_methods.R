@@ -129,7 +129,10 @@ summary.fpgw <- function(object, ...) {
   if (!is.null(object$rho)) {
     cat("  Variant: Mass-constrained (rho =", object$rho, ")\n")
   } else if (!is.null(object$lambda) && object$lambda > 0) {
-    cat("  Variant: TV-penalized (lambda =", object$lambda, ")\n")
+    cat(
+      "  Variant: Withdrawn legacy TV-penalized result (lambda =",
+      object$lambda, ")\n"
+    )
   } else {
     cat("  Variant: Classical FGW\n")
   }
