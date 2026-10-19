@@ -31,10 +31,22 @@ and [lifecycle decision record](https://github.com/bbuchsbaum/manifoldalign/blob
 | **Coupled Diag.** | `coupled_diagonalization()` | Joint feature-derived spectral bases | Experimental |
 | **Spectral MNN** | `spectral_mnn_align()` | Feature-derived spectral graphs | Experimental |
 | **Token-OT Graph** | `token_ot_graph_align()` | Sparse OT on feature-derived graphs | Experimental |
-| **SSMA** | `ssma_align()` | Semi-supervised feature-derived manifolds | Experimental |
+| **SSMA** | `ssma_align()` | Feature-derived manifolds with sample and linear feature-summary constraints | Experimental |
 | **Multiset UOT** | `multiset_uot_align()` | Unbalanced metric-measure/template OT | Experimental |
 | **LSE** | `linear_sim_embed()` | Single-domain target-similarity embedding | Experimental utility |
 | **Multiscale** | `multiscale_manifold_align()` | Incoherent experimental hierarchy retained for reproduction | Deprecated; removal 1.0.0 |
+
+## Linear constraints in SSMA
+
+`ssma_align(..., constraints = list(...))` accepts `linear_correspondence()`
+objects for weighted agreement between linear feature summaries and
+`linear_penalty()` objects for within-domain regularization. These add quadratic
+penalties without inserting synthetic observations or changing sample-graph
+normalization. Unequal feature counts, sparse maps, and external PCA composition
+are supported. Maps refer to processed feature coefficients; rank-truncation loss
+and fitted residuals are reported per constraint. See the
+[worked vignette](vignettes/ssma-linear-constraints.Rmd) for coordinate, scaling,
+and validation contracts. SSMA remains experimental.
 
 ## Current evidence
 

@@ -17,6 +17,7 @@ ssma_align(data, ...)
   preproc = multivarious::center(),
   ncomp = 20L,
   control = ssma_align_control(),
+  constraints = NULL,
   ...
 )
 
@@ -28,6 +29,7 @@ ssma_align(data, ...)
   preproc = multivarious::center(),
   ncomp = 20L,
   control = ssma_align_control(),
+  constraints = NULL,
   ...
 )
 
@@ -39,22 +41,31 @@ ssma_align(data, ...)
 \item{...}{Additional arguments passed to methods.}
 
 \item{y}{Optional unquoted label column used for label-based correspondences
-when explicit `correspondences` are not provided.}
+when explicit \code{correspondences} are not provided.}
 
 \item{correspondences}{Optional data.frame with columns
-`domain_i,index_i,domain_j,index_j[,weight]`.}
+\verb{domain_i,index_i,domain_j,index_j[,weight]}.}
 
 \item{serial_index}{Optional serial/time index specification used for
 within-domain graph decontamination. Can be:
-1) `NULL`, 2) a single design-column name, or 3) a list with one numeric
-index vector per domain.}
+\enumerate{
+\item \code{NULL}, 2) a single design-column name, or 3) a list with one numeric
+index vector per domain.
+}}
 
 \item{preproc}{Optional preprocessing function/preprocessor applied per
-domain. Default: `multivarious::center()`.}
+domain. Default: \code{multivarious::center()}.}
 
 \item{ncomp}{Number of aligned components.}
 
-\item{control}{Control settings from [ssma_align_control()].}
+\item{control}{Control settings from \code{\link[=ssma_align_control]{ssma_align_control()}}.}
+
+\item{constraints}{Optional list of \code{\link[=linear_correspondence]{linear_correspondence()}} and
+\code{\link[=linear_penalty]{linear_penalty()}} objects in processed feature coordinates. These extend
+the quadratic objective without altering the observation graph or its
+normalization. Inspect \code{constraint_diagnostics} for residuals and loss from
+rank truncation. Returned \code{compression_bases} compose reduced coefficients
+back to processed input features; NULL entries denote identity maps.}
 }
 \description{
 Baseline SSMA implementation based on Wang et al. feature-level manifold

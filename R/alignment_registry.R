@@ -399,7 +399,8 @@ alignment_method_registry <- function() {
       lifecycle = .alignment_registry_lifecycle(
         "ssma_align", correctness = "invariant", accuracy = "comparative",
         scalability = "comparative",
-        oracle_ids = "tests/testthat/test-ssma-align.R",
+        oracle_ids = c("tests/testthat/test-ssma-align.R",
+                       "tests/testthat/test-ssma-linear-constraints.R"),
         benchmark_ids = c(
           "docs/rapid-ma-scaling-summary.csv",
           "dev-scripts/benchmarks/toy_feature_seed_audit_results.csv"
