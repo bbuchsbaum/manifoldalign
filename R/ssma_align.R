@@ -102,6 +102,12 @@ resolve_ssma_serial_control <- function(serial_control = NULL) {
 #' @param mnn_k Integer k used for unsupervised MNN correspondence discovery.
 #' @param max_unsup_pairs_per_pair Integer cap per domain pair for unsupervised
 #'   correspondences.
+#' @param auto_correspondences Whether to discover label/MNN links when no
+#'   positive explicit sample links remain. Set FALSE for feature-constraint-only
+#'   alignment or an explicitly unlinked sample graph.
+#' @param compression `"svd"` (default) uses degree-weighted rank reduction;
+#'   `"none"` preserves all input features, for example externally reduced data.
+#'   In the latter mode rank_per_domain and svd_tol are inactive.
 #' @param rank_per_domain Integer rank cap for per-domain compression basis.
 #' @param svd_tol Relative singular-value tolerance used in compression.
 #' @param eig_tol Non-negative threshold for filtering trivial generalized
@@ -119,6 +125,7 @@ resolve_ssma_serial_control <- function(serial_control = NULL) {
 #'   [ssma_serial_control()].
 #'
 #' @return A list of class `ssma_align_control`.
+#' @md
 #' @export
 ssma_align_control <- function(
   knn = 15L,
@@ -137,9 +144,15 @@ ssma_align_control <- function(
   operator_power_iter = 25L,
   seed = 1L,
   verbose = FALSE,
-  serial_control = ssma_serial_control()
+  serial_control = ssma_serial_control(),
+  compression = c("svd", "none"),
+  auto_correspondences = TRUE
 ) {
   solver <- match.arg(solver)
+  compression <- match.arg(compression)
+  if (!is.logical(auto_correspondences) || length(auto_correspondences) != 1L || is.na(auto_correspondences)) {
+    stop("`auto_correspondences` must be TRUE or FALSE.", call. = FALSE)
+  }
 
   if (!is.numeric(knn) || length(knn) != 1L || is.na(knn) || knn < 1) {
     stop("`knn` must be >= 1.", call. = FALSE)
@@ -197,6 +210,8 @@ ssma_align_control <- function(
       max_pairs_per_label = as.integer(max_pairs_per_label),
       mnn_k = as.integer(mnn_k),
       max_unsup_pairs_per_pair = as.integer(max_unsup_pairs_per_pair),
+      auto_correspondences = auto_correspondences,
+      compression = compression,
       rank_per_domain = as.integer(rank_per_domain),
       svd_tol = as.numeric(svd_tol),
       eig_tol = as.numeric(eig_tol),
@@ -635,8 +650,9 @@ resolve_ssma_align_control <- function(control = NULL) {
   list(A = A, degree = as.numeric(Matrix::rowSums(A)), serial = serial_info)
 }
 
-.ssma_domain_basis <- function(X, degree, rank_per_domain, svd_tol) {
+.ssma_domain_basis <- function(X, degree, rank_per_domain, svd_tol, compression = "svd") {
   X <- as.matrix(X)
+  if (compression == "none") return(list(P = NULL, T = X, s = NULL))
   dhalf <- sqrt(pmax(as.numeric(degree), 1e-12))
   Xw <- X * dhalf
 
@@ -663,7 +679,8 @@ resolve_ssma_align_control <- function(control = NULL) {
 }
 
 .ssma_build_reduced_system <- function(domains, within_graphs, L_joint, rank_per_domain, svd_tol,
-                                       assemble_dense = TRUE) {
+                                       assemble_dense = TRUE, compression = "svd",
+                                       constraints = list()) {
   n_domains <- length(domains)
   domain_sizes <- vapply(domains, function(d) nrow(d$x), integer(1))
   degree_list <- lapply(within_graphs, function(g) pmax(as.numeric(g$degree), 1e-12))
@@ -676,11 +693,14 @@ resolve_ssma_align_control <- function(control = NULL) {
       X = domains[[i]]$x,
       degree = within_graphs[[i]]$degree,
       rank_per_domain = rank_per_domain,
-      svd_tol = svd_tol
+      svd_tol = svd_tol,
+      compression = compression
     )
     basis[[i]] <- bi
-    ranks[i] <- ncol(bi$P)
+    ranks[i] <- ncol(bi$T)
   }
+
+  constraint_terms <- .compile_linear_constraints(constraints, basis)
 
   rank_offsets <- c(0L, cumsum(ranks))
   sample_offsets <- c(0L, cumsum(domain_sizes))
@@ -722,7 +742,12 @@ resolve_ssma_align_control <- function(control = NULL) {
     }
   }
 
+  if (isTRUE(assemble_dense) && length(constraint_terms)) {
+    A_r <- .add_linear_constraint_matrix(A_r, constraint_terms, ranks)
+  }
+
   list(
+    constraints = constraint_terms,
     A_r = if (isTRUE(assemble_dense)) 0.5 * (A_r + t(A_r)) else NULL,
     B_r = if (isTRUE(assemble_dense)) 0.5 * (B_r + t(B_r)) else NULL,
     B_blocks = B_blocks,
@@ -767,8 +792,9 @@ resolve_ssma_align_control <- function(control = NULL) {
     vecs <- as.matrix(eig$vectors)
   } else {
     eig <- eigen(S, symmetric = TRUE)
-    vals <- as.numeric(eig$values[seq_len(k_req)])
-    vecs <- as.matrix(eig$vectors[, seq_len(k_req), drop = FALSE])
+    smallest <- order(eig$values)[seq_len(k_req)]
+    vals <- as.numeric(eig$values[smallest])
+    vecs <- as.matrix(eig$vectors[, smallest, drop = FALSE])
   }
 
   ord <- order(vals, decreasing = FALSE)
@@ -888,6 +914,10 @@ resolve_ssma_align_control <- function(control = NULL) {
     v_blocks <- .ssma_split_blocks(v, domain_sizes)
     y_blocks <- lapply(seq_along(v_blocks), function(i) crossprod(basis[[i]]$T, v_blocks[[i]]))
 
+    if (length(reduced$constraints)) {
+      extra <- .linear_constraint_apply(reduced$constraints, xb)
+      y_blocks <- Map(`+`, y_blocks, extra)
+    }
     .ssma_bind_blocks(y_blocks, as_vector = xm$vec)
   }
 
@@ -981,6 +1011,13 @@ ssma_align <- function(data, ...) {
 #'   domain. Default: `multivarious::center()`.
 #' @param ncomp Number of aligned components.
 #' @param control Control settings from [ssma_align_control()].
+#' @param constraints Optional list of [linear_correspondence()] and
+#'   [linear_penalty()] objects in processed feature coordinates. These extend
+#'   the quadratic objective without altering the observation graph or its
+#'   normalization. Inspect `constraint_diagnostics` for residuals and loss from
+#'   rank truncation. Returned `compression_bases` compose reduced coefficients
+#'   back to processed input features; NULL entries denote identity maps.
+#' @md
 #' @export
 ssma_align.hyperdesign <- function(
   data,
@@ -990,6 +1027,7 @@ ssma_align.hyperdesign <- function(
   preproc = multivarious::center(),
   ncomp = 20L,
   control = ssma_align_control(),
+  constraints = NULL,
   ...
 ) {
   ctrl <- resolve_ssma_align_control(control)
@@ -1003,6 +1041,9 @@ ssma_align.hyperdesign <- function(
   domains_in <- resolved$domains
   domain_names <- resolved$domain_names
   n_domains <- resolved$n_domains
+  if (anyNA(domain_names) || anyDuplicated(domain_names)) {
+    stop("Data domains must have unique, nonempty names.", call. = FALSE)
+  }
 
   if (n_domains < 2L) {
     stop("ssma_align requires at least two domains.", call. = FALSE)
@@ -1012,6 +1053,8 @@ ssma_align.hyperdesign <- function(
   domains <- pre$pdata
   proc <- pre$proc
   names(domains) <- domain_names
+
+  constraints <- .resolve_linear_constraints(constraints, domains, domain_names)
 
   serial_idx <- .ssma_resolve_serial_indices(domains, serial_index = serial_index)
 
@@ -1040,7 +1083,7 @@ ssma_align.hyperdesign <- function(
     default_weight = ctrl$corr_edge_weight
   )
 
-  if (!nrow(corr_df)) {
+  if (!nrow(corr_df) && isTRUE(ctrl$auto_correspondences)) {
     if (!is.null(label_list)) {
       corr_df <- .ssma_build_label_correspondences(
         labels_list = label_list,
@@ -1080,7 +1123,9 @@ ssma_align.hyperdesign <- function(
     L_joint = L_joint,
     rank_per_domain = ctrl$rank_per_domain,
     svd_tol = ctrl$svd_tol,
-    assemble_dense = (solver_used == "reduced")
+    assemble_dense = (solver_used == "reduced"),
+    compression = ctrl$compression,
+    constraints = constraints
   )
 
   solved <- if (solver_used == "reduced") {
@@ -1113,7 +1158,9 @@ ssma_align.hyperdesign <- function(
   scores_blocks <- vector("list", n_domains)
   for (i in seq_len(n_domains)) {
     ri <- (rank_offsets[i] + 1L):rank_offsets[i + 1L]
-    Fi <- reduced$basis[[i]]$P %*% solved$alpha[ri, , drop = FALSE]
+    Qi <- reduced$basis[[i]]$P
+    Ai <- solved$alpha[ri, , drop = FALSE]
+    Fi <- if (is.null(Qi)) Ai else Qi %*% Ai
     Xi <- as.matrix(domains[[i]]$x)
 
     loadings_blocks[[i]] <- Fi
@@ -1140,6 +1187,9 @@ ssma_align.hyperdesign <- function(
       correspondences = corr_df,
       serial = serial_diag,
       reduced_ranks = reduced$ranks,
+      compression_bases = lapply(reduced$basis, `[[`, "P"),
+      constraint_diagnostics = .linear_constraint_diagnostics(
+        reduced$constraints, .ssma_split_blocks(solved$alpha, reduced$ranks)),
       domain_names = domain_names,
       solver = solver_used,
       control = ctrl,
@@ -1159,13 +1209,17 @@ ssma_align.list <- function(
   preproc = multivarious::center(),
   ncomp = 20L,
   control = ssma_align_control(),
+  constraints = NULL,
   ...
 ) {
   if (!length(data) || !all(vapply(data, function(x) is.matrix(x) || is.data.frame(x), logical(1)))) {
     stop("For list input, `data` must be a non-empty list of matrices/data.frames.", call. = FALSE)
   }
 
-  hd <- as_hyperdesign(data)
+  if (!is.null(names(data)) && (anyNA(names(data)) || any(!nzchar(names(data))) || anyDuplicated(names(data)))) {
+    stop("Named data domains must have unique, nonempty names.", call. = FALSE)
+  }
+  hd <- as_hyperdesign(data, domain_names = names(data))
 
   if (missing(y)) {
     return(ssma_align.hyperdesign(
@@ -1175,6 +1229,7 @@ ssma_align.list <- function(
       preproc = preproc,
       ncomp = ncomp,
       control = control,
+      constraints = constraints,
       ...
     ))
   }
@@ -1188,6 +1243,7 @@ ssma_align.list <- function(
     preproc = preproc,
     ncomp = ncomp,
     control = control,
+    constraints = constraints,
     ...
   ))
 }

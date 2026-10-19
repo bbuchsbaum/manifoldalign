@@ -1,3 +1,13 @@
+# Development version
+
+* SSMA accepts generic weighted `linear_correspondence()` and `linear_penalty()`
+  objects in processed feature coordinates, with sparse maps, dense/operator
+  compilation, and constraint residual/truncation diagnostics.
+* `compression = "none"` preserves externally reduced features; named input
+  domains are retained and `auto_correspondences = FALSE` disables automatic
+  sample-link discovery. Existing defaults remain unchanged.
+* Fix SSMA's base-eigen fallback selecting large eigenpairs before sorting (#10).
+
 # manifoldalign 0.1.0.9000
 
 ### Major Changes
