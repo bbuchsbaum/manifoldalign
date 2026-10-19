@@ -27,6 +27,20 @@
   `lambda_coord` without an alias.
 * Added `rapid_ma_feature_scores()`, feature-side (dual) coordinates for
   RAPID-MA fits.
+* Added `cv_alignment_transfer()`, a held-out-domain transfer evaluator: each
+  fold holds out one domain, fits the method on source domains only,
+  calibrates the held-out domain against the frozen reference from
+  calibration rows that never share an event or grouping value with the
+  evaluation rows, and scores a source-trained target readout plus explicit
+  linear reconstruction readouts (self, sources to held-out, held-out to
+  sources) on the evaluation rows. Methods that cannot calibrate a new
+  domain are reported as `unsupported` and errors as `failed` with their
+  stage; no fold is dropped. `evaluation_groups = "novel"` also removes the
+  evaluation events from the sources.
+* Added ablation helpers `event_order_kernel()` (an event-similarity kernel
+  from event order, usable as `sumcor_align()` event features) and
+  `surrogate_event_features()` (circular-shift or phase-randomised surrogates
+  that keep autocorrelation but break the link to events).
 
 * Implemented Fused-Partial Gromov-Wasserstein (FPGW) distance for heterogeneous domain adaptation
 * Added support for mass-constrained partial optimal transport with `rho` parameter

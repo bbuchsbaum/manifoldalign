@@ -133,6 +133,35 @@ fit2 <- calibrate_domain(fit, heldout$X, design = heldout$design,
                          domain_name = "heldout")
 ```
 
+## Evaluating transfer to a new domain
+
+`cv_alignment_transfer()` holds out one domain at a time, fits the method on
+the source domains only, calibrates the held-out domain against that frozen
+fit from calibration rows that share no event or group with the evaluation
+rows, and scores a source-trained readout of a target variable plus linear
+reconstructions in each domain's own columns (`recon_*_r2`). Methods that
+cannot calibrate a new domain are reported as `unsupported`, never refitted
+with the held-out domain.
+
+```r
+X_list <- lapply(domains, `[[`, "X")
+design_list <- lapply(domains, function(d) {
+  transform(d$design, label = latent[as.integer(sub("e", "", d$design$event_id)), 1] > 0)
+})
+cv <- cv_alignment_transfer(
+  X_list,
+  methods = list(sumcor = function(data, design) {
+    sumcor_align(data, design = design, event_id = "event_id",
+                 repeat_id = "repeat_id", ncomp = 3,
+                 control = sumcor_control(beta = 0, basis_rank = 10))
+  }),
+  design = design_list,
+  event_id = "event_id",
+  target = "label"
+)
+cv
+```
+
 ## Dual (feature-side) coordinates
 
 Embedding methods place samples in the shared latent space. For RAPID-MA, which

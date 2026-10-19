@@ -553,7 +553,7 @@ ci_contract:
       known_gaps: [metamorphic_coverage_missing, comparative_accuracy_missing, scale_evidence_missing]
     - method: sumcor_align
       families: [contract, oracle, invariant, metamorphic, adversarial, regression]
-      pr_files: [tests/testthat/test-sumcor-align.R]
+      pr_files: [tests/testthat/test-sumcor-align.R, tests/testthat/test-cv-alignment-transfer.R]
       nightly_files: []
       mandatory_tests: ["tests/testthat/test-sumcor-align.R::two-domain fit reaches the exact CCA optimum and its constraints", "tests/testthat/test-sumcor-align.R::calibrating a training domain against the others reproduces it"]
       release_evidence: []

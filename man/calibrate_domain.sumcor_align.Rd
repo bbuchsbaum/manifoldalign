@@ -48,4 +48,15 @@ excluded and counted. The identifier columns of the original fit are used.
 Calibrating a training domain's own data against the other training
 domains reproduces that domain's fitted encoder whenever the fit converged,
 which makes this a direct stationarity check.
+
+The new domain's covariance and its rotation are both estimated from the
+calibration events alone, so few calibration events give a noisier
+encoder: whitening with a small-sample covariance inflates the scores'
+scale, and the polar rotation is fitted to few events. In a simulation
+with three latent dimensions and basis rank 5, held-out events encoded
+after calibrating on 20 events matched the reference consensus with R^2
+about 0.89 (scores about 17\\% too large), against 0.95 with 40 and 0.98
+with 80 events, while the best linear map from the same encoding reached
+0.99 in every case. Use \code{\link[=cv_alignment_transfer]{cv_alignment_transfer()}} to measure this on real
+data.
 }
