@@ -1,0 +1,5 @@
+Frozen synthetic benchmark tables copied byte-for-byte from dev-scripts/benchmarks
+at manifoldalign source 45ab2550a44b79ee24f9c763441a84d19b80f2fc.
+These support installed vignette rebuilding; they are not newly computed evidence.
+The mandatory source audit checks parity with the tracked benchmark outputs.
+Current method lifecycle states take precedence over historical rankings.

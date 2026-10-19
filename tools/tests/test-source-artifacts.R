@@ -51,3 +51,16 @@ test_that("vignette metadata is parsed with a clean UTF-8 encoding", {
   expect_true(all(meta$encodings == "UTF-8"))
   expect_true(all(meta$engines == "knitr::rmarkdown"))
 })
+
+
+test_that("bundled vignette benchmarks retain the tracked evidence bytes", {
+  root <- test_path("..", "..")
+  files <- c("toy_feature_aligners_regime_ranks.csv",
+             "toy_feature_seed_audit_summary.csv")
+  for (file in files) {
+    original <- file.path(root, "dev-scripts", "benchmarks", file)
+    bundled <- file.path(root, "inst", "extdata", "benchmark-guidance", file)
+    expect_identical(unname(tools::md5sum(original)),
+                     unname(tools::md5sum(bundled)))
+  }
+})
