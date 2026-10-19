@@ -97,49 +97,88 @@ coskern <- function() {
   if (is.null(seed)) draw() else .with_local_seed(seed, draw())
 }
 
-#' Approximate peak memory of the dense KEMA formulation
+#' Approximate peak memory of the dense parts of a KEMA fit
 #'
-#' Every KEMA backend (including `operator_exact`) materialises dense kernel
-#' blocks, their eigen/SVD factors, dense quotient matrices of order
-#' `r_total`, and dense label-comparison matrices over the labelled rows. The
-#' estimate below is a deliberately coarse upper bound on those allocations:
-#' about 60 bytes per kernel entry (dense block, sparse copies and factors),
-#' 48 bytes per entry of an `r_total x r_total` matrix (the two quotient
-#' matrices plus dense eigensolver workspace) and 32 bytes per pair of
-#' labelled rows (logical and sparse class graphs).
+#' Every KEMA backend materialises the dense kernel blocks (`n_i x r_i`, held
+#' in dense and sparse-format copies), their eigen/SVD factors and dense
+#' label-comparison matrices over the labelled rows. The dense quotient
+#' backends (`full_exact`, `reduced_exact`) additionally form the two
+#' `r_total x r_total` quotient matrices plus a Cholesky preconditioner or
+#' dense eigensolver workspace of the same order. `operator_exact` applies the
+#' quotient matrix-free: beyond the kernel factors it keeps only per-domain
+#' `r_i x r_i` preconditioner blocks and `O((n_total + r_total) * block)`
+#' LOBPCG workspace. The estimate is a coarse upper bound on those
+#' allocations: about 60 bytes per kernel entry, 96 bytes per entry of an
+#' `r_total x r_total` matrix for the dense quotient backends (24 bytes per
+#' entry of each `r_i x r_i` block for `operator_exact`), and 32 bytes per pair
+#' of labelled rows. Calibrated against the peak resident memory of complete
+#' fits on the RAPID scaling fixture (R 4.5.3, eigencore 2.0.0, single-threaded
+#' OpenBLAS): at 5,500 samples the measured peaks were 0.93 GB
+#' (`operator_exact`, estimate 1.35 GB) and 2.9 GB (`reduced_exact`, estimate
+#' 3.8 GB); at 2,200 samples 0.51 GB for `full_exact` (estimate 0.61 GB).
 #'
+#' @param backend Backend whose footprint is estimated.
+#' @param ncomp Requested number of components (sets the LOBPCG block width).
 #' @keywords internal
 #' @noRd
-.kema_dense_memory_estimate <- function(n_per_block, r_per_block, n_labeled) {
+.kema_dense_memory_estimate <- function(n_per_block, r_per_block, n_labeled,
+                                        backend = "full_exact",
+                                        ncomp = 2L) {
   n_per_block <- as.numeric(n_per_block)
   r_per_block <- as.numeric(r_per_block)
   r_total <- sum(r_per_block)
-  60 * sum(n_per_block * r_per_block) +
-    48 * r_total^2 +
-    32 * as.numeric(n_labeled)^2
+  kernel_bytes <- 60 * sum(n_per_block * r_per_block)
+  label_bytes <- 32 * as.numeric(n_labeled)^2
+  quotient_bytes <- if (identical(backend, "operator_exact")) {
+    block <- max(2 * ncomp, ncomp + 4)
+    24 * sum(r_per_block^2) +
+      8 * 12 * block * (sum(n_per_block) + r_total)
+  } else {
+    96 * r_total^2
+  }
+  kernel_bytes + quotient_bytes + label_bytes
 }
 
+#' Apply the KEMA dense-memory guard to the backend candidates
+#'
+#' @return A list with the per-candidate `estimates` and the `admissible`
+#'   candidates (in their original order). Errors when no candidate fits.
 #' @keywords internal
 #' @noRd
 .kema_check_dense_memory <- function(n_per_block, r_per_block, n_labeled,
-                                     max_bytes) {
-  est <- .kema_dense_memory_estimate(n_per_block, r_per_block, n_labeled)
-  if (is.finite(max_bytes) && est > max_bytes) {
+                                     max_bytes,
+                                     candidates = "full_exact",
+                                     ncomp = 2L) {
+  est <- vapply(candidates, function(b) {
+    .kema_dense_memory_estimate(
+      n_per_block, r_per_block, n_labeled,
+      backend = b, ncomp = ncomp
+    )
+  }, numeric(1))
+  names(est) <- candidates
+  fits <- !is.finite(max_bytes) | est <= max_bytes
+  if (!any(fits)) {
+    cheapest <- candidates[which.min(est)]
+    fmt <- function(x) {
+      format(structure(x, class = "object_size"), units = "auto")
+    }
     stop(
       "KEMA would allocate dense O(n^2) objects of roughly ",
-      format(structure(est, class = "object_size"), units = "auto"),
-      " (", sum(n_per_block), " samples, ", sum(r_per_block),
+      fmt(min(est)), " for its cheapest candidate backend '", cheapest,
+      "' (", sum(n_per_block), " samples, ", sum(r_per_block),
       " kernel columns, ", n_labeled, " labelled rows), which exceeds ",
-      "backend_control$max_dense_bytes = ",
-      format(structure(max_bytes, class = "object_size"), units = "auto"),
-      ". Every KEMA backend, including 'operator_exact', forms dense kernel ",
-      "blocks and quotient matrices. Use sample_frac < 1 (REKEMA) to reduce ",
-      "the kernel rank, or raise max_dense_bytes if the memory is available.",
+      "backend_control$max_dense_bytes = ", fmt(max_bytes), ". Every KEMA ",
+      "backend forms the dense kernel blocks and their eigen factors ",
+      "(O(sum n_i r_i)); 'full_exact' and 'reduced_exact' also form dense ",
+      "r_total x r_total quotient matrices, which 'operator_exact' applies ",
+      "matrix-free. Use sample_frac < 1 (REKEMA) to reduce the kernel rank, ",
+      "or raise max_dense_bytes if the memory is available.",
       call. = FALSE
     )
   }
-  invisible(est)
+  list(estimates = est, admissible = candidates[fits])
 }
+
 
 #' Compute the KEMA kernel blocks
 #'
@@ -147,7 +186,8 @@ coskern <- function() {
 #' @param kernel A kernlab kernel.
 #' @param landmarks `NULL` for full KEMA (square blocks `K(X_i, X_i)`), or a
 #'   list of landmark row indices per domain for REKEMA (`K(X_i, X_i[L_i, ])`).
-#' @return A list of sparse-format kernel blocks (dense content).
+#' @return A list of `dgCMatrix` kernel blocks (dense content, no explicit
+#'   zeros); square full-KEMA blocks are exactly symmetric.
 #' @keywords internal
 #' @noRd
 compute_kernels <- function(strata, kernel, landmarks = NULL) {
@@ -177,8 +217,14 @@ compute_kernels <- function(strata, kernel, landmarks = NULL) {
       stop("Kernel matrix for block ", i, " contains non-finite values", call. = FALSE)
     }
 
-    K <- as(as.matrix(K), "dgCMatrix")
-    Ks[[i]] <- K
+    K <- as.matrix(K)
+    if (is.null(landmarks)) {
+      # Square full-KEMA blocks are symmetric in exact arithmetic; remove the
+      # rounding asymmetry on the dense content before the single conversion.
+      K <- (K + t(K)) / 2
+    }
+    Ks[[i]] <- as(K, "dgCMatrix")
+    rm(K)
   }
 
   Ks
@@ -492,12 +538,18 @@ partial_project.kema_fit <- function(x, new_data, ...) {
 #'   `"regression"` value never selected a distinct implementation and is now
 #'   rejected.
 #' @param backend Backend for the original eigensolver. One of `"auto"`,
-#'   `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`. The legacy
-#'   `"operator_exact"` name requests the certified partial quotient solver,
-#'   with a certified dense fallback for small quotients. Every backend,
-#'   including `"operator_exact"`, materialises dense kernel blocks and dense
-#'   quotient matrices; a memory guard (`backend_control$max_dense_bytes`)
-#'   rejects problems whose estimated dense footprint is too large.
+#'   `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`. All backends
+#'   solve the same nullspace-deflated quotient pencil. `"full_exact"` and
+#'   `"reduced_exact"` form the dense `r x r` quotient matrices (`r` the total
+#'   kernel rank) and use a dense generalized solve for small quotients,
+#'   otherwise preconditioned LOBPCG with a certified dense fallback.
+#'   `"operator_exact"` applies the quotient matrix-free through the
+#'   per-domain kernel factors (certified dense fallback only for very small
+#'   quotients). Every backend still materialises the dense kernel blocks and
+#'   their eigen factors; a memory guard (`backend_control$max_dense_bytes`)
+#'   estimates each backend's footprint before allocation, skips candidates
+#'   that exceed it (recorded in `fit$fidelity_history`) and errors when none
+#'   fits.
 #' @param backend_control Optional list controlling auto backend thresholds,
 #'   fidelity checks and the dense-memory guard (passed through to
 #'   `kema_orig()`).

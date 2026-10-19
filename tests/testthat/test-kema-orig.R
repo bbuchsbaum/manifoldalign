@@ -123,7 +123,10 @@ test_that("KEMA kernel quotient removes numerical kernel null directions", {
   expect_equal(quotient$rank, 1L)
   expect_equal(quotient$discarded_rank, 2L)
   expect_equal(
-    as.matrix(quotient$H %*% Matrix::t(quotient$V)),
+    as.matrix(
+      manifoldalign:::.kema_quotient_H(quotient) %*%
+        Matrix::t(manifoldalign:::.kema_quotient_V(quotient))
+    ),
     K,
     tolerance = 1e-12
   )
