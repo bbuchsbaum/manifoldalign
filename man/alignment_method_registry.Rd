@@ -19,27 +19,27 @@ validate_alignment_method_registry(registry = alignment_method_registry())
 \item{method}{One canonical ID, exported entry point, adapter name, or
 benchmark alias.}
 
-\item{registry}{A registry returned by `alignment_method_registry()`.}
+\item{registry}{A registry returned by \code{alignment_method_registry()}.}
 }
 \value{
-`alignment_method_registry()` returns a named list with class
-  `alignment_method_registry`. `alignment_method_info()` returns one record.
-  `alignment_method_table()` returns a data frame.
-  `validate_alignment_method_registry()` returns an
-  `alignment_registry_problems` data frame; zero rows means valid.
+\code{alignment_method_registry()} returns a named list with class
+\code{alignment_method_registry}. \code{alignment_method_info()} returns one record.
+\code{alignment_method_table()} returns a data frame.
+\code{validate_alignment_method_registry()} returns an
+\code{alignment_registry_problems} data frame; zero rows means valid.
 }
 \description{
 Returns the machine-readable source of truth for public alignment methods.
 Registry records distinguish supplied graphs from feature-derived topology
 and metric-measure geometry; describe topology, node-data, supervision,
 output, complexity, dependency, and scale contracts; and embed lifecycle
-metadata validated by [validate_alignment_lifecycle()].
+metadata validated by \code{\link[=validate_alignment_lifecycle]{validate_alignment_lifecycle()}}.
 }
 \details{
-`alignment_method_info()` resolves a canonical method ID, exported entry
+\code{alignment_method_info()} resolves a canonical method ID, exported entry
 point, adapter name, or benchmark alias to exactly one record.
-`alignment_method_table()` returns a flattened data frame suitable for
-documentation and audits. `validate_alignment_method_registry()` returns
+\code{alignment_method_table()} returns a flattened data frame suitable for
+documentation and audits. \code{validate_alignment_method_registry()} returns
 typed schema and contradiction problems.
 }
 \examples{

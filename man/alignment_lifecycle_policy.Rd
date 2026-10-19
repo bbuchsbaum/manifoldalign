@@ -21,22 +21,22 @@ assert_alignment_release_ready(records, policy = alignment_lifecycle_policy())
 \item{record}{A named list containing lifecycle metadata for one method.}
 
 \item{previous_state}{Optional prior lifecycle state. When supplied, the
-transition to `record$state` is validated.}
+transition to \code{record$state} is validated.}
 
 \item{previous_quarantined}{Whether the method is being restored from an
 active quarantine. Restoration to stable requires independent review and
 explicit oracle and benchmark evidence.}
 
-\item{policy}{A policy object returned by `alignment_lifecycle_policy()`.}
+\item{policy}{A policy object returned by \code{alignment_lifecycle_policy()}.}
 
 \item{records}{One lifecycle record or a list of lifecycle records.}
 }
 \value{
-`alignment_lifecycle_policy()` returns a named policy list.
-  `validate_alignment_lifecycle()` returns an
-  `alignment_lifecycle_problems` data frame (zero rows means valid).
-  `assert_alignment_release_ready()` invisibly returns `TRUE`, or raises an
-  error containing the combined problems in its `problems` field.
+\code{alignment_lifecycle_policy()} returns a named policy list.
+\code{validate_alignment_lifecycle()} returns an
+\code{alignment_lifecycle_problems} data frame (zero rows means valid).
+\code{assert_alignment_release_ready()} invisibly returns \code{TRUE}, or raises an
+error containing the combined problems in its \code{problems} field.
 }
 \description{
 Return and enforce the package-wide policy used to distinguish numerical
@@ -46,15 +46,15 @@ scalability, immediate quarantine triggers, permitted state transitions,
 and deprecation cadence.
 }
 \details{
-`validate_alignment_lifecycle()` validates one method record. A record is a
-named list with `method`, `state`, `recommended`, `quarantined`,
-`api_enabled`, `findings`, and `evidence` fields. Stable records require
+\code{validate_alignment_lifecycle()} validates one method record. A record is a
+named list with \code{method}, \code{state}, \code{recommended}, \code{quarantined},
+\code{api_enabled}, \code{findings}, and \code{evidence} fields. Stable records require
 oracle-level correctness plus comparative accuracy and scalability evidence.
-Deprecated and removed records additionally require a `deprecation` list;
-see `docs/ALIGNMENT_LIFECYCLE.md` for the complete schema.
+Deprecated and removed records additionally require a \code{deprecation} list;
+see \code{docs/ALIGNMENT_LIFECYCLE.md} for the complete schema.
 
-`assert_alignment_release_ready()` validates a list of records and raises an
-`alignment_release_error` when any lifecycle invariant is violated. In
+\code{assert_alignment_release_ready()} validates a list of records and raises an
+\code{alignment_release_error} when any lifecycle invariant is violated. In
 particular, deprecated, removed, experimental, legacy/reference, or
 quarantined methods cannot be presented as recommended.
 }

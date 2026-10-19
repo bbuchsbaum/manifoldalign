@@ -59,17 +59,17 @@ A \code{multiblock_biprojector}-compatible object with subclass
 Deprecated experimental multiset manifold alignment with a QR-free spectral
 hierarchy. This implementation is retained temporarily for reproducibility,
 but it has unresolved solver/completion failures and is not recommended.
-Use [rapid_ma()] for supplied sparse relations and structured attributes,
-[ssma_align()] for semi-supervised feature manifolds, or
-[spectral_mnn_align()] for an unsupervised spectral baseline. Removal is
+Use \code{\link[=rapid_ma]{rapid_ma()}} for supplied sparse relations and structured attributes,
+\code{\link[=ssma_align]{ssma_align()}} for semi-supervised feature manifolds, or
+\code{\link[=spectral_mnn_align]{spectral_mnn_align()}} for an unsupervised spectral baseline. Removal is
 scheduled for manifoldalign 1.0.0.
 }
 \section{Migration}{
 
-Given a list `domains` of feature matrices, choose the replacement by input
+Given a list \code{domains} of feature matrices, choose the replacement by input
 contract:
-```r
-# Supplied sparse relations, positions, or structured attributes
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{# Supplied sparse relations, positions, or structured attributes
 rapid_ma(domains, relations = relations, positions = positions,
          attributes = attributes)
 
@@ -78,7 +78,7 @@ ssma_align(domains, correspondences = correspondences)
 
 # Unsupervised feature-derived spectral alignment
 spectral_mnn_align(domains)
-```
+}\if{html}{\out{</div>}}
 }
 
 \section{Bounded repair gate}{

@@ -228,7 +228,10 @@ prepare_ot_data <- function(data, preproc = NULL) {
   
   # Apply preprocessing if provided
   if (!is.null(preproc)) {
-    data <- multivarious::init_transform(data, preproc)
+    # One pre-processor fitted per domain on that domain's rows.
+    for (i in seq_along(data)) {
+      data[[i]]$x <- .preproc_fit_transform(preproc, as.matrix(data[[i]]$x))$transformed
+    }
   }
   
   # Extract data matrices

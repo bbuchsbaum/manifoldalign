@@ -65,14 +65,13 @@ alignment (\verb{Z^T L Z f = λ Z^T D Z f}) solved in a reduced-rank space.
 \details{
 Estimand: \code{L} is the Laplacian of the joint graph whose edges are the
 within-domain kNN edges plus the cross-domain correspondence edges
-(weight \code{corr_edge_weight}), while \code{D} is the block-diagonal
-\emph{within-domain} degree matrix, i.e. the constraint is
-\verb{f' Z' D_w Z f = 1} with \code{D_w = diag(D_1, ..., D_m)} from each domain's
-own kNN graph. Correspondence edges therefore enter only the objective;
-this differs from the formulation of Wang & Mahadevan, whose \code{D} is the
-degree matrix of the joint graph (it would add each row's incident
-correspondence weight to its degree). The result records this choice as
-\code{degree_matrix = "within_domain"}. The \code{ncomp} smallest generalized eigenpairs above
+(weight \code{corr_edge_weight}), and \code{D} is the degree matrix of the same joint
+graph, as in Wang & Mahadevan: the constraint is \verb{f' Z' D Z f = 1}, where a
+row's degree is its within-domain kNN degree plus the weight of its
+incident correspondence edges. \code{ssma_align_control(degree_matrix = "within_domain")} instead uses the block-diagonal within-domain degrees
+\code{D_w = diag(D_1, ..., D_m)}, so correspondence edges enter only the
+objective (the behaviour of earlier versions). The result records the
+choice in \code{degree_matrix}. The \code{ncomp} smallest generalized eigenpairs above
 \code{eig_tol} are returned; trivial (null-space) pairs are never substituted.
 If fewer than \code{ncomp} non-trivial pairs exist a warning is issued and the
 result records \code{ncomp_requested} and \code{ncomp_returned}; if none exist the

@@ -32,15 +32,15 @@ computed from data.}
 \item{M}{Symmetric non-negative mask matrix (n x n), with positive entries
 selecting or weighting pairs. If NULL, uses all off-diagonal pairs.}
 
-\item{sigma_P}{Numeric scalar > 0 or "auto". Scale parameter for Gaussian kernel. 
+\item{sigma_P}{Numeric scalar > 0 or "auto". Scale parameter for Gaussian kernel.
 If "auto", uses log-space grid search with histogram-spread heuristic (default: "auto").}
 
 \item{ncomp}{Integer > 0. Number of dimensions for the embedding (m) (default: 2).}
 
-\item{alpha_p}{Numeric in [0,1]. Weight for the orthogonality regularizer. 
-Uses convex combination: (1-alpha_p)*Js + alpha_p*Jp (default: 0.1).}
+\item{alpha_p}{Numeric in \verb{[0, 1]}. Weight for the orthogonality regularizer.
+Uses convex combination: (1-alpha_p)\emph{Js + alpha_p}Jp (default: 0.1).}
 
-\item{alpha_schedule}{Logical. If TRUE, linearly decay alpha_p from 1 to specified value 
+\item{alpha_schedule}{Logical. If TRUE, linearly decay alpha_p from 1 to specified value
 over first 50 iterations to avoid early orthogonality trapping (default: FALSE).}
 
 \item{maxit}{Integer. Maximum number of iterations (default: 500).}
@@ -67,35 +67,37 @@ If FALSE, use the R ADAM implementation (default: FALSE).}
 }
 \value{
 A \code{simembed} object (S3 class) containing:
-  - \code{weights} (W): The optimized projection matrix (d x m).
-  - \code{scores} (Y): The projected data (n x m).
-  - \code{sdev}: Standard deviations of the scores.
-  - \code{preproc}: The preprocessing object used on X.
-  - \code{center}: Centering vector used in preprocessing.
-  - \code{scale}: Scaling vector used in preprocessing.
-  - \code{sigma_P}: Final sigma_P value used (important if auto-selected).
-  - \code{alpha_p}: Final alpha_p value used.
-  - \code{objective_trace}: Vector of objective function values during optimization.
-  - Metadata: \code{target_sim}, \code{mask}, \code{optimizer}, and
-    \code{convergence}; the latter records normalized status, backend,
-    objective, evaluation counts when available, and any fallback source.
+\itemize{
+\item \code{weights} (W): The optimized projection matrix (d x m).
+\item \code{scores} (Y): The projected data (n x m).
+\item \code{sdev}: Standard deviations of the scores.
+\item \code{preproc}: The preprocessing object used on X.
+\item \code{center}: Centering vector used in preprocessing.
+\item \code{scale}: Scaling vector used in preprocessing.
+\item \code{sigma_P}: Final sigma_P value used (important if auto-selected).
+\item \code{alpha_p}: Final alpha_p value used.
+\item \code{objective_trace}: Vector of objective function values during optimization.
+\item Metadata: \code{target_sim}, \code{mask}, \code{optimizer}, and
+\code{convergence}; the latter records normalized status, backend,
+objective, evaluation counts when available, and any fallback source.
+}
 }
 \description{
 Performs linear dimensionality reduction by optimizing a weight matrix W (d x m)
 such that the pairwise similarities P computed from the projected data
-(`Y = X %*% W`)
+(\code{Y = X \%*\% W})
 match a target similarity matrix T as closely as possible, considering a mask M.
 The optimization balances similarity preservation (Js) with an orthogonality
-constraint (Jp) on W, minimizing (1-alpha_p)*Js + alpha_p*Jp.
+constraint (Jp) on W, minimizing (1-alpha_p)\emph{Js + alpha_p}Jp.
 }
 \details{
-The algorithm follows the Linear Similarity Embedding Framework (SEF) from 
+The algorithm follows the Linear Similarity Embedding Framework (SEF) from
 Passalis & Tefas (2016). The optimization uses either ADAM (R implementation)
 or L-BFGS-B (C++ implementation).
 
-Compiled L-BFGS-B status codes are reported as `converged` (0),
-`iteration_limit` (1), `optimizer_warning` (51), `optimizer_error` (52), or
-`unknown_failure`. A nonzero compiled status triggers an exact-objective
+Compiled L-BFGS-B status codes are reported as \code{converged} (0),
+\code{iteration_limit} (1), \code{optimizer_warning} (51), \code{optimizer_error} (52), or
+\code{unknown_failure}. A nonzero compiled status triggers an exact-objective
 base-R L-BFGS-B retry. The function returns a fit only if one backend
 converges; otherwise it stops instead of returning unchecked weights.
 
@@ -104,10 +106,10 @@ The orthogonality penalty is Jp = ||W'W - I||^2_F / (2*m^2).
 
 Key algorithmic features:
 \itemize{
-  \item Automatic sigma_P selection using histogram-spread heuristic (Step 2, Fig. 2)
-  \item PCA/KPCA initialization for faster convergence (Step 3, Fig. 2)
-  \item Enforced similarity matrix symmetry for numerical stability
-  \item Alpha_p scheduling option for improved convergence
+\item Automatic sigma_P selection using histogram-spread heuristic (Step 2, Fig. 2)
+\item PCA/KPCA initialization for faster convergence (Step 3, Fig. 2)
+\item Enforced similarity matrix symmetry for numerical stability
+\item Alpha_p scheduling option for improved convergence
 }
 }
 \examples{
@@ -135,8 +137,8 @@ result_cpp <- linear_sim_embed(X, use_cpp = TRUE, verbose = TRUE)
 
 }
 \references{
-Passalis, N., & Tefas, A. (2016). Learning deep representations with 
-probabilistic knowledge transfer. In Proceedings of the European Conference 
+Passalis, N., & Tefas, A. (2016). Learning deep representations with
+probabilistic knowledge transfer. In Proceedings of the European Conference
 on Computer Vision (pp. 268-284).
 }
 \seealso{

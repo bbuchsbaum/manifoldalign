@@ -429,17 +429,9 @@ compute_block_indices <- function(pdata) {
 
     pre_i <- unserialize(serialize(pre_i, connection = NULL))
     Xi <- as.matrix(Xi)
-    if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
-      ft <- multivarious::fit_transform(pre_i, Xi)
-      pdata[[i]]$x <- ft$transformed
-      proclist[[i]] <- ft$preproc
-    } else {
-      templ <- multivarious::prep(pre_i)
-      Xi_tf <- multivarious::init_transform(templ, Xi)
-      pdata[[i]]$x <- Xi_tf
-      proc_attr <- attr(Xi_tf, "preproc")
-      proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
-    }
+    ft <- .preproc_fit_transform(pre_i, Xi)
+    pdata[[i]]$x <- ft$transformed
+    proclist[[i]] <- ft$preproc
   }
 
   if (stateless) {

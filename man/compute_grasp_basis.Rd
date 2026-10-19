@@ -4,7 +4,12 @@
 \alias{compute_grasp_basis}
 \title{Block A: Spectral Basis Construction - Corrected}
 \usage{
-compute_grasp_basis(strata, ncomp, use_laplacian = TRUE)
+compute_grasp_basis(
+  strata,
+  ncomp,
+  use_laplacian = TRUE,
+  graph_metric = c("euclidean", "correlation")
+)
 }
 \arguments{
 \item{strata}{List of data domains}
@@ -12,6 +17,9 @@ compute_grasp_basis(strata, ncomp, use_laplacian = TRUE)
 \item{ncomp}{Number of spectral components}
 
 \item{use_laplacian}{Whether to use Laplacian normalization}
+
+\item{graph_metric}{\code{"euclidean"} or \code{"correlation"}; see
+\code{\link{grasp}}.}
 }
 \value{
 List of spectral bases for each domain

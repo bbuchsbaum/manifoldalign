@@ -21,7 +21,8 @@ ssma_align_control(
   operator_power_iter = 25L,
   seed = 1L,
   verbose = FALSE,
-  serial_control = ssma_serial_control()
+  serial_control = ssma_serial_control(),
+  degree_matrix = c("joint", "within_domain")
 )
 }
 \arguments{
@@ -66,6 +67,14 @@ operator spectral scale.}
 
 \item{serial_control}{Serial-correlation handling settings from
 \code{\link[=ssma_serial_control]{ssma_serial_control()}}.}
+
+\item{degree_matrix}{Degree matrix \code{D} of the constraint
+\verb{f' Z' D Z f = 1}. \code{"joint"} (default) is the degree matrix of the joint
+graph, as in Wang & Mahadevan: each row's within-domain degree plus the
+weight of its incident correspondence edges. \code{"within_domain"} uses only
+each domain's own kNN degrees, so correspondence edges enter the
+objective but not the constraint; this was the behaviour of earlier
+versions and is kept for reproduction.}
 }
 \value{
 A list of class \code{ssma_align_control}.

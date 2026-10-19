@@ -43,7 +43,6 @@ Suggests:
     matrixStats,
     parallel,
     PRIMME,
-    pryr,
     RcppAnnoy,
     Rnanoflann,
     scales,

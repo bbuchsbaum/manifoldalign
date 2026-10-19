@@ -15,6 +15,7 @@
   lambda = 0.1,
   use_laplacian = TRUE,
   solver = c("linear", "hungarian"),
+  graph_metric = c("euclidean", "correlation"),
   ...
 )
 }
@@ -39,6 +40,14 @@
 
 \item{solver}{Assignment solver: \code{"linear"} or \code{"hungarian"}; both run the
 exact linear assignment solver.}
+
+\item{graph_metric}{Distance used to build each domain's kNN graph:
+\code{"euclidean"} (default) uses Euclidean distances between rows, so
+the graph is invariant to rotations and translations of the features;
+\code{"correlation"} first standardises each row across its features
+(needs at least three features) and suits rows whose features are
+comparable profiles. The heat-kernel bandwidth of each graph is the
+median distance to the k-th neighbour under the same metric.}
 
 \item{...}{Additional arguments (unused)}
 }

@@ -459,15 +459,10 @@ gpca_align.hyperdesign <- function(
       if (is.function(pre_i)) {
         pdata[[i]]$x <- pre_i(data[[i]]$x)
         proclist[[i]] <- pre_i
-      } else if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
-        ft <- multivarious::fit_transform(pre_i, data[[i]]$x)
+      } else {
+        ft <- .preproc_fit_transform(pre_i, data[[i]]$x)
         pdata[[i]]$x <- ft$transformed
         proclist[[i]] <- ft$preproc
-      } else {
-        templ <- multivarious::prep(pre_i)
-        Xi_tf <- multivarious::init_transform(templ, data[[i]]$x)
-        pdata[[i]]$x <- Xi_tf
-        proclist[[i]] <- attr(Xi_tf, "preproc") %||% templ
       }
     } else {
       # No preprocessing for this domain: record a fitted identity transform

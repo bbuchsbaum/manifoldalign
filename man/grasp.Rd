@@ -19,6 +19,7 @@ grasp(data, ...)
   solver = "linear",
   max_iter = 200,
   tol = 1e-08,
+  graph_metric = c("euclidean", "correlation"),
   ...
 )
 
@@ -51,6 +52,14 @@ alignment (default: 200).}
 
 \item{tol}{Relative-decrease tolerance of the base alignment
 (default: 1e-8).}
+
+\item{graph_metric}{Distance used to build each domain's kNN graph:
+\code{"euclidean"} (default) uses Euclidean distances between rows, so
+the graph is invariant to rotations and translations of the features;
+\code{"correlation"} first standardises each row across its features
+(needs at least three features) and suits rows whose features are
+comparable profiles. The heat-kernel bandwidth of each graph is the
+median distance to the k-th neighbour under the same metric.}
 }
 \value{
 A \code{multiblock_biprojector} object containing:

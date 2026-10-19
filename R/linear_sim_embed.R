@@ -629,7 +629,7 @@ adam_update <- function(par, grad, m_state, v_state, t, lr=1e-3,
 #' @param sigma_P Numeric scalar > 0 or "auto". Scale parameter for Gaussian kernel. 
 #'   If "auto", uses log-space grid search with histogram-spread heuristic (default: "auto").
 #' @param ncomp Integer > 0. Number of dimensions for the embedding (m) (default: 2).
-#' @param alpha_p Numeric in [0,1]. Weight for the orthogonality regularizer. 
+#' @param alpha_p Numeric in `[0, 1]`. Weight for the orthogonality regularizer. 
 #'   Uses convex combination: (1-alpha_p)*Js + alpha_p*Jp (default: 0.1).
 #' @param alpha_schedule Logical. If TRUE, linearly decay alpha_p from 1 to specified value 
 #'   over first 50 iterations to avoid early orthogonality trapping (default: FALSE).

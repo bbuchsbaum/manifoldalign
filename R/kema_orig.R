@@ -184,21 +184,9 @@ kema_orig.hyperdesign <- function(data, y,
       if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
         pre_i <- unserialize(serialize(pre_i, connection = NULL))
       }
-      if (exists(
-        "fit_transform",
-        envir = asNamespace("multivarious"),
-        mode = "function"
-      )) {
-        fitted <- multivarious::fit_transform(pre_i, Xi)
-        pdata[[i]]$x <- fitted$transformed
-        proclist[[i]] <- fitted$preproc
-      } else {
-        proc_template <- multivarious::prep(pre_i)
-        transformed_x <- multivarious::init_transform(proc_template, Xi)
-        pdata[[i]]$x <- transformed_x
-        proc_attr <- attr(transformed_x, "preproc")
-        proclist[[i]] <- if (is.null(proc_attr)) proc_template else proc_attr
-      }
+      fitted <- .preproc_fit_transform(pre_i, Xi)
+      pdata[[i]]$x <- fitted$transformed
+      proclist[[i]] <- fitted$preproc
     }
   }
   names(proclist) <- names(data)

@@ -297,11 +297,9 @@ global_geo_align.hyperdesign <- function(
       if (inherits(pre_i, "prepper") || inherits(pre_i, "pre_processor")) {
         pre_i <- unserialize(serialize(pre_i, connection = NULL))
       }
-      templ <- multivarious::prep(pre_i)
-      Xi_tf <- multivarious::init_transform(templ, Xi)
-      pdata[[i]]$x <- as.matrix(Xi_tf)
-      proc_attr <- attr(Xi_tf, "preproc")
-      proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
+      ft <- .preproc_fit_transform(pre_i, Xi)
+      pdata[[i]]$x <- as.matrix(ft$transformed)
+      proclist[[i]] <- ft$preproc
     } else {
       # Keep one (NULL) entry per domain: `proclist[[i]] <- NULL` would delete
       # the element and shift later domains onto the wrong blocks.

@@ -315,8 +315,13 @@ oos_predict.multiblock_biprojector <- function(fit_or_transform, newX, side = c(
       X <- multivarious::transform(pre, X, colind = feat_idx)
     } else {
       if (is.list(pre) && length(pre) >= side_idx) pre <- pre[[side_idx]]
-      if (inherits(pre, "prepper") || inherits(pre, "pre_processor")) {
-        X <- multivarious::init_transform(pre, X)
+      if (inherits(pre, "pre_processor")) {
+        # Apply the training statistics; refitting on newX would centre and
+        # scale the new rows by their own statistics.
+        X <- multivarious::transform(pre, X)
+      } else if (inherits(pre, "prepper")) {
+        stop("The stored preprocessor is not fitted, so new rows cannot be ",
+             "preprocessed with the training statistics.", call. = FALSE)
       } else if (is.function(pre)) {
         X <- pre(X)
       }

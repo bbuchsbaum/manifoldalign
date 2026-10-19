@@ -4,7 +4,7 @@
 \alias{.lse_objective}
 \title{Full-data LSE objective}
 \usage{
-.lse_objective(X, W, T, M, sigma, alpha, upper_idx = NULL)
+.lse_objective(X, W, T, M, sigma, alpha)
 }
 \arguments{
 \item{X}{Preprocessed data matrix (n x d).}
@@ -18,8 +18,6 @@
 \item{sigma}{Gaussian scale sigma_P.}
 
 \item{alpha}{Orthogonality weight alpha_p.}
-
-\item{upper_idx}{Optional precomputed linear indices of the masked upper triangle.}
 }
 \value{
 List with components \code{objective}, \code{Js} and \code{Jp}.
@@ -27,8 +25,8 @@ List with components \code{objective}, \code{Js} and \code{Jp}.
 \description{
 Evaluates the documented objective
 \eqn{(1-\alpha) J_s + \alpha J_p} with
-\eqn{J_s = \sum_{i<j} M_{ij}(P_{ij}-T_{ij})^2 / (2K)},
-\eqn{K = \#\{i<j: M_{ij} \ne 0\}} and
-\eqn{J_p = \|W^\top W - I\|_F^2 / (2m^2)}.
+\eqn{J_s = \sum_{ij} M_{ij}(P_{ij}-T_{ij})^2 / (2 \sum_{ij} M_{ij})} and
+\eqn{J_p = \|W^\top W - I\|_F^2 / (2m^2)}, the same objective as
+\code{.lse_objective_gradient()} and the compiled backend.
 }
 \keyword{internal}

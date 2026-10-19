@@ -137,19 +137,9 @@ multiscale_manifold_align <- function(data, ...) {
       fitted_preproc[i] <- list(pre_i)
       next
     }
-    if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
-      ft <- multivarious::fit_transform(pre_i, Xi)
-      out[[i]]$x <- ft$transformed
-      fitted_preproc[i] <- list(ft$preproc)
-    } else {
-      templ <- multivarious::prep(pre_i)
-      Xi_tf <- multivarious::init_transform(templ, Xi)
-      out[[i]]$x <- Xi_tf
-      fitted_preproc[i] <- list(attr(Xi_tf, "preproc"))
-      if (is.null(fitted_preproc[[i]])) {
-        fitted_preproc[i] <- list(templ)
-      }
-    }
+    ft <- .preproc_fit_transform(pre_i, Xi)
+    out[[i]]$x <- ft$transformed
+    fitted_preproc[i] <- list(ft$preproc)
   }
   names(fitted_preproc) <- names(domains)
   list(domains = out, preproc = fitted_preproc)

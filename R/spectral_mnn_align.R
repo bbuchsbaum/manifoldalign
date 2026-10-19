@@ -680,18 +680,9 @@ resolve_spectral_mnn_align_control <- function(control) {
       pre_i <- unserialize(serialize(pre_i, connection = NULL))
     }
 
-    if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
-      ft <- multivarious::fit_transform(pre_i, Xi)
-      pdata[[i]]$x <- ft$transformed
-      proclist[[i]] <- ft$preproc
-    } else {
-      # Back-compat for older multivarious versions
-      templ <- multivarious::prep(pre_i)
-      Xi_tf <- multivarious::init_transform(templ, Xi)
-      pdata[[i]]$x <- Xi_tf
-      proc_attr <- attr(Xi_tf, "preproc")
-      proclist[[i]] <- if (is.null(proc_attr)) templ else proc_attr
-    }
+    ft <- .preproc_fit_transform(pre_i, Xi)
+    pdata[[i]]$x <- ft$transformed
+    proclist[[i]] <- ft$preproc
   }
 
   feature_sizes <- vapply(pdata, function(x) ncol(x$x), integer(1))

@@ -138,8 +138,16 @@ These fix defects found in a package review; several change fitted output.
   coverage and solver availability are reported.
 * **Random numbers**: package functions no longer reset the caller's RNG
   stream; seeded steps restore it afterwards.
+* **Out-of-sample preprocessing**: `oos_predict()` for fits that store one
+  pre-processor per domain now applies the training statistics to new rows;
+  it used to refit the pre-processor on the new rows (so, for example, a
+  single new row was centred to zero). An unfitted stored pre-processor is an
+  error.
+* **multivarious**: pre-processors are fitted through `fit_transform()`, so
+  fits no longer emit `prep()`/`init_transform()` deprecation warnings with
+  multivarious >= 0.3.0; older versions fall back to the previous calls.
 * **Dependencies**: PRIMME is optional (RSpectra fallback); `pryr` is no
-  longer used; `src/Makevars` links LAPACK and BLAS; the vendored LEMON code
+  longer used or suggested; `src/Makevars` links LAPACK and BLAS; the vendored LEMON code
   no longer requires OpenMP and is credited in `inst/COPYRIGHTS`.
 
 ### Bug Fixes

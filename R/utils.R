@@ -209,3 +209,16 @@ new_alignment_result <- function(scores,
 .primme_available <- function() {
   requireNamespace("PRIMME", quietly = TRUE)
 }
+
+# Fit a multivarious pre-processor on X and transform X with it. Returns
+# list(preproc = fitted pre-processor, transformed = matrix). Uses
+# fit_transform() (multivarious >= 0.3.0); older versions fall back to the
+# prep()/init_transform() pair that fit_transform() replaced.
+.preproc_fit_transform <- function(pre, X) {
+  if (exists("fit_transform", envir = asNamespace("multivarious"), mode = "function")) {
+    return(multivarious::fit_transform(pre, X))
+  }
+  templ <- multivarious::prep(pre)
+  Xt <- multivarious::init_transform(templ, X)
+  list(preproc = attr(Xt, "preproc") %||% templ, transformed = Xt)
+}
