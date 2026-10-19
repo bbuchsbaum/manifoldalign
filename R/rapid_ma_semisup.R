@@ -949,14 +949,11 @@ rapid_ma_semisup_control <- function(
 #' reference. When the fallback is selected, it replaces that domain's
 #' initial probabilities and no relation is propagated there; later
 #' pseudo-label rounds (`control$rounds > 0`) still use transport and are
-#' guarded only by rollback. Before this comparator was introduced the full
-#' relation set was the comparator and no fallback existed, so the gate kept
-#' harmful structure whenever no subset beat it by the margin.
+#' guarded only by rollback.
 #'
-#' Because propagation mixes each row with
-#' its relation neighbours, replacing only a labelled row's own probability by a
-#' leave-one-out value is not out-of-fold: its neighbours' probabilities would
-#' still have used its label. Folds avoid this: each fold's whole matrix is
+#' Because propagation mixes each row with its relation neighbours, replacing
+#' only a labelled row's own probability by a leave-one-out value is not
+#' out-of-fold: its neighbours' probabilities would still have used its label. Folds avoid this: each fold's whole matrix is
 #' propagated and only that fold's rows are scored, so per-row (leave-one-out)
 #' or grouped refits give genuinely out-of-fold scores. Rows outside every fold
 #' are not scored.
