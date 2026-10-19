@@ -33,3 +33,19 @@ md5 R/rapid_ma_benchmark.R=f092af35dc3dcebda2aacd99d4f59bd1
 md5 inst/benchmarks/rapid_ma_scaling.R=eeffcd76d0805ce342928a7b11b5a305
 control=pre-fix commit 78fbc05 on the same machine, RAPID_MA_COMMON_SIZES=1000,5000 RAPID_MA_RAPID_SIZES=50000 RAPID_MA_REPETITIONS=1 -> rapid-ma-scaling-control-prefix-summary.csv
 packages: eigencore 2.0.0, multivarious 0.4.0, adjoin 0.1.0, Matrix 1.7.6, RANN 2.6.2, kernlab 0.9.33
+## second regeneration (all runners, sequential, no other jobs)
+commit=a6e1cd63b031b5c1f074813a48c5ca07d6479cb8
+timeline: accuracy_start 15:51:27; accuracy_end 15:59:51; ablation_start 15:59:52; ablation_end 16:03:11; holdout_start 16:03:11; holdout_end 16:06:24; matching_start 16:06:24; matching_end 16:09:17; scaling_start 16:09:17; scaling_end 16:19:09 (UTC)
+working_dir=/tmp/rapid_ev2/run (no DESCRIPTION; R_LIBS=installed build of the commit)
+env=OMP_NUM_THREADS=1 LANG=C.UTF-8 RAPID_MA_PROFILE=full
+holdout ablation seeds=8001:8020 (chosen after the gate fix was final; not inspected before this run)
+md5 R/rapid_ma.R=3e43380ab781139eec75b929048bc7e8
+md5 R/rapid_ma_semisup.R=17f409bf0f1db52abe832622bf4214ce
+md5 R/rapid_ma_benchmark.R=a8c40ebc3e8b0d8eaa409b8e302878aa
+md5 R/rapid_ma_relations.R=cd351d3cae9d41df20068af625300ec6
+md5 src/rapid_exact_knn.cpp=9946739371ccdfddb996fd38247ead3a
+md5 inst/benchmarks/rapid_ma_accuracy.R=419d064075606dc953757a61bbefac20
+md5 inst/benchmarks/rapid_ma_ablation.R=9dbbc6bf7f4ed6c3f0f47df470fd9e89
+md5 inst/benchmarks/rapid_ma_matching.R=e562a46fca8eab9fc63f82493f77f2c3
+md5 inst/benchmarks/rapid_ma_scaling.R=eeffcd76d0805ce342928a7b11b5a305
+packages: manifoldalign 0.1.0.9000, eigencore 2.0.0, multivarious 0.4.0, adjoin 0.1.0, Matrix 1.7.6, RANN 2.6.2, RSpectra 0.16.2, irlba 2.4.1, kernlab 0.9.33

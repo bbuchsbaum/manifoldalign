@@ -300,9 +300,8 @@ alignment_method_registry <- function() {
         note = paste0(
           "The current full-scoring external-process tournament completed ",
           "22,600 total nodes. The regenerated scaling runner completed ",
-          "110,000 total nodes on a 4-core machine (220,000 exceeded its ",
-          "four-minute cap there; an older run on a faster machine completed ",
-          "it), and the 1,000,002-node attempt timed out."
+          "220,000 total nodes in 149 seconds on a 4-core machine; the ",
+          "1,000,002-node attempt (previous machine) timed out."
         )
       ),
       summary = paste0(
@@ -506,8 +505,8 @@ alignment_method_registry <- function() {
         "O(N^2) full kernel/graph storage; reduced kernels remain stored"
       ),
       validated_scale_ceiling = .alignment_registry_scale(
-        "failed", NA_integer_, 550L, "docs/rapid-ma-scaling-summary.csv",
-        "Regenerated 2026-10-19: certified eigensolves rejected all three 550-node runs; 1,100 to 5,500 nodes timed out and larger tasks exceed max_dense_bytes."
+        "validated", 1100L, 2200L, "docs/rapid-ma-scaling-summary.csv",
+        "Regenerated 2026-10-19 (4-core x86_64, ten-second cap): 1,100 total nodes completed with certified solves; 2,200 to 11,000 timed out and 22,000 exceeds max_dense_bytes even for operator_exact."
       ),
       summary = paste0(
         "Semi-supervised kernel manifold alignment with repaired generalized-",
@@ -920,8 +919,8 @@ alignment_method_registry <- function() {
         "Declared O(E + N r); not validated"
       ),
       validated_scale_ceiling = .alignment_registry_scale(
-        "failed", NA_integer_, 550L, "docs/rapid-ma-scaling-raw.csv",
-        "The first 550-total-node scaling cases fail with a malformed solver formula."
+        "validated", 5500L, 11000L, "docs/rapid-ma-scaling-summary.csv",
+        "Regenerated 2026-10-19 (4-core x86_64, ten-second cap): 5,500 total nodes completed; 11,000 timed out. Completion only; the method remains deprecated."
       ),
       summary = "Deprecated incoherent experimental hierarchy; retained only for reproducibility until 1.0.0."
     ),

@@ -1,0 +1,8 @@
+generated_utc=2026-10-19 16:06:24 UTC
+seeds=8001,8002,8003,8004,8005,8006,8007,8008,8009,8010,8011,8012,8013,8014,8015,8016,8017,8018,8019,8020
+development_seeds=201:205,2001:2020
+target_feature_noise_sd=0.75
+test_label_tuning=false
+relation_gate=no-transfer reference (domain-local centroid); full relation set kept when out-of-fold non-inferior within one row; alternatives need margin 1/6 and no worse log-loss
+R.version=R version 4.5.3 (2026-03-11)
+platform=x86_64-conda-linux-gnu

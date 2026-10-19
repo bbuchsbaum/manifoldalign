@@ -169,10 +169,12 @@ These fix defects found in a package review; several change fitted output.
   definitions. The validation, ablation, matching and scaling evidence in
   `docs/rapid-ma-*.md` has been regenerated with the frozen runners: the
   headline accuracy claims hold, while the misleading-structure safety
-  result (now below the target-only baseline), the attribute and propagation
-  ablation effects, the small-n memory comparison with LeMA, and the
-  sparse-baseline runtime crossover do not and are corrected there. The
-  Chikusei blocked-inductive and million-node evidence was not rerun.
+  result, the attribute and propagation ablation effects and the small-n
+  memory comparison with LeMA do not and are corrected there. After the gate
+  fix the misleading-structure result matches the target-only baseline,
+  including on 20 untouched seeds; after the speedups RAPID-MA completes
+  220,000 nodes in 149 seconds on a 4-core machine. The Chikusei
+  blocked-inductive and million-node evidence was not rerun.
 * **RAPID-MA speed**: fits are faster (about 2.6x at 50,000 common nodes on
   the scaling fixture; the 100,000-node task now completes within the
   240-second cap) with bit-identical results on the benchmark fixtures.

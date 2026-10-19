@@ -1,7 +1,8 @@
-generated_utc=2026-10-19 03:08:31 UTC
+generated_utc=2026-10-19 16:03:11 UTC
 seeds=4001,4002,4003,4004,4005,4006,4007,4008,4009,4010,4011,4012,4013,4014,4015,4016,4017,4018,4019,4020
 development_seeds=201:205,2001:2020
 target_feature_noise_sd=0.75
 test_label_tuning=false
+relation_gate=no-transfer reference (domain-local centroid); full relation set kept when out-of-fold non-inferior within one row; alternatives need margin 1/6 and no worse log-loss
 R.version=R version 4.5.3 (2026-03-11)
 platform=x86_64-conda-linux-gnu

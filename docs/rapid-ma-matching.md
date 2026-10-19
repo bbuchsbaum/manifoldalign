@@ -1,9 +1,10 @@
 # RAPID-MA bounded node-matching validation
 
 > **Regenerated 2026-10-19** with the documented runner and frozen seeds
-> 7201--7220 at commit `78d33c9b34f0185b120920ae18ae5a150e17401a`, after the
+> 7201--7220 at commit `a6e1cd63b031b5c1f074813a48c5ca07d6479cb8`, after the
 > diffusion-encoder, candidate-density and fixture row-name fixes. All 180
-> rows completed. The previous run (commit `8a1992b`, R 4.5.1 on
+> rows completed; every accuracy value is identical to the earlier
+> regeneration at `78d33c9`, before the exact RAPID-MA speedups. The previous run (commit `8a1992b`, R 4.5.1 on
 > aarch64-apple-darwin) is superseded; every accuracy conclusion below still
 > holds. Fit and match times come from a different machine (4-core x86_64
 > Linux, R 4.5.3, OpenBLAS) and are not comparable with the previous run.
@@ -33,7 +34,7 @@ The fixture has 300 source nodes with known mates among 360 target nodes,
 different source and target feature widths, nonlinear target features, noisy
 positions, mixed numeric/categorical attributes, missing attributes, class
 imbalance, and only four labels per class. Development used seeds 7101--7103.
-Implementation commit `78d33c9b34f0185b120920ae18ae5a150e17401a`
+Implementation commit `a6e1cd63b031b5c1f074813a48c5ca07d6479cb8`
 was evaluated on untouched seeds 7201--7220.
 
 Hits@1 below is normalized over all 300 source nodes; unmatched rows count as
@@ -42,15 +43,15 @@ valid target.
 
 | Method | Runs | Hits@1 | Matched Hits@1 | Coverage | Fit (s) | Match (s) |
 |---|---:|---:|---:|---:|---:|---:|
-| Position kNN diagnostic | 20/20 | **18.53%** | 18.53% | 100.00% | 0 | 0.0061 |
-| RAPID multi-view, independent | 20/20 | **14.20%** | 14.20% | **100.00%** | 1.315 | 0.876 |
-| RAPID multi-view, one-to-one | 20/20 | 13.67% | **15.78%** | 86.50% | 1.315 | 0.860 |
-| RAPID prototype, one-to-one | 20/20 | 3.00% | 4.74% | 63.45% | 1.315 | 0.853 |
-| RAPID embedding kNN | 20/20 | 1.35% | 1.35% | 100.00% | 1.315 | NA |
-| Spectral-MNN embedding kNN | 20/20 | 0.55% | 0.55% | 100.00% | 0.118 | NA |
-| Token-OT embedding kNN | 20/20 | 0.52% | 0.52% | 100.00% | 0.184 | NA |
-| SSMA embedding kNN | 20/20 | 0.27% | 0.27% | 100.00% | 0.091 | NA |
-| LeMA embedding kNN | 20/20 | 0.05% | 1.25% | 4.00% | 1.269 | NA |
+| Position kNN diagnostic | 20/20 | **18.53%** | 18.53% | 100.00% | 0 | 0.0064 |
+| RAPID multi-view, independent | 20/20 | **14.20%** | 14.20% | **100.00%** | 1.000 | 0.931 |
+| RAPID multi-view, one-to-one | 20/20 | 13.67% | **15.78%** | 86.50% | 1.000 | 0.928 |
+| RAPID prototype, one-to-one | 20/20 | 3.00% | 4.74% | 63.45% | 1.000 | 0.910 |
+| RAPID embedding kNN | 20/20 | 1.35% | 1.35% | 100.00% | 1.000 | NA |
+| Spectral-MNN embedding kNN | 20/20 | 0.55% | 0.55% | 100.00% | 0.127 | NA |
+| Token-OT embedding kNN | 20/20 | 0.52% | 0.52% | 100.00% | 0.219 | NA |
+| SSMA embedding kNN | 20/20 | 0.27% | 0.27% | 100.00% | 0.106 | NA |
+| LeMA embedding kNN | 20/20 | 0.05% | 1.25% | 4.00% | 1.308 | NA |
 
 LeMA receives the paired labeled-landmark correspondence expected by its
 reference formulation, but its source embedding is valid for only those 12
@@ -128,8 +129,8 @@ RAPID_MA_PROFILE=full \
 SHA-256:
 
 ```text
-a31ebd3e57e3d3a7ea3509f32f978cf3e65349a8804708ff0c5c9f50329ee9e1  rapid-ma-matching-raw.csv
-f27657dc909b5be202a90b2b7cff0e53fe7528761d11427273320bfbb1cdba77  rapid-ma-matching-summary.csv
+b225d217a46f2dea0acd0279ab52f62128cde120fb0c9f2f1db6c3b70628a898  rapid-ma-matching-raw.csv
+4a864d4e034d1b995ddded24c945ae3e7eec5e987fffcf848ef6ca89f8660c5a  rapid-ma-matching-summary.csv
 89e6217e79a7dc362c0d0d7ee9c73c058b6f0a474ad4df6c1cda2837355d823a  rapid-ma-matching-metadata.txt
-fffd98245276f7c51872ef985d7ceaae23bdb693aed42bfd047218ffa25d50d7  rapid-ma-regeneration-provenance.txt
+5daae21f9402b7c594278cb1fb1bd14a513950816718075436f3426c917c5a96  rapid-ma-regeneration-provenance.txt
 ```
