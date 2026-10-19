@@ -26,12 +26,15 @@ problem structure:
 - do all domains share the same feature dimension?
 
 This article reads the tracked synthetic benchmark outputs and turns them into
-practical method guidance.
+practical method guidance. The bundled tables are frozen historical outputs;
+current `alignment_method_registry()` lifecycle states take precedence over
+historical rankings.
 
 ## Load benchmark outputs
 
 ```{r read-results}
-bench_dir <- normalizePath(file.path("..", "dev-scripts", "benchmarks"), mustWork = TRUE)
+bench_dir <- system.file("extdata", "benchmark-guidance", package = "manifoldalign",
+                         mustWork = TRUE)
 
 rank_path <- file.path(bench_dir, "toy_feature_aligners_regime_ranks.csv")
 seed_path <- file.path(bench_dir, "toy_feature_seed_audit_summary.csv")

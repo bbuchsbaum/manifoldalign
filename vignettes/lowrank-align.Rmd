@@ -1,8 +1,10 @@
 ---
 title: Low-Rank Alignment with lowrank_align
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{Low-Rank Alignment with lowrank_align} %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Low-Rank Alignment with lowrank_align}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
   preset: homage

@@ -704,6 +704,19 @@ multiscale_manifold_align <- function(data, ...) {
   }
 }
 
+.msa_reduce_dictionary <- function(dictionary, tol) {
+  # Scaling and wavelet blocks share eigenvectors. Their concatenation is
+  # rank deficient: coefficient-null modes otherwise dominate the smallest
+  # generalized eigenpairs and yield zero node scores. Right-compress with
+  # U D, preserving D D^T and the minimum coefficient ridge penalty.
+  sv <- svd(dictionary, nv = 0L)
+  keep <- which(is.finite(sv$d) & sv$d > tol * max(sv$d))
+  if (!length(keep)) {
+    stop("Multiscale diffusion dictionary has zero numerical rank.", call. = FALSE)
+  }
+  sweep(sv$u[, keep, drop = FALSE], 2L, sv$d[keep], `*`)
+}
+
 .msa_build_diffusion_dictionary <- function(node_eig, eigvals, corr_df, domain_sizes, ctrl) {
   n_nodes <- nrow(node_eig)
   lambda <- pmin(pmax(as.numeric(eigvals), 0), 1)
@@ -793,7 +806,7 @@ multiscale_manifold_align <- function(data, ...) {
   }
 
   list(
-    dictionary = as.matrix(dictionary),
+    dictionary = .msa_reduce_dictionary(dictionary, ctrl$svd_tol),
     levels = scaling_levels,
     wavelet_levels = wavelet_levels,
     level_dims = as.integer(level_dims),

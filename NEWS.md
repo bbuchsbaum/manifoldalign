@@ -1,3 +1,28 @@
+# Development validation repairs
+
+- Match native constructor initializer lists to member declaration order,
+  retaining compiler warnings and clean Windows package installation.
+
+- Preserve LF bytes in frozen text evidence on Windows and use native R
+  file hashing; exact checksum and byte-count checks remain enforced.
+
+- Remove redundant multiscale dictionary coordinates before its eigensolve,
+  preserving the node kernel and coefficient ridge penalty; the method remains
+  deprecated. Generate website files separately from tracked evidence.
+
+- Resolve required PRIMME from a pinned CRAN-mirror source; replace the
+  archived pryr memory helper with maintained lobstr, and declare the
+  preprocessing-test dependency.
+- Run checkout-resource audits as an explicit mandatory PR-tier phase and
+  keep installed-package tests independent of checkout paths.
+- Compile network-simplex transport without OpenMP when unavailable, with
+  a standalone serial exhaustive oracle in CI.
+- Repair the GPCA alignment fixture's per-coordinate means, vignette engine
+  metadata, withdrawn FPGW example, and exported print-method documentation.
+- ADAM now evaluates its objective at every iterate regardless of verbosity;
+  small descending steps are progress, and scheduled objectives are not
+  compared for convergence before the schedule finishes.
+
 # Development version
 
 * SSMA accepts generic weighted `linear_correspondence()` and `linear_penalty()`

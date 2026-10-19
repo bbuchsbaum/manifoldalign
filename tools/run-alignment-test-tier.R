@@ -192,6 +192,17 @@ main <- function() {
     }
   }
 
+  # Source-layout and evidence audits cannot resolve checkout paths from an
+  # installed namespace. Run them explicitly in every tier; their failures
+  # are critical and remain in the same evidence tables as runtime tests.
+  source_results <- testthat::test_dir(
+    file.path(root, "tools", "tests"), reporter = "silent",
+    stop_on_failure = FALSE, stop_on_warning = FALSE, shuffle = FALSE
+  )
+  source_detail <- alignment_ci_results_detail(source_results, contract, tier)
+  source_detail$file <- sub("^tests/testthat/", "tools/tests/", source_detail$file)
+  detail <- rbind(detail, source_detail)
+
   summary <- alignment_ci_results_summary(detail)
   contract_status <- alignment_ci_contract_status(contract, tier = tier)
   write_csv(detail, file.path(output_dir, "alignment-test-results.csv"))

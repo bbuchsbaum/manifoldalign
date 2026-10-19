@@ -1,8 +1,10 @@
 ---
 title: Fused-Partial Gromov-Wasserstein for Domain Alignment
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{Fused-Partial Gromov-Wasserstein for Domain Alignment}
-  %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Fused-Partial Gromov-Wasserstein for Domain Alignment}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
   preset: homage
@@ -120,17 +122,13 @@ P_partial <- result_partial$transport_plans[[1]]
 cat("Total transported mass:", sum(P_partial), "\n")
 ```
 
-### TV-Penalized FPGW
+### Selecting transported mass
 
-The total variation penalty provides a soft constraint on transported mass:
-
-```{r tv-penalized}
-# Use TV penalty instead of hard mass constraint
-result_tv <- fpgw(hd_noisy, omega1 = 0.5, lambda = 0.1)
-
-P_tv <- result_tv$transport_plans[[1]]
-cat("Total transported mass with TV penalty:", sum(P_tv), "\n")
-```
+The supported partial-transport solver fixes the transported mass through
+`rho`. Set it explicitly according to the expected shared support. The former
+TV-penalized mode (`lambda > 0`) is withdrawn and raises an error; it is not an
+alternative way to fit the current solver. The preceding `rho = 0.8` example
+uses the supported fixed-mass objective.
 
 ## Controlling Feature vs Structure Weight
 

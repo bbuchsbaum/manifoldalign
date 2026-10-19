@@ -182,24 +182,3 @@ test_that("flattened method table preserves required comparison fields", {
     "storage", "optional_dependencies", "scale_ceiling", "scale_evidence"
   ) %in% names(table)))
 })
-
-test_that("generated comparison table cannot drift from registry", {
-  root <- test_path("..", "..")
-  paths <- c(
-    file.path(root, "METHOD_COMPARISON_TABLE.md"),
-    file.path(root, "docs", "METHOD_COMPARISON_TABLE.md")
-  )
-  copies <- lapply(paths, readLines, warn = FALSE)
-  for (lines in copies) {
-    begin <- match("<!-- BEGIN GENERATED METHOD TABLE -->", lines)
-    end <- match("<!-- END GENERATED METHOD TABLE -->", lines)
-    expect_false(is.na(begin))
-    expect_false(is.na(end))
-    expect_gt(end, begin)
-    expect_identical(
-      lines[seq.int(begin + 1L, end - 1L)],
-      manifoldalign:::.alignment_registry_markdown()
-    )
-  }
-  expect_identical(copies[[1L]], copies[[2L]])
-})

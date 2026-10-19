@@ -161,6 +161,8 @@ test_that("multiscale randomized backend yields matched cross-domain neighbors",
   mismatched_mean <- mean(cross_dist[row(cross_dist) != col(cross_dist)])
 
   expect_lt(matched_mean, mismatched_mean)
+  expect_gt(mismatched_mean, 1e-6)  # a near-zero embedding is not alignment
+  expect_true(all(fit$generalized_eigenvalues > 1e-8))
 })
 
 test_that("multiscale_manifold_align retains preprocessors for high-dimensional OOS projection", {
@@ -297,4 +299,21 @@ test_that("multiscale_manifold_align can tune core diffusion controls", {
   expect_true(fit$control$cross_edge_weight %in% c(0.5, 1, 2))
   expect_true(fit$control$rank_per_domain %in% c(8L, 10L))
   expect_true(fit$control$max_levels %in% c(2L, 3L))
+})
+
+
+test_that("multiscale dictionary reduction removes coefficient null space without changing its kernel", {
+  reduce <- manifoldalign:::.msa_reduce_dictionary
+  D <- cbind(diag(1:3), diag(1:3), matrix(0, 3, 2))
+  reduced <- reduce(D, 1e-8)
+  expect_equal(dim(reduced), c(3L, 3L))
+  expect_equal(tcrossprod(reduced), diag(2 * (1:3)^2), tolerance = 1e-12)
+  expect_equal(tcrossprod(reduce(D[, 8:1], 1e-8)),
+               tcrossprod(reduced), tolerance = 1e-12)
+  # Minimum squared coefficient norm for D a = y has an independent closed
+  # form here. Right compression must preserve the ridge part of the solve.
+  y <- c(2, -3, 5)
+  expect_equal(sum(solve(reduced, y)^2), sum(y^2 / (2 * (1:3)^2)),
+               tolerance = 1e-12)
+  expect_error(reduce(matrix(0, 3, 4), 1e-8), "zero numerical rank")
 })

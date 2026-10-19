@@ -323,7 +323,8 @@ test_that("Alpha parameter scaling works consistently", {
   diag(M) <- 0
   
   sigma_P <- 1.0
-  maxit <- 30
+  # ADAM must optimize the measured objective, not stop on a stale value.
+  maxit <- 500
   
   # Test with different alpha values
   alpha_values <- c(0.01, 0.1, 0.5, 0.9)

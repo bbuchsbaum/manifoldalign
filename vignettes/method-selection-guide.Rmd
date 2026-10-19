@@ -244,43 +244,34 @@ Do you have exact row-level correspondences across domains?
 
 The package tracks synthetic benchmark results across five fast-profile
 scenarios that stress different problem axes. The `benchmark-guidance`
-vignette has full tables; here is the executive summary.
+vignette has full tables; here is the executive summary. These are frozen
+historical outputs. Current `alignment_method_registry()` lifecycle states
+take precedence over historical rankings.
 
 ### Exact correspondence, full overlap
 
 ```{r exact-leaders, echo = FALSE}
-bench_dir <- tryCatch(
-  normalizePath(file.path("..", "dev-scripts", "benchmarks"), mustWork = TRUE),
-  error = function(e) NULL
-)
-
-if (!is.null(bench_dir)) {
-  rank_path <- file.path(bench_dir, "toy_feature_aligners_regime_ranks.csv")
-  if (file.exists(rank_path)) {
-    regime_ranks <- utils::read.csv(rank_path, stringsAsFactors = FALSE)
-    exact <- regime_ranks[
-      regime_ranks$supervision_regime == "exact_correspondence" &
-        regime_ranks$dimensionality_constraint == "unrestricted",
-    ]
-    # Show top 3 per scenario
-    exact <- exact[order(exact$scenario, exact$overall_rank), ]
-    top3 <- do.call(rbind, lapply(split(exact, exact$scenario), function(df) {
-      utils::head(df, 3)
-    }))
-    rownames(top3) <- NULL
-    knitr::kable(top3[, c(
-      "scenario", "method", "overall_rank",
-      "max_abs_latent_cor_mean", "centroid_acc_mean", "runtime_sec_mean"
-    )], col.names = c(
-      "Scenario", "Method", "Rank",
-      "Latent cor", "Centroid acc", "Runtime (s)"
-    ), digits = 3)
-  } else {
-    cat("Benchmark CSVs not found; run the benchmark to populate this table.")
-  }
-} else {
-  cat("Benchmark directory not found; this table requires building from source.")
-}
+bench_dir <- system.file("extdata", "benchmark-guidance", package = "manifoldalign",
+                         mustWork = TRUE)
+rank_path <- file.path(bench_dir, "toy_feature_aligners_regime_ranks.csv")
+regime_ranks <- utils::read.csv(rank_path, stringsAsFactors = FALSE)
+exact <- regime_ranks[
+  regime_ranks$supervision_regime == "exact_correspondence" &
+    regime_ranks$dimensionality_constraint == "unrestricted",
+]
+# Show top 3 per scenario from the frozen historical benchmark.
+exact <- exact[order(exact$scenario, exact$overall_rank), ]
+top3 <- do.call(rbind, lapply(split(exact, exact$scenario), function(df) {
+  utils::head(df, 3)
+}))
+rownames(top3) <- NULL
+knitr::kable(top3[, c(
+  "scenario", "method", "overall_rank",
+  "max_abs_latent_cor_mean", "centroid_acc_mean", "runtime_sec_mean"
+)], col.names = c(
+  "Scenario", "Method", "Rank",
+  "Latent cor", "Centroid acc", "Runtime (s)"
+), digits = 3)
 ```
 
 **Takeaways:**

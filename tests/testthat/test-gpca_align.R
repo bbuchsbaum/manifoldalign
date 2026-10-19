@@ -140,10 +140,15 @@ test_that("gpca_align correctly handles cross-domain alignment", {
   
   # Base data with clear cluster structure
   base_data <- rbind(
-    matrix(rnorm(20 * 3, mean = c(-2, 0, 0)), 20, 3),  # Cluster A
-    matrix(rnorm(20 * 3, mean = c(2, 0, 0)), 20, 3)    # Cluster B
+    sweep(matrix(rnorm(20 * 3), 20, 3), 2, c(-2, 0, 0), "+"),  # Cluster A
+    sweep(matrix(rnorm(20 * 3), 20, 3), 2, c(2, 0, 0), "+")    # Cluster B
   )
   labels <- rep(c("A", "B"), each = 20)
+  # Qualify the fixture itself before testing an alignment algorithm.
+  separation <- colMeans(base_data[labels == "B", ]) -
+    colMeans(base_data[labels == "A", ])
+  expect_gt(separation[1], 3)
+  expect_lt(max(abs(separation[2:3])), 1)
   
   # Create rotation matrix
   theta <- pi/6  # 30 degrees

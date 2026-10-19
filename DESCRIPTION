@@ -7,6 +7,7 @@ Description: Provides tools for manifold alignment and domain adaptation across 
 License: MIT + file LICENSE
 Encoding: UTF-8
 Imports:
+    digest,
     Matrix,
     eigencore (>= 1.0.3),
     PRIMME,
@@ -28,6 +29,7 @@ Imports:
     RANN,
     clue
 Suggests:
+    albersdown,
     pkgdown,
     testthat (>= 3.0.0),
     FNN,
@@ -36,6 +38,8 @@ Suggests:
     knitr,
     multidesign,
     proxy,
+    lobstr,
+    matrixStats,
     ps,
     pkgload,
     rmarkdown,
@@ -61,6 +65,7 @@ BugReports: https://github.com/bbuchsbaum/manifoldalign/issues
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Remotes:
+    cran/PRIMME@7264c93fb8345a11c9fc31c7b37780b326b02581,
     bbuchsbaum/adjoin,
     bbuchsbaum/genpca,
     bbuchsbaum/multidesign,

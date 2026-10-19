@@ -19,7 +19,7 @@ test_that("linear_sim_embed recovers known latent subspace", {
 
   fit   <- linear_sim_embed(Xobs, T = Tstar, ncomp = 2,
                             sigma_P = 1, alpha_p = 0.05,
-                            maxit = 800, tol = 1e-7, verbose = FALSE)
+                            maxit = 5000, tol = 1e-7, verbose = FALSE)
 
   # Align to ground truth with Procrustes
   Yhat  <- fit$scores

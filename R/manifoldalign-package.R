@@ -7,8 +7,8 @@
 #' @useDynLib manifoldalign, .registration = TRUE
 #' @importFrom graphics axis hist
 #' @importFrom grDevices heat.colors
-#' @importFrom stats aggregate cov IQR lm median model.frame model.matrix model.response prcomp predict runif
-#' @importFrom utils modifyList setTxtProgressBar txtProgressBar write.csv
+#' @importFrom stats ave coef sd setNames aggregate cov IQR lm median model.frame model.matrix model.response prcomp predict runif
+#' @importFrom utils capture.output modifyList setTxtProgressBar txtProgressBar write.csv
 "_PACKAGE"
 
-utils::globalVariables(c("anchors", "i", "j", "k", "v", "value"))
+utils::globalVariables(c("benchmark_label", "anchors", "i", "j", "k", "v", "value"))
