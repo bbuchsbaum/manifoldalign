@@ -196,6 +196,88 @@ compute_rank_matrices <- function(strata, sv_thresh = 1) {
   }
 }
 
+# Orthonormal basis Q (n x K, sparse) of the per-domain constant vectors for
+# the domain index `block_id` (one entry per sample): column k is the
+# indicator of domain k divided by sqrt(n_k). The embedding is solved on the
+# orthogonal complement of span(Q).
+#' @noRd
+.lowrank_constant_basis <- function(block_id) {
+  g <- match(block_id, unique(block_id))
+  sizes <- tabulate(g)
+  Matrix::sparseMatrix(
+    i = seq_along(g),
+    j = g,
+    x = 1 / sqrt(sizes[g]),
+    dims = c(length(g), length(sizes))
+  )
+}
+
+# Projector P = I - Q Q' onto the complement of the per-domain constant
+# vectors, as a function: it removes the per-domain mean of each column of x
+# in O(n) per column, without forming P or Q.
+#' @noRd
+.lowrank_projector <- function(block_id) {
+  g <- match(block_id, unique(block_id))
+  sizes <- tabulate(g)
+  function(x) {
+    if (is.null(dim(x))) {
+      return(x - (as.numeric(rowsum(x, g, reorder = FALSE)) / sizes)[g])
+    }
+    x <- as.matrix(x)
+    means <- rowsum(x, g, reorder = FALSE) / sizes
+    dimnames(means) <- NULL
+    x - means[g, , drop = FALSE]
+  }
+}
+
+#' @noRd
+.lowrank_project_complement <- function(x, block_id) {
+  .lowrank_projector(block_id)(x)
+}
+
+# Smallest eigenpairs of the symmetric matrix A restricted to the orthogonal
+# complement of the per-domain constant vectors, i.e. of P A P on range(P).
+# `sigma` must exceed the largest eigenvalue of A; the constraint directions
+# are placed at `sigma` so that they are never among the smallest eigenpairs.
+# PRIMME's own `ortho` argument is not used because it does not converge when
+# the constrained span is not invariant under A.
+#' @noRd
+.lowrank_eigs_restricted <- function(A, k, block_id, sigma, dense_max = 2000L) {
+  n <- nrow(A)
+  n_free <- n - length(unique(block_id))
+  k <- as.integer(min(k, n_free))
+  P <- .lowrank_projector(block_id)
+  deflated <- function(x, ...) {
+    px <- P(x)
+    apx <- A %*% px
+    apx <- if (is.null(dim(x))) as.numeric(apx) else as.matrix(apx)
+    P(apx) + sigma * (x - px)
+  }
+
+  if (.primme_available()) {
+    eig <- PRIMME::eigs_sym(deflated, NEig = k, which = "SA", n = n, isreal = TRUE,
+                            method = "PRIMME_DEFAULT_MIN_MATVECS")
+    vals <- eig$values
+    vecs <- eig$vectors
+  } else if (n <= dense_max) {
+    Qd <- as.matrix(.lowrank_constant_basis(block_id))
+    N <- qr.Q(qr(Qd), complete = TRUE)[, -seq_len(ncol(Qd)), drop = FALSE]
+    e <- eigen(crossprod(N, as.matrix(A %*% N)), symmetric = TRUE)
+    # eigen() returns eigenvalues in decreasing order.
+    idx <- rev(seq_len(n_free))[seq_len(k)]
+    vals <- e$values[idx]
+    vecs <- N %*% e$vectors[, idx, drop = FALSE]
+  } else {
+    eig <- RSpectra::eigs_sym(deflated, k = k, n = n, which = "SA")
+    vals <- eig$values
+    vecs <- eig$vectors
+  }
+
+  ord <- order(vals)
+  list(values = vals[ord],
+       vectors = P(vecs[, ord, drop = FALSE]))
+}
+
 #' @noRd
 .make_shifted_op <- function(Z_op, n, c_bound) {
   function(x, ...) {
@@ -215,18 +297,34 @@ compute_rank_matrices <- function(strata, sv_thresh = 1) {
 #' @param ... Additional arguments passed to specific methods
 #'
 #' @details
-#' Low-rank alignment optimizes the objective function Z = (1-μ) * M + 2μ * L 
-#' where M captures low-rank structure and L is the graph Laplacian from 
-#' similarity matrix. The method balances preserving low-rank structure 
-#' (μ=0) with enforcing similarity constraints (μ=1).
-#' 
+#' Low-rank alignment (Boucher, Carey, Mahadevan & Dyar, 2015) builds the
+#' matrix Z = (1-μ) * M + 2μ * L, where M = (I-R)ᵀ(I-R) is the block-diagonal
+#' low-rank reconstruction term (R_k = U_k diag(1 - 1/s²) U_kᵀ per domain) and
+#' L is the graph Laplacian of the cross-domain similarity matrix. The method
+#' balances preserving low-rank structure (μ=0) with enforcing similarity
+#' constraints (μ=1).
+#'
+#' **Estimand.** The embedding F (n x ncomp, rows are samples of all domains
+#' stacked in order) minimises trace(Fᵀ Z F) subject to Fᵀ F = I and
+#' Fᵀ e_k = 0 for every domain indicator vector e_k, i.e. the `ncomp`
+#' smallest eigenvectors of Z restricted to the orthogonal complement of the
+#' per-domain constant vectors. Each domain's coordinates therefore have zero
+#' mean. As in Laplacian eigenmaps, this removes trivial solutions: with
+#' centred features every R_k annihilates the domain constant, so the global
+#' constant vector is an exact eigenvector of Z (eigenvalue 1-μ) and, without
+#' the constraint, it is returned as a zero-variance component whenever the
+#' label term dominates. Per-domain offsets carry no within-domain structure
+#' and cannot be reproduced by the no-intercept linear projection fitted to
+#' centred data. Both solvers solve this same restricted problem.
+#'
 #' **Semi-supervised Learning Support:**
 #' The algorithm handles NA labels gracefully. Unlabeled samples:
 #' - Still contribute to the low-rank structure term M through their data
 #' - Do not participate in the similarity constraints (L term)
 #' - Receive coordinates in the joint embedding space
-#' - Create isolated nodes that produce zero eigenvalues (automatically 
-#'   skipped)
+#' - Are isolated nodes of the similarity graph. For μ < 1, M is positive
+#'   definite, so they do not create zero eigenvalues; for μ = 1 the zero
+#'   eigenvalues of Z (null modes of L) are skipped.
 #'
 #' @return The return value depends on the specific method. For hyperdesign 
 #'   objects, returns a multiblock_biprojector object containing alignment 
@@ -279,8 +377,8 @@ lowrank_align <- function(data, y, ...) {
 #' @param ncomp Number of components to extract (default: 2)
 #' @param simfun Function to compute similarity matrix from labels. Should 
 #'   handle NA labels gracefully (e.g., created with createSimFun())
-#' @param mu Balance parameter between low-rank (μ=0) and similarity (μ=1) 
-#'   terms (default: 0.5)
+#' @param mu Balance parameter between low-rank (μ=0) and similarity (μ=1)
+#'   terms (default: 0.5). Must be a single number in `[0, 1]`.
 #' @param lambda Regularization parameter for glmnet. If NULL (default), uses 
 #'   cross-validation to select optimal lambda via cv.glmnet. If specified, 
 #'   uses the provided value directly.
@@ -302,6 +400,9 @@ lowrank_align <- function(data, y, ...) {
 #'   eigendecomposition for up to 2000 samples, or RSpectra), matching the
 #'   original implementation. `"operator"` keeps low-rank factors and uses
 #'   RSpectra with a matrix-vector operator to reduce memory and runtime.
+#'   Both restrict the eigenproblem to the complement of the per-domain
+#'   constant vectors by projecting inside the matrix-vector product (the
+#'   projector is never formed), so they target the same embedding.
 #'
 #' @details
 #' The scale_M parameter controls whether to apply eigenvalue-based scaling:
@@ -321,9 +422,13 @@ lowrank_align <- function(data, y, ...) {
 #' Samples with NA labels are supported through the following mechanism:
 #' - They contribute to the low-rank reconstruction term M = (I-R)ᵀ(I-R)
 #' - They do not participate in similarity constraints (zero rows/columns in C)
-#' - They create isolated nodes with zero degree, producing zero eigenvalues
-#' - The algorithm automatically detects and skips these zero modes
+#' - They are isolated nodes with zero degree; zero eigenvalues of Z (which
+#'   occur only for μ = 1) are skipped
 #' - Final embedding includes coordinates for all samples (labeled and unlabeled)
+#'
+#' Each domain needs at least two samples for its coordinates to carry
+#' within-domain structure; a single-sample domain is embedded at the origin,
+#' and an error is raised when no domain has two or more samples.
 #'
 #' @export
 lowrank_align.hyperdesign <- function(data, y,
@@ -342,6 +447,9 @@ lowrank_align.hyperdesign <- function(data, y,
   if (!is.numeric(sv_thresh) || length(sv_thresh) != 1L || !is.finite(sv_thresh) ||
       sv_thresh < 0) {
     stop("`sv_thresh` must be a finite non-negative number.", call. = FALSE)
+  }
+  if (!is.numeric(mu) || length(mu) != 1L || !is.finite(mu) || mu < 0 || mu > 1) {
+    stop("`mu` must be a single number in [0, 1].", call. = FALSE)
   }
   y <- rlang::enquo(y)
 
@@ -449,12 +557,26 @@ lowrank_align.hyperdesign <- function(data, y,
   k_skip <- length(iso)
 
   if (k_skip > 0) {
-    message("Detected ", k_skip, " isolated nodes (unlabeled samples). Will skip corresponding zero eigenvalue modes.")
+    message("Detected ", k_skip, " isolated nodes (unlabeled samples); they are ",
+            "embedded through the low-rank term only.")
   }
 
   Ls <- Matrix::Diagonal(x = deg) - C_block
 
-  nev <- min(ncomp + k_skip + 4L, max(1L, ninstances - 2L))
+  # The embedding is solved on the orthogonal complement of the per-domain
+  # constant vectors (each domain's coordinates have zero mean). With centred
+  # features, every domain constant satisfies R e_k = 0, so M e_k = e_k and the
+  # global constant 1 is an exact eigenvector of Z (L 1 = 0) with eigenvalue
+  # 1 - mu; without the constraint it is returned as a zero-variance component
+  # whenever the label term dominates.
+  n_free <- ninstances - length(unique(block_id))
+  if (n_free < 1L) {
+    stop("lowrank_align() needs at least one domain with two or more samples: ",
+         "per-domain constant directions carry no within-domain structure.",
+         call. = FALSE)
+  }
+
+  nev <- min(ncomp + k_skip + 4L, max(1L, n_free - 1L))
 
   if (solver == "explicit") {
     Rs <- purrr::map2(R_factors, sample_sizes, .factors_to_R)
@@ -463,6 +585,8 @@ lowrank_align.hyperdesign <- function(data, y,
     R_i <- Matrix::Diagonal(ninstances) - R_block
     M <- crossprod(R_i, R_i)
 
+    # lambda_max(M) <= 1 because 0 < a < 1; scaled below with M when scale_M.
+    m_upper <- 1
     if (scale_M) {
       s_m <- .lowrank_eigs_sym(M, 1L, which = "LA")
       s_l <- .lowrank_eigs_sym(Ls, 1L, which = "LA")
@@ -470,6 +594,7 @@ lowrank_align.hyperdesign <- function(data, y,
           s_l$values[1] > 0 && is.finite(s_l$values[1])) {
         e_ratio <- s_l$values[1] / s_m$values[1]
         M <- M * e_ratio
+        m_upper <- e_ratio
         if (getOption("lowrank_align.verbose", FALSE)) {
           message("Applied M scaling with ratio: ", round(e_ratio, 4),
                   ". This changes the objective function - consider adjusting mu.")
@@ -479,7 +604,12 @@ lowrank_align.hyperdesign <- function(data, y,
 
     Z <- (1 - mu) * M + (2 * mu * Ls)
 
-    eig <- .lowrank_eigs_sym(Z, nev, which = "SA")
+    # Rigorous upper bounds on lambda_max(Z): lambda_max(M) <= m_upper and
+    # lambda_max(L) <= 2 max(deg), or Gershgorin on Z itself. The constraint
+    # directions are shifted just above the smaller bound.
+    z_upper <- min((1 - mu) * m_upper + 4 * mu * max(deg),
+                   max(Matrix::rowSums(abs(Z))))
+    eig <- .lowrank_eigs_restricted(Z, nev, block_id, sigma = 1.01 * z_upper + 1e-8)
     evals <- eig$values
     vecs <- eig$vectors
 
@@ -517,11 +647,21 @@ lowrank_align.hyperdesign <- function(data, y,
       c_bound <- max(1, lamM + lamL + 1e-6)
     }
 
-    B_op <- .make_shifted_op(Z_op, ninstances, c_bound)
+    # P (I - Z / c) P with P = I - Q Q': the constraint directions get
+    # eigenvalue 0 and the complement keeps 1 - lambda / c.
+    P <- .lowrank_projector(block_id)
+    B_shift <- .make_shifted_op(Z_op, ninstances, c_bound)
+    B_op <- function(x, ...) P(B_shift(P(x)))
 
     eig <- RSpectra::eigs_sym(B_op, k = nev, n = ninstances, which = "LM")
     evals <- c_bound * (1 - eig$values)
     vecs <- eig$vectors
+    # Discard any returned constraint direction (only possible when nev is
+    # close to n_free) and remove round-off outside the complement.
+    in_constraint <- colSums(vecs^2 - P(vecs)^2) > 0.5
+    evals <- evals[!in_constraint]
+    vecs <- P(vecs[, !in_constraint, drop = FALSE])
+    vecs <- sweep(vecs, 2, sqrt(colSums(vecs^2)), "/")
   }
 
   keep <- which(evals > 1e-8)
