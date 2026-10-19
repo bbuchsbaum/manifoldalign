@@ -47,26 +47,37 @@ test_that("default R run does not stop after a single update", {
 
 test_that("an exhausted iteration budget is reported as non-convergence", {
   X <- lse_fixture()
+  # The public function refuses to return unconverged weights, with or
+  # without logging.
+  for (verbose in c(FALSE, TRUE)) {
+    capture.output(
+      expect_error(
+        expect_warning(
+          linear_sim_embed(X, ncomp = 2, sigma_P = 1, maxit = 3, tol = 1e-12,
+                           verbose = verbose),
+          "did not converge within 3 iterations"
+        ),
+        "failed to converge: MAXITER_REACHED"
+      )
+    )
+  }
+
+  # The optimizer itself reports the exhausted budget and a full trace.
+  ns <- asNamespace("manifoldalign")
+  Xs <- scale(X)
+  T <- ns$gaussian_sim(Xs, 1)
+  M <- matrix(1, nrow(Xs), nrow(Xs))
+  diag(M) <- 0
+  W0 <- svd(Xs, nu = 0, nv = 2)$v
   expect_warning(
-    fit <- linear_sim_embed(X, ncomp = 2, sigma_P = 1, maxit = 3, tol = 0),
+    res <- ns$.optimize_W_enhanced(Xs, T, M, W0, sigma = 1, maxit = 3,
+                                   tol = 1e-12),
     "did not converge within 3 iterations"
   )
-  expect_equal(fit$convergence$convergence, 1)
-  expect_identical(fit$convergence$message, "MAXITER_REACHED")
-  expect_identical(fit$convergence$iterations, 3L)
-  expect_length(fit$objective_trace, 4L)
-  expect_output(print(fit), "Convergence: FAILED \\(MAXITER_REACHED\\)")
-
-  # Same budget with verbose logging gives the same answer and status.
-  capture.output(
-    expect_warning(
-      fit_v <- linear_sim_embed(X, ncomp = 2, sigma_P = 1, maxit = 3, tol = 0,
-                                verbose = TRUE),
-      "did not converge"
-    )
-  )
-  expect_identical(fit_v$weights, fit$weights)
-  expect_identical(fit_v$convergence, fit$convergence)
+  expect_equal(res$convergence, 1)
+  expect_identical(res$message, "MAXITER_REACHED")
+  expect_identical(res$iterations, 3L)
+  expect_length(res$trace, 4L)
 })
 
 test_that("weights are returned as a base matrix", {

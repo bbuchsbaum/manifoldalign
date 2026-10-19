@@ -329,9 +329,11 @@ test_that("Alpha parameter scaling works consistently", {
   alpha_values <- c(0.01, 0.1, 0.5, 0.9)
   
   for (alpha in alpha_values) {
+    # ADAM needs 150-180 updates here, so it gets the default budget;
+    # L-BFGS-B keeps maxit = 30.
     result_R <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P,
                                 ncomp = ncomp, alpha_p = alpha,
-                                maxit = maxit, use_cpp = FALSE, verbose = FALSE)
+                                maxit = 500, use_cpp = FALSE, verbose = FALSE)
     
     result_cpp <- linear_sim_embed(X, T = T, M = M, sigma_P = sigma_P,
                                   ncomp = ncomp, alpha_p = alpha,

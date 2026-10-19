@@ -63,3 +63,7 @@ repomix-output.txt
 # Test strategy docs (not test code)
 tests/TESTING_GUIDE.md
 tests/testthat/COUPLED_DIAG_MATH_TESTS.md
+
+# testthat failure snapshots
+tests/testthat/_problems/
+tests/testthat/testthat-problems.rds

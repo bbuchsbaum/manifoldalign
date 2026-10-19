@@ -17,9 +17,13 @@ test_that("linear_sim_embed recovers known latent subspace", {
   D2    <- as.matrix(dist(Xlat))^2
   Tstar <- exp(-D2 / median(D2))
 
+  # L-BFGS-B converges here in about 300 iterations; ADAM needs more than
+  # 1000 updates on this n = 400 problem.
   fit   <- linear_sim_embed(Xobs, T = Tstar, ncomp = 2,
                             sigma_P = 1, alpha_p = 0.05,
-                            maxit = 800, tol = 1e-7, verbose = FALSE)
+                            maxit = 800, tol = 1e-7, use_cpp = TRUE,
+                            verbose = FALSE)
+  expect_equal(fit$convergence$convergence, 0L)
 
   # Align to ground truth with Procrustes
   Yhat  <- fit$scores

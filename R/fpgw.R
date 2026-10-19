@@ -418,7 +418,7 @@ fw_fpgw <- function(C, Cx, Cy, p, q,
   n1 <- length(p)
   n2 <- length(q)
   P <- as.matrix(P0)
-  .fpgw_check_plan(P, p, q, variant, rho, what = "starting plan")
+  .fpgw_check_plan(P, p, q, variant, rho, what = "starting plan P0")
 
   Cx2 <- Cx^2
   Cy2 <- Cy^2
