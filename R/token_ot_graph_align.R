@@ -361,7 +361,7 @@ resolve_token_ot_graph_align_control <- function(control) {
     } else {
       pc <- tryCatch({
         if (requireNamespace("irlba", quietly = TRUE) && k_raw < min(nrow(Xc), ncol(Xc))) {
-          irlba::irlba(Xc, nv = k_raw, nu = 0)
+          .irlba_det(Xc, nv = k_raw, nu = 0)
         } else {
           stats::prcomp(Xc, rank. = k_raw)
         }

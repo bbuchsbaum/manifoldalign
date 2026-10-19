@@ -250,7 +250,7 @@ compute_dataset_pair_scores_ <- function(domains, algo, n_landmarks = 200, q = 8
     qq <- min(q, ncol(Xs), nrow(Xs))
     pc <- tryCatch({
       if (requireNamespace("irlba", quietly = TRUE) && qq < min(nrow(Xs), ncol(Xs))) {
-        irlba::irlba(Xs, nv = qq, nu = qq)
+        .irlba_det(Xs, nv = qq, nu = qq)
       } else {
         svd(Xs, nu = qq, nv = qq)
       }

@@ -336,7 +336,7 @@ multiscale_manifold_align <- function(data, ...) {
   }
 
   sv <- if (requireNamespace("irlba", quietly = TRUE) && k < min(dim(A))) {
-    irlba::irlba(A, nv = k, nu = 0)
+    .irlba_det(A, nv = k, nu = 0)
   } else {
     s <- svd(as.matrix(A), nu = 0, nv = k)
     list(v = s$v, d = s$d[seq_len(k)])
@@ -425,21 +425,12 @@ multiscale_manifold_align <- function(data, ...) {
     stop("Need at least one eigenpair.", call. = FALSE)
   }
 
-  if (requireNamespace("RSpectra", quietly = TRUE) && k < (n - 1L)) {
-    eig <- safe_compute(
-      RSpectra::eigs_sym(A, k = k, which = "LA"),
-      "Diffusion eigendecomposition failed in multiscale_manifold_align()."
-    )
-    vals <- as.numeric(eig$values)
-    vecs <- as.matrix(eig$vectors)
-  } else {
-    eig <- eigen(A, symmetric = TRUE)
-    vals <- as.numeric(eig$values[seq_len(k)])
-    vecs <- as.matrix(eig$vectors[, seq_len(k), drop = FALSE])
-  }
-
-  ord <- order(vals, decreasing = TRUE)
-  list(values = vals[ord], vectors = vecs[, ord, drop = FALSE])
+  # The shared solver checks convergence and falls back to a dense solve;
+  # unconverged ARPACK vectors depend on its random start, which made fits
+  # vary between runs with the same seed.
+  eig <- .sym_eigs(A, k, which = "LA",
+                   context = "Diffusion eigendecomposition in multiscale_manifold_align()")
+  list(values = eig$values, vectors = eig$vectors)
 }
 
 .msa_diffusion_eig_randomized <- function(A, k, ctrl) {
@@ -484,7 +475,7 @@ multiscale_manifold_align <- function(data, ...) {
   }
 
   sv <- if (requireNamespace("irlba", quietly = TRUE) && k < min(dim(block))) {
-    irlba::irlba(block, nu = k, nv = 0)
+    .irlba_det(block, nu = k, nv = 0)
   } else {
     s <- svd(block, nu = k, nv = 0)
     list(u = s$u[, seq_len(k), drop = FALSE], d = s$d[seq_len(k)])

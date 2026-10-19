@@ -298,3 +298,21 @@ test_that("multiscale_manifold_align can tune core diffusion controls", {
   expect_true(fit$control$rank_per_domain %in% c(8L, 10L))
   expect_true(fit$control$max_levels %in% c(2L, 3L))
 })
+
+test_that("the exact diffusion eigensolve is converged and deterministic", {
+  # Regression: unconverged ARPACK vectors (1 of 13 converged) were returned,
+  # so benchmark fits differed between runs with the same seed.
+  set.seed(11)
+  X <- matrix(rnorm(80 * 3), 80, 3)
+  A <- exp(-as.matrix(dist(X))^2)
+  diag(A) <- 0
+  k <- 13L
+  eig <- manifoldalign:::.msa_diffusion_eig_exact(A, k)
+  ref <- eigen((A + t(A)) / 2, symmetric = TRUE)
+  expect_equal(eig$values, ref$values[seq_len(k)], tolerance = 1e-8)
+  # Same invariant subspace as the dense oracle.
+  P <- eig$vectors %*% t(eig$vectors)
+  Q <- ref$vectors[, seq_len(k)] %*% t(ref$vectors[, seq_len(k)])
+  expect_lt(max(abs(P - Q)), 1e-6)
+  expect_identical(manifoldalign:::.msa_diffusion_eig_exact(A, k), eig)
+})

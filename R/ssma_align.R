@@ -688,7 +688,7 @@ resolve_ssma_align_control <- function(control = NULL) {
   }
 
   sv <- if (requireNamespace("irlba", quietly = TRUE) && k < min(dim(Xw))) {
-    irlba::irlba(Xw, nv = k, nu = 0)
+    .irlba_det(Xw, nv = k, nu = 0)
   } else {
     s <- svd(Xw, nu = 0, nv = k)
     list(v = s$v[, seq_len(k), drop = FALSE], d = s$d[seq_len(k)])

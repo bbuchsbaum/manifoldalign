@@ -222,3 +222,11 @@ new_alignment_result <- function(scores,
   Xt <- multivarious::init_transform(templ, X)
   list(preproc = attr(Xt, "preproc") %||% templ, transformed = Xt)
 }
+
+# irlba() draws its starting vector from R's random number stream, so an
+# unseeded call can return a different (equally valid) basis in every
+# process. Run it under a fixed local seed: results are reproducible and the
+# caller's RNG stream is restored.
+.irlba_det <- function(A, ..., seed = 1L) {
+  .with_local_seed(seed, irlba::irlba(A, ...))
+}

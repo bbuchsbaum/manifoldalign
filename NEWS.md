@@ -181,7 +181,12 @@ These fix defects found in a package review; several change fitted output.
 * **`assess_ssma()`**: missing predictions count in the denominator and
   coverage and solver availability are reported.
 * **Random numbers**: package functions no longer reset the caller's RNG
-  stream; seeded steps restore it afterwards.
+  stream; seeded steps restore it afterwards. Truncated SVDs through `irlba`
+  (SSMA, Multiscale, Token-OT, `align_many()` consensus) now use a fixed local
+  seed for their starting vectors, so fits no longer depend on the caller's
+  RNG state (Multiscale benchmark accuracy varied between runs with the same
+  seed), and Multiscale's exact diffusion eigensolve goes through the shared
+  converged-or-dense solver instead of returning unconverged ARPACK vectors.
 * **Out-of-sample preprocessing**: `oos_predict()` for fits that store one
   pre-processor per domain now applies the training statistics to new rows;
   it used to refit the pre-processor on the new rows (so, for example, a
