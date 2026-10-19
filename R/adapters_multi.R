@@ -1,10 +1,10 @@
-#' Multi-view aligner adapters (native delegates)
-#'
-#' These adapters declare native multi-domain support and delegate
-#' to existing multi-view functions in this package. Their `fit_many()`
-#' methods translate the generic latent dimension `k` (as passed by
-#' [align_many()]) into the delegate's `ncomp` argument; passing both `k` and
-#' a different `ncomp` is an error.
+# Multi-view aligner adapters (native delegates)
+#
+# These adapters declare native multi-domain support and delegate
+# to existing multi-view functions in this package. Their `fit_many()`
+# methods translate the generic latent dimension `k` (as passed by
+# [align_many()]) into the delegate's `ncomp` argument; passing both `k` and
+# a different `ncomp` is an error.
 
 # Resolve the generic `k` and the method-specific `ncomp` into one value.
 .native_ncomp <- function(k, ncomp, aligner) {
