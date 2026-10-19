@@ -249,16 +249,15 @@ test_that("dataset and algorithm failures remain distinguishable", {
 })
 
 test_that("real-data scripts pin resume, license, and evidence-scope contracts", {
-  root <- normalizePath(test_path("..", ".."), mustWork = TRUE)
-  prepare <- readLines(file.path(
-    root, "inst", "benchmarks", "prepare_real_alignment_data.R"
-  ), warn = FALSE)
-  extract <- readLines(file.path(
-    root, "inst", "benchmarks", "extract_so2sat_ci_fixture.R"
-  ), warn = FALSE)
-  runner <- readLines(file.path(
-    root, "inst", "benchmarks", "run_real_alignment_benchmarks.R"
-  ), warn = FALSE)
+  # Source checkout: inst/benchmarks; installed package: benchmarks/.
+  bench_script <- function(name) {
+    source_path <- test_path("..", "..", "inst", "benchmarks", name)
+    if (file.exists(source_path)) return(source_path)
+    system.file("benchmarks", name, package = "manifoldalign", mustWork = TRUE)
+  }
+  prepare <- readLines(bench_script("prepare_real_alignment_data.R"), warn = FALSE)
+  extract <- readLines(bench_script("extract_so2sat_ci_fixture.R"), warn = FALSE)
+  runner <- readLines(bench_script("run_real_alignment_benchmarks.R"), warn = FALSE)
 
   expect_true(any(grepl("--continue-at", prepare, fixed = TRUE)))
   expect_true(any(grepl("MANIFOLDALIGN_ACCEPT_SO2SAT_LICENSE", prepare,

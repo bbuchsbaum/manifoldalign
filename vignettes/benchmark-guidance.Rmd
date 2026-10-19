@@ -31,7 +31,9 @@ practical method guidance.
 ## Load benchmark outputs
 
 ```{r read-results}
-bench_dir <- normalizePath(file.path("..", "dev-scripts", "benchmarks"), mustWork = TRUE)
+# Shipped copies of dev-scripts/benchmarks outputs (kept identical by a test).
+bench_dir <- system.file("extdata", "benchmarks", package = "manifoldalign",
+                         mustWork = TRUE)
 
 rank_path <- file.path(bench_dir, "toy_feature_aligners_regime_ranks.csv")
 seed_path <- file.path(bench_dir, "toy_feature_seed_audit_summary.csv")

@@ -2,6 +2,12 @@ library(testthat)
 library(manifoldalign)
 
 alignment_ci_root <- normalizePath(test_path("..", ".."), mustWork = TRUE)
+# The contract tooling lives in the source tree and is not part of the built
+# package; the PR evidence tier runs these tests from the source checkout.
+skip_if_not(
+  file.exists(file.path(alignment_ci_root, "tools", "alignment-test-contract.R")),
+  "alignment CI contract tooling is only available in the source checkout"
+)
 sys.source(
   file.path(alignment_ci_root, "tools", "alignment-test-contract.R"),
   envir = environment()

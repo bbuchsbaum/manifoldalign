@@ -205,3 +205,16 @@ test_that("generated comparison table cannot drift from registry", {
   }
   expect_identical(copies[[1L]], copies[[2L]])
 })
+
+test_that("shipped benchmark tables match their dev-scripts sources", {
+  # vignettes/benchmark-guidance.Rmd reads the copies in inst/extdata.
+  source_dir <- test_path("..", "..", "dev-scripts", "benchmarks")
+  skip_if_not(dir.exists(source_dir), "dev-scripts live in the source checkout")
+  for (name in c("toy_feature_aligners_regime_ranks.csv",
+                 "toy_feature_seed_audit_summary.csv")) {
+    shipped <- system.file("extdata", "benchmarks", name, package = "manifoldalign")
+    expect_true(nzchar(shipped), info = name)
+    expect_identical(readLines(shipped), readLines(file.path(source_dir, name)),
+                     info = name)
+  }
+})
