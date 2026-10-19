@@ -104,19 +104,32 @@ is the exact correspondence-only model, so the effect of the features can be
 tested directly.
 
 ```r
+set.seed(1)
+n_events <- 40
+latent <- matrix(rnorm(n_events * 3), n_events, 3)
+make_domain <- function(p) {
+  rows <- rep(seq_len(n_events), times = 2)          # two repeats per event
+  X <- latent[rows, ] %*% matrix(rnorm(3 * p), 3, p) +
+    matrix(rnorm(length(rows) * p, sd = 0.5), length(rows), p)
+  list(X = X, design = data.frame(event_id = paste0("e", rows),
+                                  repeat_id = rep(1:2, each = n_events)))
+}
+domains <- list(a = make_domain(20), b = make_domain(25), c = make_domain(18))
+
 fit <- sumcor_align(
-  X_list, design = design_list,
+  lapply(domains, `[[`, "X"),
+  design = lapply(domains, `[[`, "design"),
   event_id = "event_id", repeat_id = "repeat_id",
-  event_features = list(f1 = F1, f2 = F2),
-  ncomp = 10,
-  control = sumcor_control(beta = 0.5, covariance_shrinkage = 0.1)
+  ncomp = 3,
+  control = sumcor_control(beta = 0, basis_rank = 10)
 )
 
 # Encode new observations of one domain
-Z_new <- oos_predict(fit, X_new, side = "domain3")
+Z_new <- oos_predict(fit, domains$c$X[1:5, ], side = "c")
 
 # Add a held-out domain against the frozen reference
-fit2 <- calibrate_domain(fit, X_heldout, design = design_heldout,
+heldout <- make_domain(22)
+fit2 <- calibrate_domain(fit, heldout$X, design = heldout$design,
                          domain_name = "heldout")
 ```
 
@@ -128,7 +141,10 @@ places each feature column at the weighted barycentre of the samples it loads
 on, so features from different domains can be compared in the same space:
 
 ```r
-fit  <- rapid_ma(X, relations = relations, ncomp = 16)
+set.seed(1)
+X <- list(domain1 = matrix(abs(rnorm(40 * 6)), 40, 6),
+          domain2 = matrix(abs(rnorm(35 * 6)), 35, 6))
+fit  <- rapid_ma(X, ncomp = 3L)
 dual <- rapid_ma_feature_scores(fit, X)
 dual$scores$domain1   # feature x component coordinates for one domain
 dual$pooled           # equal-weight mean across domains
