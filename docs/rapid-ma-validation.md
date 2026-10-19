@@ -218,8 +218,10 @@ Not established:
 The next accuracy work is a new cross-scene or independent-sensor benchmark
 with a fit-only reliability gate for structural OOS views. The next performance
 work is approximate/reusable relation indexing plus warm-started UOT. The
-scaling benchmark establishes near-linear growth through 220,000 total nodes;
-the measured million-node attempt is runtime-bound, not memory-bound.
+regenerated scaling benchmark shows slightly super-linear runtime (slope 1.24)
+and linear retained state through 110,000 total nodes on a 4-core machine; the
+million-node attempt on the previous machine was runtime-bound, not
+memory-bound.
 
 ## Artifacts
 
@@ -242,5 +244,5 @@ cd43302ff8b3622c2e3323ecb9f89c2542f2ede9995bd91e92c818df83573354  rapid-ma-valid
 f35c7d1cc8f4a319e044057169c925606933cb07854d39bce4a313c3d964c555  rapid-ma-ablation-raw.csv
 24d0a972b655694561ade0feccde8252d5ed4789d81717ce0c8924f675617fcd  rapid-ma-ablation-summary.csv
 5003ad04bbc3262e9aba2caba3bebc41cd355f53153b25b2167f66a8b991659d  rapid-ma-ablation-metadata.txt
-8fcbca6d80391b28bd7e6bc9fa108bd65dbc25bb0fb4ad71716a1b14f1da73cf  rapid-ma-regeneration-provenance.txt
+fffd98245276f7c51872ef985d7ceaae23bdb693aed42bfd047218ffa25d50d7  rapid-ma-regeneration-provenance.txt
 ```

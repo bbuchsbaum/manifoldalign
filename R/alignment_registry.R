@@ -299,8 +299,10 @@ alignment_method_registry <- function() {
         evidence_id = "docs/evidence/alignment-tournament-v2/raw_results.csv",
         note = paste0(
           "The current full-scoring external-process tournament completed ",
-          "22,600 total nodes. An older runner completed 220,000; its ",
-          "1,000,002-node attempt timed out and is not a validated ceiling."
+          "22,600 total nodes. The regenerated scaling runner completed ",
+          "110,000 total nodes on a 4-core machine (220,000 exceeded its ",
+          "four-minute cap there; an older run on a faster machine completed ",
+          "it), and the 1,000,002-node attempt timed out."
         )
       ),
       summary = paste0(
@@ -343,8 +345,8 @@ alignment_method_registry <- function() {
       ),
       optional_dependencies = c("RcppAnnoy", "Rnanoflann"),
       validated_scale_ceiling = .alignment_registry_scale(
-        "stale", 11000L, 22000L, "docs/rapid-ma-scaling-summary.csv",
-        "11,000 total nodes completed in an older runner; 22,000 timed out."
+        "validated", 5500L, 11000L, "docs/rapid-ma-scaling-summary.csv",
+        "Regenerated 2026-10-19 (4-core x86_64, ten-second cap): 5,500 total nodes completed; 11,000 timed out."
       ),
       summary = paste0(
         "Sparse token/candidate OT over graphs derived from the feature matrix; ",
@@ -384,8 +386,8 @@ alignment_method_registry <- function() {
         "O(E + N k)"
       ),
       validated_scale_ceiling = .alignment_registry_scale(
-        "stale", 11000L, 22000L, "docs/rapid-ma-scaling-summary.csv",
-        "11,000 total nodes completed in an older runner; 22,000 timed out."
+        "validated", 11000L, 22000L, "docs/rapid-ma-scaling-summary.csv",
+        "Regenerated 2026-10-19 (4-core x86_64, ten-second cap): 11,000 total nodes completed; 22,000 timed out."
       ),
       summary = "Fast HKS/MNN spectral alignment on feature-derived kNN graphs."
     ),
@@ -421,8 +423,8 @@ alignment_method_registry <- function() {
         "O(E + N r)"
       ),
       validated_scale_ceiling = .alignment_registry_scale(
-        "stale", 11000L, 22000L, "docs/rapid-ma-scaling-summary.csv",
-        "11,000 total nodes completed in an older runner; 22,000 timed out."
+        "validated", 11000L, 22000L, "docs/rapid-ma-scaling-summary.csv",
+        "Regenerated 2026-10-19 (4-core x86_64, ten-second cap): 11,000 total nodes completed; 22,000 timed out."
       ),
       summary = "Semi-supervised spectral alignment using feature-derived graphs and correspondences."
     ),
@@ -504,8 +506,8 @@ alignment_method_registry <- function() {
         "O(N^2) full kernel/graph storage; reduced kernels remain stored"
       ),
       validated_scale_ceiling = .alignment_registry_scale(
-        "stale", 1100L, 2200L, "docs/rapid-ma-scaling-summary.csv",
-        "Older KEMA code completed 1,100 total nodes; current fidelity repair invalidates that ceiling."
+        "failed", NA_integer_, 550L, "docs/rapid-ma-scaling-summary.csv",
+        "Regenerated 2026-10-19: certified eigensolves rejected all three 550-node runs; 1,100 to 5,500 nodes timed out and larger tasks exceed max_dense_bytes."
       ),
       summary = paste0(
         "Semi-supervised kernel manifold alignment with repaired generalized-",

@@ -22,3 +22,14 @@ e562a46fca8eab9fc63f82493f77f2c3  inst/benchmarks/rapid_ma_matching.R
 ## BLAS/LAPACK: /opt/r45/lib/libopenblasp-r0.3.34.so (OMP_NUM_THREADS=1)
 ## R: R version 4.5.3 (2026-03-11), platform x86_64-conda-linux-gnu
 ## run timeline (UTC): accuracy 02:56:15-03:04:33; ablation 03:04:33-03:08:31; matching 03:08:31-03:11:22; all exit 0. Two other R jobs were running on other cores (load avg ~1.7-2.1).
+## scaling regeneration (rapid_ma_scaling.R)
+commit=91f23f03c5aaca9f4a55ab7b9c1fdfdc9765e3b7
+run_utc=Mon Oct 19 04:40:26 UTC 2026 to Mon Oct 19 04:53:36 UTC 2026
+working_dir=/tmp/rapid_scaling/run (no DESCRIPTION; installed build of the commit via R_LIBS)
+env=OMP_NUM_THREADS=1 LANG=C.UTF-8 RAPID_MA_PROFILE=full; no other jobs running
+md5 R/rapid_ma.R=3e43380ab781139eec75b929048bc7e8
+md5 R/rapid_ma_semisup.R=598c7bb90365153a992e49a7876dc05f
+md5 R/rapid_ma_benchmark.R=f092af35dc3dcebda2aacd99d4f59bd1
+md5 inst/benchmarks/rapid_ma_scaling.R=eeffcd76d0805ce342928a7b11b5a305
+control=pre-fix commit 78fbc05 on the same machine, RAPID_MA_COMMON_SIZES=1000,5000 RAPID_MA_RAPID_SIZES=50000 RAPID_MA_REPETITIONS=1 -> rapid-ma-scaling-control-prefix-summary.csv
+packages: eigencore 2.0.0, multivarious 0.4.0, adjoin 0.1.0, Matrix 1.7.6, RANN 2.6.2, kernlab 0.9.33

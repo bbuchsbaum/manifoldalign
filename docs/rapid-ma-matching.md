@@ -131,5 +131,5 @@ SHA-256:
 a31ebd3e57e3d3a7ea3509f32f978cf3e65349a8804708ff0c5c9f50329ee9e1  rapid-ma-matching-raw.csv
 f27657dc909b5be202a90b2b7cff0e53fe7528761d11427273320bfbb1cdba77  rapid-ma-matching-summary.csv
 89e6217e79a7dc362c0d0d7ee9c73c058b6f0a474ad4df6c1cda2837355d823a  rapid-ma-matching-metadata.txt
-8fcbca6d80391b28bd7e6bc9fa108bd65dbc25bb0fb4ad71716a1b14f1da73cf  rapid-ma-regeneration-provenance.txt
+fffd98245276f7c51872ef985d7ceaae23bdb693aed42bfd047218ffa25d50d7  rapid-ma-regeneration-provenance.txt
 ```
