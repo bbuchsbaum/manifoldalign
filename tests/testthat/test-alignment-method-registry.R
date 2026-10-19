@@ -122,17 +122,33 @@ test_that("lifecycle gate accepts the registry but recommends no unproven method
   }, logical(1))))
 })
 
-test_that("scale ceilings expose current, stale, failed, and unvalidated evidence", {
+test_that("scale ceilings follow the regenerated scaling evidence", {
   rapid <- alignment_method_info("rapid_ma")$validated_scale_ceiling
   multiscale <- alignment_method_info(
     "multiscale_manifold_align"
   )$validated_scale_ceiling
+  kema <- alignment_method_info("kema")$validated_scale_ceiling
 
   expect_identical(rapid$status, "validated")
   expect_equal(rapid$n_total, 22600L)
   expect_equal(rapid$attempted_n_total, 22600L)
-  expect_identical(multiscale$status, "failed")
-  expect_equal(multiscale$attempted_n_total, 550L)
+  # The regenerated scaling run (docs/rapid-ma-scaling-summary.csv) replaced
+  # the frozen "first 550-node cases fail" record: Multiscale completes 5,500
+  # total nodes and KEMA 1,100 within the ten-second cap.
+  expect_identical(multiscale$status, "validated")
+  expect_equal(c(multiscale$n_total, multiscale$attempted_n_total), c(5500L, 11000L))
+  expect_identical(kema$status, "validated")
+  expect_equal(c(kema$n_total, kema$attempted_n_total), c(1100L, 2200L))
+  # In the source checkout, the ceilings match the evidence file they cite.
+  evidence <- test_path("..", "..", "docs", "rapid-ma-scaling-summary.csv")
+  if (file.exists(evidence)) {
+    summary <- utils::read.csv(evidence)
+    completed <- function(method) {
+      max(summary$total_nodes[summary$method == method & summary$n_ok > 0])
+    }
+    expect_equal(completed("multiscale"), multiscale$n_total)
+    expect_equal(completed("kema"), kema$n_total)
+  }
   expect_true(any(alignment_method_table()$scale_status == "unvalidated"))
 })
 
