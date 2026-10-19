@@ -141,6 +141,12 @@ We request three components with a moderate balance (`mu = 0.35`) between the
 low-rank term `M` and the Laplacian term `L`. The operator-based solver keeps the
 computation sparse without forming dense matrices.
 
+The embedding consists of the smallest eigenvectors of
+`Z = (1 - mu) M + 2 mu L` restricted to vectors with zero mean within every
+domain. Constant and per-domain constant vectors carry no within-domain
+structure (with centred features the global constant is an exact eigenvector
+of `Z`), so they are excluded, and each domain's scores are centred.
+
 ```{r fit-lowrank}
 lowrank_fit <- lowrank_align(
   semi_hd,
@@ -208,9 +214,8 @@ rms_alignment(as.matrix(lowrank_fit$s), domain_sizes, domain_names)
   nodes stay in the low-rank term while the Laplacian only couples labeled pairs.
 - The label-aware similarity function above produces a sparse Laplacian without
   touching unobserved samples, matching the algorithm's expectations.
-- On the benchmark data the first three components cleanly separate the two
-  latent classes and keep per-domain RMS discrepancies low despite masked
-  supervision.
+- On the benchmark data the first component separates the two latent classes,
+  and per-domain RMS discrepancies stay low despite masked supervision.
 - Switch to the explicit solver or adjust `sv_thresh` when working with smaller
   problems where dense matrices are affordable.
 

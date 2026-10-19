@@ -272,6 +272,10 @@ test_that("lowrank_align achieves strong performance on linear data", {
   expect_equal(nrow(fit$s), 2 * nrow(X1))
   expect_equal(ncol(fit$s), 2)
   expect_true(all(is.finite(fit$s)))
+  # No trivial component: every score column varies and has zero mean in
+  # each domain (the constant eigenvector of Z is excluded).
+  expect_true(all(fit$sdev > 1e-6))
+  expect_lt(max(abs(rowsum(as.matrix(fit$s), rep(1:2, each = nrow(X1))))), 1e-8)
 
   # Evaluate alignment on the first view via strict Procrustes metrics
   emb1 <- fit$s[seq_len(nrow(X1)), , drop = FALSE]
