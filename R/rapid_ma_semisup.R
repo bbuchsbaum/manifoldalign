@@ -22,9 +22,17 @@
 #' @param relation_consistency Whether candidates must agree with trusted
 #'   relation neighbours.
 #' @param relation_validation Whether explicitly supplied out-of-fold
-#'   probabilities guard against misleading relation channels.
-#' @param relation_validation_margin Minimum balanced-accuracy improvement over
-#'   the full relation set before selecting a safer subset.
+#'   probabilities guard against misleading relation channels and against a
+#'   transferred teacher seed that is worse than a no-transfer fallback (see
+#'   [rapid_ma_semisup()]).
+#' @param relation_validation_margin Minimum out-of-fold class-balanced
+#'   accuracy improvement that a data-selected alternative (a relation subset,
+#'   no relations, or the no-transfer fallback) needs over the gate's
+#'   comparator before it replaces it; the alternative's class-balanced
+#'   log-loss must also be no worse than the comparator's. The comparator is the
+#'   full relation set when that set is out-of-fold non-inferior to the
+#'   no-transfer reference, and the no-transfer reference otherwise (see
+#'   [rapid_ma_semisup()]).
 #' @param relation_validation_max_relations Maximum highest-weight relations
 #'   used to construct bounded single and pair candidates.
 #' @param propagation_steps Fixed number of sparse relation-propagation steps.
@@ -354,6 +362,26 @@ rapid_ma_semisup_control <- function(
   list(probabilities = probabilities, source = "external")
 }
 
+# Validate optional no-transfer fallback probabilities: one entry per domain,
+# each NULL (no fallback for that domain) or a class-probability matrix.
+.rapid_semisup_fallback_probabilities <- function(fit, fallback_probabilities) {
+  if (is.null(fallback_probabilities)) return(NULL)
+  if (!is.list(fallback_probabilities) || is.data.frame(fallback_probabilities) ||
+      length(fallback_probabilities) != length(fit$domain_sizes)) {
+    stop(
+      "`fallback_probabilities` must provide one matrix (or NULL) per domain.",
+      call. = FALSE
+    )
+  }
+  output <- lapply(seq_along(fallback_probabilities), function(m) {
+    value <- fallback_probabilities[[m]]
+    if (is.null(value)) return(NULL)
+    .rapid_semisup_probability_matrix(fit, m, value)
+  })
+  names(output) <- fit$domain_names
+  output
+}
+
 # Normalize `validation_probabilities` to out-of-fold folds per domain. Each
 # domain entry is either one probability matrix (a single fold that scores
 # every observed label row; the caller guarantees that no row of it used any
@@ -361,7 +389,13 @@ rapid_ma_semisup_control <- function(
 # <matrix>)`, where each fold's full matrix was computed without the labels
 # of its `rows`. Only fold rows are scored, after propagating that fold's own
 # matrix, so relation neighbours never carry a scored row's label.
-.rapid_semisup_validation_folds <- function(fit, validation_probabilities) {
+#
+# `has_fallback[m]` states whether domain `m` has a no-transfer fallback. Then
+# every fold of that domain must also carry `fallback`, the fallback
+# predictor's full matrix computed without the labels of the fold's `rows`;
+# otherwise a `fallback` entry would be ignored and is rejected.
+.rapid_semisup_validation_folds <- function(fit, validation_probabilities,
+                                            has_fallback = NULL) {
   if (!is.list(validation_probabilities) ||
       length(validation_probabilities) != length(fit$domain_sizes)) {
     stop(
@@ -370,10 +404,21 @@ rapid_ma_semisup_control <- function(
       call. = FALSE
     )
   }
+  if (is.null(has_fallback)) {
+    has_fallback <- rep(FALSE, length(fit$domain_sizes))
+  }
   lapply(seq_along(validation_probabilities), function(m) {
     value <- validation_probabilities[[m]]
     n <- fit$domain_sizes[[m]]
     if (length(dim(value)) == 2L) {
+      if (has_fallback[[m]]) {
+        stop(
+          "Domain `", fit$domain_names[[m]], "`: a no-transfer fallback needs ",
+          "validation folds `list(rows, probabilities, fallback)`, not a ",
+          "single probability matrix.",
+          call. = FALSE
+        )
+      }
       return(list(list(
         rows = seq_len(n),
         probabilities = .rapid_semisup_probability_matrix(fit, m, value)
@@ -404,11 +449,32 @@ rapid_ma_semisup_control <- function(
           call. = FALSE
         )
       }
+      if (has_fallback[[m]] && is.null(fold$fallback)) {
+        stop(
+          "Domain `", fit$domain_names[[m]], "`: every validation fold needs ",
+          "an out-of-fold `fallback` matrix when `fallback_probabilities` ",
+          "is supplied for the domain.",
+          call. = FALSE
+        )
+      }
+      if (!has_fallback[[m]] && !is.null(fold$fallback)) {
+        stop(
+          "Domain `", fit$domain_names[[m]], "`: validation folds carry ",
+          "`fallback` matrices but `fallback_probabilities` provides no ",
+          "fallback for the domain.",
+          call. = FALSE
+        )
+      }
       list(
         rows = as.integer(rows),
         probabilities = .rapid_semisup_probability_matrix(
           fit, m, fold$probabilities
-        )
+        ),
+        fallback = if (has_fallback[[m]]) {
+          .rapid_semisup_probability_matrix(fit, m, fold$fallback)
+        } else {
+          NULL
+        }
       )
     })
     scored <- unlist(lapply(folds, `[[`, "rows"), use.names = FALSE)
@@ -481,16 +547,77 @@ rapid_ma_semisup_control <- function(
   )
 }
 
+# Relation-safety gate. Every candidate teacher is scored on out-of-fold
+# probabilities at observed labels only (class-balanced accuracy, then
+# class-balanced log-loss); no other label is read.
+#
+# The no-transfer reference is the supplied fallback (scored without
+# propagation) or, without one, the seed without relations (`none`). The full
+# relation set is the pre-specified transfer teacher: it is the comparator when
+# its out-of-fold balanced accuracy is not below the reference's, and the
+# reference is the comparator otherwise. Every other candidate is a
+# data-selected alternative and replaces the comparator only when it improves
+# balanced accuracy by at least `relation_validation_margin`, has a log-loss no
+# worse than the comparator's, and is strictly better on one of the two. The
+# selected teacher's out-of-fold balanced accuracy is therefore never below
+# the reference's. A domain without any scored row cannot be validated and
+# keeps the reference.
+.rapid_semisup_select_candidate <- function(score, reference, margin) {
+  tolerance <- 1e-12
+  finite <- is.finite(score[, "accuracy"]) & is.finite(score[, "log_loss"])
+  if (!finite[[reference]]) {
+    return(list(selected = reference, comparator = reference,
+                decision = "unvalidated"))
+  }
+  accuracy <- score[, "accuracy"]
+  log_loss <- score[, "log_loss"]
+  full_noninferior <- "full" %in% rownames(score) && finite[["full"]] &&
+    accuracy[["full"]] + tolerance >= accuracy[[reference]]
+  comparator <- if (full_noninferior) "full" else reference
+  alternatives <- setdiff(rownames(score)[finite], comparator)
+  gain <- accuracy[alternatives] - accuracy[[comparator]]
+  loss_change <- log_loss[alternatives] - log_loss[[comparator]]
+  eligible <- alternatives[
+    gain + tolerance >= margin & loss_change <= tolerance &
+      (gain > tolerance | loss_change < -tolerance)
+  ]
+  if (!length(eligible)) {
+    return(list(
+      selected = comparator,
+      comparator = comparator,
+      decision = if (full_noninferior) "kept_full" else "rejected_transfer"
+    ))
+  }
+  ordering <- order(-accuracy[eligible], log_loss[eligible], eligible,
+                    method = "radix")
+  list(
+    selected = eligible[[ordering[[1L]]]],
+    comparator = comparator,
+    decision = "selected_alternative"
+  )
+}
+
 .rapid_semisup_validate_relations <- function(
   fit,
   validation_probabilities,
   labels,
-  control
+  control,
+  fallback_probabilities = NULL
 ) {
   diagnostics <- vector("list", length(fit$domain_names))
   names(diagnostics) <- fit$domain_names
+  fallback_selected <- rep(FALSE, length(fit$domain_names))
+  names(fallback_selected) <- fit$domain_names
   if (!isTRUE(control$relation_validation)) {
-    return(list(fit = fit, diagnostics = diagnostics, status = "disabled"))
+    if (!is.null(fallback_probabilities)) {
+      stop(
+        "`fallback_probabilities` is used only by the relation-safety gate; ",
+        "set `relation_validation = TRUE` or omit it.",
+        call. = FALSE
+      )
+    }
+    return(list(fit = fit, diagnostics = diagnostics, status = "disabled",
+                fallback_selected = fallback_selected))
   }
   if (is.null(validation_probabilities)) {
     stop(
@@ -499,7 +626,14 @@ rapid_ma_semisup_control <- function(
       call. = FALSE
     )
   }
-  folds <- .rapid_semisup_validation_folds(fit, validation_probabilities)
+  has_fallback <- if (is.null(fallback_probabilities)) {
+    rep(FALSE, length(fit$domain_names))
+  } else {
+    !vapply(fallback_probabilities, is.null, logical(1))
+  }
+  folds <- .rapid_semisup_validation_folds(
+    fit, validation_probabilities, has_fallback
+  )
   class_levels <- fit$prototypes$class_levels
   unknown <- fit$prototypes$control$unknown_level
   classes <- setdiff(class_levels, unknown)
@@ -512,9 +646,10 @@ rapid_ma_semisup_control <- function(
       weights,
       control$relation_validation_max_relations
     )
+    scored_names <- c(names(candidates), if (has_fallback[[m]]) "fallback")
     score <- matrix(
-      NA_real_, length(candidates), 2L,
-      dimnames = list(names(candidates), c("accuracy", "log_loss"))
+      NA_real_, length(scored_names), 2L,
+      dimnames = list(scored_names, c("accuracy", "log_loss"))
     )
     n <- fit$domain_sizes[[m]]
     scored <- rep(FALSE, n)
@@ -544,35 +679,41 @@ rapid_ma_semisup_control <- function(
         assembled, scored_labels, classes
       )
     }
-    full_index <- match("full", rownames(score))
-    valid <- which(is.finite(score[, "accuracy"]) &
-                     is.finite(score[, "log_loss"]))
-    selected <- "full"
-    switched <- FALSE
-    if (length(valid) && !is.na(full_index) &&
-        is.finite(score[full_index, "accuracy"])) {
-      ordering <- valid[order(
-        -score[valid, "accuracy"],
-        score[valid, "log_loss"],
-        rownames(score)[valid],
-        method = "radix"
-      )]
-      best <- rownames(score)[ordering[[1L]]]
-      improvement <- score[best, "accuracy"] - score[full_index, "accuracy"]
-      if (!identical(best, "full") &&
-          improvement + 1e-12 >= control$relation_validation_margin) {
-        selected <- best
-        switched <- TRUE
+    if (has_fallback[[m]]) {
+      # The fallback is used without relation propagation, so it is scored
+      # without propagation as well.
+      assembled <- matrix(
+        0, n, length(class_levels), dimnames = list(NULL, class_levels)
+      )
+      for (fold in folds[[m]]) {
+        assembled[fold$rows, ] <- fold$fallback[fold$rows, , drop = FALSE]
       }
+      score["fallback", ] <- .rapid_semisup_validation_score(
+        assembled, scored_labels, classes
+      )
     }
-    keep <- intersect(candidates[[selected]], relation_names)
+    reference <- if (has_fallback[[m]]) "fallback" else "none"
+    choice <- .rapid_semisup_select_candidate(
+      score, reference, control$relation_validation_margin
+    )
+    selected <- choice$selected
+    keep <- if (identical(selected, "fallback")) {
+      character(0)
+    } else {
+      intersect(candidates[[selected]], relation_names)
+    }
+    fallback_selected[[m]] <- identical(selected, "fallback")
     fit$relations[[m]]$relations <- fit$relations[[m]]$relations[keep]
     fit$diffusion[[m]]$relation_weights <-
       fit$diffusion[[m]]$relation_weights[keep]
     diagnostics[[m]] <- list(
       selected = selected,
       selected_relations = keep,
-      switched = switched,
+      switched = !identical(selected, "full"),
+      decision = choice$decision,
+      reference = reference,
+      comparator = choice$comparator,
+      teacher_seed = if (fallback_selected[[m]]) "fallback" else "initial",
       margin = control$relation_validation_margin,
       scores = as.data.frame(score),
       candidate_relations = candidates,
@@ -580,7 +721,8 @@ rapid_ma_semisup_control <- function(
       validation_folds = length(folds[[m]])
     )
   }
-  list(fit = fit, diagnostics = diagnostics, status = "validated")
+  list(fit = fit, diagnostics = diagnostics, status = "validated",
+       fallback_selected = fallback_selected)
 }
 
 .rapid_relation_agreement <- function(probability, choice, relation_state,
@@ -791,9 +933,27 @@ rapid_ma_semisup_control <- function(
 #' With `control$relation_validation = TRUE`, every candidate relation subset
 #' (none, all, each single relation, and each pair of the highest-weight
 #' relations) is scored by propagating `validation_probabilities` and measuring
-#' class-balanced accuracy on the observed labels. The full relation set is
-#' replaced only when a subset improves on it by at least
-#' `control$relation_validation_margin`. Because propagation mixes each row with
+#' class-balanced accuracy, then class-balanced log-loss, on the observed
+#' labels. The gate compares candidates with a no-transfer reference: the
+#' optional `fallback_probabilities` predictor (for example a domain-local
+#' classifier trained only on that domain's labels), scored without
+#' propagation, or, when no fallback is supplied, the seed probabilities
+#' without relations (`none`). The full relation set is the pre-specified
+#' teacher and is kept when its out-of-fold balanced accuracy is not below the
+#' reference's; otherwise the reference becomes the comparator. Any other
+#' candidate, including the reference itself, replaces the comparator only
+#' when it improves balanced accuracy by at least
+#' `control$relation_validation_margin` without a worse log-loss. The selected
+#' teacher therefore never has a lower out-of-fold balanced accuracy than the
+#' no-transfer reference, and a domain whose labels cannot be scored keeps the
+#' reference. When the fallback is selected, it replaces that domain's
+#' initial probabilities and no relation is propagated there; later
+#' pseudo-label rounds (`control$rounds > 0`) still use transport and are
+#' guarded only by rollback. Before this comparator was introduced the full
+#' relation set was the comparator and no fallback existed, so the gate kept
+#' harmful structure whenever no subset beat it by the margin.
+#'
+#' Because propagation mixes each row with
 #' its relation neighbours, replacing only a labelled row's own probability by a
 #' leave-one-out value is not out-of-fold: its neighbours' probabilities would
 #' still have used its label. Folds avoid this: each fold's whole matrix is
@@ -816,8 +976,17 @@ rapid_ma_semisup_control <- function(
 #'   whose full probability matrix was computed without the labels of its
 #'   `rows`, or a single probability matrix, which must then be out-of-fold for
 #'   every observed label row and all of its relation neighbours (see
-#'   Details).
+#'   Details). For a domain with a fallback, every fold must also carry
+#'   `fallback`, the fallback predictor's matrix computed without the labels
+#'   of the fold's `rows`.
 #' @param control Settings returned by [rapid_ma_semisup_control()].
+#' @param fallback_probabilities Optional no-transfer reference predictor for
+#'   the relation-safety gate: one named-class probability matrix per domain,
+#'   or `NULL` for a domain without one. It must not use cross-domain
+#'   information or relation propagation (for example, a nearest-centroid
+#'   classifier on the domain's own features and labels). Requires
+#'   `control$relation_validation = TRUE` and matching `fallback` matrices in
+#'   the validation folds; it is rejected otherwise rather than ignored.
 #' @return The updated `rapid_ma` object with refined probabilities and a
 #'   `semisup` provenance record.
 #' @export
@@ -828,13 +997,24 @@ rapid_ma_semisup <- function(
   mode = c("transductive", "inductive"),
   initial_probabilities = NULL,
   validation_probabilities = NULL,
-  control = rapid_ma_semisup_control()
+  control = rapid_ma_semisup_control(),
+  fallback_probabilities = NULL
 ) {
   if (!inherits(fit, "rapid_ma")) {
     stop("`fit` must be a fitted rapid_ma object.", call. = FALSE)
   }
   mode <- match.arg(mode)
   control <- .rapid_resolve_semisup_control(control)
+  if (!is.null(fallback_probabilities) && !isTRUE(control$relation_validation)) {
+    stop(
+      "`fallback_probabilities` is used only by the relation-safety gate; ",
+      "set `relation_validation = TRUE` or omit it.",
+      call. = FALSE
+    )
+  }
+  fallback_probabilities <- .rapid_semisup_fallback_probabilities(
+    fit, fallback_probabilities
+  )
   masks <- .rapid_semisup_masks(fit, labels, train_mask, mode)
   true_labels <- masks$labels
   unknown <- fit$prototypes$control$unknown_level
@@ -859,9 +1039,13 @@ rapid_ma_semisup <- function(
     fit, initial_probabilities
   )
   relation_validation <- .rapid_semisup_validate_relations(
-    fit, validation_probabilities, true_labels, control
+    fit, validation_probabilities, true_labels, control,
+    fallback_probabilities = fallback_probabilities
   )
   fit <- relation_validation$fit
+  for (m in which(relation_validation$fallback_selected)) {
+    initialization$probabilities[[m]] <- fallback_probabilities[[m]]
+  }
   probabilities <- .rapid_fix_true_probabilities(
     initialization$probabilities, true_labels, fit$prototypes$class_levels
   )
@@ -1012,6 +1196,7 @@ rapid_ma_semisup <- function(
       eligible_rows = vapply(masks$eligible, sum, integer(1)),
       true_label_counts = lapply(true_labels, function(x) table(x, useNA = "no")),
       probability_initialization = initialization$source,
+      fallback_selected = relation_validation$fallback_selected,
       relation_validation = relation_validation$diagnostics
     ),
     control = control

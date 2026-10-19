@@ -294,11 +294,33 @@ rapid_ma_benchmark_fixture <- function(
     )[[1L]]$probability
     local_weight * local + (1 - local_weight) * shared
   }
+  # No-transfer fallback: the domain-local nearest centroid trained only on
+  # the domain's own labels (for the target this is exactly the
+  # `target_centroid` comparator). A fold that leaves the domain without any
+  # label gets an uninformative uniform matrix.
+  domain_local <- function(m, domain_labels) {
+    if (!any(!is.na(domain_labels[[m]]))) {
+      return(matrix(
+        1 / length(classes), nrow(local_embedding[[m]]), length(classes),
+        dimnames = list(NULL, classes)
+      ))
+    }
+    .rapid_benchmark_centroid(
+      list(local_embedding[[m]]), list(domain_labels[[m]]), classes
+    )[[1L]]$probability
+  }
   initial <- lapply(seq_along(labels), blend, domain_labels = labels)
+  fallback <- lapply(seq_along(labels), function(m) {
+    if (!any(!is.na(labels[[m]]))) return(NULL)
+    domain_local(m, labels)
+  })
   # Leave-one-label-out folds: each fold recomputes the whole probability
   # matrix of its domain without the held-out label, so the relation-safety
   # gate propagates probabilities in which no neighbour used that label.
-  # A row whose removal leaves a class without any label is not scored.
+  # The fallback is recomputed in the same fold. A row whose removal leaves a
+  # class without any label is not scored. The shared-embedding part comes
+  # from the core fit, which used every training label, so it is not refitted
+  # per fold.
   validation <- lapply(seq_along(labels), function(m) {
     folds <- list()
     for (row in which(!is.na(labels[[m]]))) {
@@ -308,7 +330,10 @@ rapid_ma_benchmark_fixture <- function(
       if (!all(classes %in% remaining)) next
       folds[[length(folds) + 1L]] <- list(
         rows = row,
-        probabilities = blend(m, held_out_labels)
+        probabilities = blend(m, held_out_labels),
+        fallback = if (is.null(fallback[[m]])) NULL else {
+          domain_local(m, held_out_labels)
+        }
       )
     }
     if (!length(folds)) {
@@ -317,7 +342,7 @@ rapid_ma_benchmark_fixture <- function(
     }
     folds
   })
-  list(initial = initial, validation = validation)
+  list(initial = initial, validation = validation, fallback = fallback)
 }
 
 .rapid_benchmark_correspondence <- function(correspondence, n_source, n_target) {
@@ -500,10 +525,18 @@ rapid_ma_benchmark_fixture <- function(
 #' feature columns contribute.
 #'
 #' The `rapid_ma_semisup` row's relation-safety gate scores relation subsets on
-#' genuinely out-of-fold teacher probabilities: for each observed label row,
-#' the whole probability matrix of its domain is recomputed without that label
+#' leave-one-label-out teacher probabilities: for each observed label row, the
+#' centroid probabilities of its domain are recomputed without that label
 #' before propagation, so neighbours never carry the held-out label. Rows whose
-#' removal would leave a class without any label are not scored.
+#' removal would leave a class without any label are not scored. The gate's
+#' no-transfer reference is the domain-local nearest centroid trained only on
+#' that domain's labels (for the target, exactly the `target_centroid`
+#' comparator), recomputed in the same folds; it replaces the teacher when the
+#' full relation set is out-of-fold worse than it and no relation subset beats
+#' it (see [rapid_ma_semisup()]). The shared-embedding part of the seed comes
+#' from the core fit, which used every training label, and is not refitted
+#' per fold, so its fold scores can be optimistic. Held-out labels are never
+#' read.
 #'
 #' The bundled LeMA implementation is an independent dense equation-level
 #' benchmark oracle and is not available as a production backend. Reported
@@ -689,6 +722,7 @@ benchmark_rapid_ma <- function(
             fit,
             initial_probabilities = seeds$initial,
             validation_probabilities = seeds$validation,
+            fallback_probabilities = seeds$fallback,
             control = utils::modifyList(
               list(
                 rounds = 0L,
@@ -911,7 +945,8 @@ benchmark_rapid_ma <- function(
         rapid_teacher_seed = paste(
           "fixed 0.75 domain-local and 0.25 shared-embedding centroid blend;",
           "two sparse relation-propagation hops with a leave-one-label-out",
-          "safety gate (each fold recomputes the domain's probabilities)"
+          "safety gate (each fold recomputes the domain's probabilities)",
+          "whose no-transfer reference is the domain-local centroid"
         )
       )
     ),

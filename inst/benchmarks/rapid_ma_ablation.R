@@ -71,6 +71,8 @@ run_variant <- function(fixture, variant, seed) {
   row$selected_relation_candidate <- NA_character_
   row$selected_target_relations <- NA_character_
   row$relation_safety_switched <- NA
+  row$relation_gate_decision <- NA_character_
+  row$teacher_seed <- NA_character_
   if (identical(method, "rapid_ma_semisup")) {
     validation <- result$fits[[method]]$semisup$provenance$
       relation_validation[[2L]]
@@ -79,6 +81,8 @@ run_variant <- function(fixture, variant, seed) {
       validation$selected_relations, collapse = "+"
     )
     row$relation_safety_switched <- validation$switched
+    row$relation_gate_decision <- validation$decision
+    row$teacher_seed <- validation$teacher_seed
   }
   row$variant <- variant
   row$replicate_seed <- seed
@@ -155,6 +159,11 @@ metadata <- c(
   "development_seeds=201:205,2001:2020",
   "target_feature_noise_sd=0.75",
   "test_label_tuning=false",
+  paste(
+    "relation_gate=no-transfer reference (domain-local centroid);",
+    "full relation set kept when out-of-fold non-inferior;",
+    "alternatives need margin 1/6 and no worse log-loss"
+  ),
   paste("R.version", R.version.string, sep = "="),
   paste("platform", R.version$platform, sep = "="),
   paste(names(tools::md5sum(source_paths)), tools::md5sum(source_paths), sep = " md5=")
