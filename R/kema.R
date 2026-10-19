@@ -109,13 +109,15 @@ coskern <- function() {
 #' `r_i x r_i` preconditioner blocks and `O((n_total + r_total) * block)`
 #' LOBPCG workspace. The estimate is a coarse upper bound on those
 #' allocations: about 60 bytes per kernel entry, 96 bytes per entry of an
-#' `r_total x r_total` matrix for the dense quotient backends (24 bytes per
+#' `r_total x r_total` matrix for the dense quotient backends (40 bytes per
 #' entry of each `r_i x r_i` block for `operator_exact`), and 32 bytes per pair
 #' of labelled rows. Calibrated against the peak resident memory of complete
 #' fits on the RAPID scaling fixture (R 4.5.3, eigencore 2.0.0, single-threaded
-#' OpenBLAS): at 5,500 samples the measured peaks were 0.93 GB
-#' (`operator_exact`, estimate 1.35 GB) and 2.9 GB (`reduced_exact`, estimate
-#' 3.8 GB); at 2,200 samples 0.51 GB for `full_exact` (estimate 0.61 GB).
+#' OpenBLAS): at 11,000 samples `operator_exact` peaked at 4.8 GB (estimate
+#' 6.2 GB; the dense backends are estimated at 15 GB); at 5,500 samples
+#' 0.93 GB (`operator_exact`, estimate 1.6 GB) and 2.9 GB (`reduced_exact`,
+#' estimate 3.8 GB); at 2,200 samples 0.51 GB for `full_exact` (estimate
+#' 0.61 GB).
 #'
 #' @param backend Backend whose footprint is estimated.
 #' @param ncomp Requested number of components (sets the LOBPCG block width).
@@ -131,7 +133,7 @@ coskern <- function() {
   label_bytes <- 32 * as.numeric(n_labeled)^2
   quotient_bytes <- if (identical(backend, "operator_exact")) {
     block <- max(2 * ncomp, ncomp + 4)
-    24 * sum(r_per_block^2) +
+    40 * sum(r_per_block^2) +
       8 * 12 * block * (sum(n_per_block) + r_total)
   } else {
     96 * r_total^2
