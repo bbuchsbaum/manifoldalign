@@ -40,7 +40,11 @@ library(testthat)
       control = ssma_align_control(
         knn = 8,
         rank_per_domain = 10,
-        verbose = FALSE
+        verbose = FALSE,
+        # These tests check cross-validation mechanics against reference
+        # scores computed with the within-domain constraint; SSMA's default
+        # joint-degree estimand is tested in test-ssma-numerics.R.
+        degree_matrix = "within_domain"
       )
     )
   }

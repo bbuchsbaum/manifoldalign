@@ -410,9 +410,17 @@ retrieval_summary <- rbind(
 head(retrieval_summary, 8)
 aggregate(feature_similarity ~ target_domain, retrieval_summary, mean)
 
+# Random retrieval: the average similarity of a query to every candidate.
+chance <- mean(c(rowMeans(feature_sim_b), rowMeans(feature_sim_c)))
+c(aligned = mean(retrieval_summary$feature_similarity), random = chance)
+
 stopifnot(all(is.finite(retrieval_summary$feature_similarity)))
-stopifnot(mean(retrieval_summary$feature_similarity) > 0.6)
+stopifnot(mean(retrieval_summary$feature_similarity) > chance + 0.4)
 ```
+
+With only eight held-out rows the mean varies from fold to fold, so it is
+compared with random retrieval in the same fold rather than with a fixed
+value.
 
 That is the full prediction loop:
 

@@ -1,8 +1,10 @@
 ---
 title: Pairwise Graph Alignment with cone_align
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{Pairwise Graph Alignment with cone_align} %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Pairwise Graph Alignment with cone_align}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
   preset: homage
