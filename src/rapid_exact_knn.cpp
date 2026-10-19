@@ -85,7 +85,8 @@ void rapid_knn_build_leaves(const double* X, int n, int d,
 }
 
 struct KnnHeap {
-  // Max-heap per query on (dist, rank); slots [q * k, q * k + size[q]).
+  // One max-heap on (dist, rank) per query of the current leaf; heap u owns
+  // slots [u * k, u * k + size[u]).
   int k;
   std::vector<double> dist;
   std::vector<double> d2;
@@ -237,7 +238,16 @@ Rcpp::List rapid_exact_knn_cpp(const Rcpp::NumericMatrix& X,
     radius[l] = std::sqrt(rmax) * (1.0 + slack) + slack;
   }
 
-  KnnHeap heap(n, k);
+  int max_leaf = 0;
+  for (int l = 0; l < n_leaves; ++l) {
+    max_leaf = std::max(max_leaf, leaves[l].end - leaves[l].start);
+  }
+  // Heaps exist only for the queries of the leaf being processed, so the
+  // working memory beyond the answer is O(leaf_size * k).
+  KnnHeap heap(max_leaf, k);
+  Rcpp::IntegerVector out_index(static_cast<R_xlen_t>(n) * k);
+  Rcpp::NumericVector out_dist(static_cast<R_xlen_t>(n) * k);
+  std::vector<int> slot(k);
   std::vector<int> rank_by_position(n);
   for (int t = 0; t < n; ++t) rank_by_position[t] = tie_rank[order[t]];
 
@@ -282,6 +292,7 @@ Rcpp::List rapid_exact_knn_cpp(const Rcpp::NumericMatrix& X,
     });
     query_threshold.assign(nq, inf);
     query_centre_bound.assign(nq, 0.0);
+    std::fill(heap.size.begin(), heap.size.begin() + nq, 0);
     arma::mat Aq(P.colptr(qa), d, nq, false, true);
 
     for (int pos = 0; pos < n_leaves; ++pos) {
@@ -322,7 +333,6 @@ Rcpp::List rapid_exact_knn_cpp(const Rcpp::NumericMatrix& X,
       for (int u = 0; u < nq; ++u) {
         if (query_centre_bound[u] > query_threshold[u]) continue;
         const int qpos = qa + u;
-        const int qrow = order[qpos];
         const double qn = norm2[qpos];
         const double* q = P.colptr(qpos);
         double threshold = query_threshold[u];
@@ -348,37 +358,34 @@ Rcpp::List rapid_exact_knn_cpp(const Rcpp::NumericMatrix& X,
           }
           const double dist = std::sqrt(s);
           const int cand_rank = rank_by_position[rpos];
-          if (heap.full(qrow) && !heap.improves(qrow, dist, cand_rank)) continue;
-          heap.push(qrow, s, dist, cand_rank, order[rpos]);
-          if (heap.full(qrow)) {
-            threshold = heap.top_d2(qrow) * inflate;
+          if (heap.full(u) && !heap.improves(u, dist, cand_rank)) continue;
+          heap.push(u, s, dist, cand_rank, order[rpos]);
+          if (heap.full(u)) {
+            threshold = heap.top_d2(u) * inflate;
             cutoff = threshold - keep_scale * qn;
           }
         }
         query_threshold[u] = threshold;
       }
     }
-  }
 
-  // Sort each query's heap into ascending (distance, rank) order.
-  Rcpp::IntegerVector out_index(static_cast<R_xlen_t>(n) * k);
-  Rcpp::NumericVector out_dist(static_cast<R_xlen_t>(n) * k);
-  std::vector<int> slot(k);
-  for (int q = 0; q < n; ++q) {
-    if (heap.size[q] != k) Rcpp::stop("Internal error: incomplete neighbour list.");
-    const std::size_t base = static_cast<std::size_t>(q) * k;
-    for (int t = 0; t < k; ++t) slot[t] = t;
-    std::sort(slot.begin(), slot.end(), [&](int u, int v) {
-      std::size_t a = base + u;
-      std::size_t b = base + v;
-      return heap.dist[a] < heap.dist[b] ||
-        (heap.dist[a] == heap.dist[b] && heap.rank[a] < heap.rank[b]);
-    });
-    for (int t = 0; t < k; ++t) {
-      out_index[base + t] = heap.index[base + slot[t]] + 1;
-      out_dist[base + t] = heap.dist[base + slot[t]];
+    // The leaf's answers are final: write them in ascending (distance, rank)
+    // order at the query's original row.
+    for (int u = 0; u < nq; ++u) {
+      if (heap.size[u] != k) Rcpp::stop("Internal error: incomplete neighbour list.");
+      const std::size_t base = static_cast<std::size_t>(u) * k;
+      const std::size_t out = static_cast<std::size_t>(order[qa + u]) * k;
+      for (int t = 0; t < k; ++t) slot[t] = t;
+      std::sort(slot.begin(), slot.end(), [&](int a, int b) {
+        return heap.worse(base + b, base + a);
+      });
+      for (int t = 0; t < k; ++t) {
+        out_index[out + t] = heap.index[base + slot[t]] + 1;
+        out_dist[out + t] = heap.dist[base + slot[t]];
+      }
     }
   }
+
   return Rcpp::List::create(
     Rcpp::Named("index") = out_index,
     Rcpp::Named("distance") = out_dist,
