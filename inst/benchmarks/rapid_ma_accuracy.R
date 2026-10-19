@@ -234,7 +234,9 @@ metadata <- c(
   paste(
     "rapid_teacher_preset=seed_local_weight:0.75,rounds:0,",
     "propagation_steps:2,propagation_strength:1,relation_validation:true,",
-    "relation_validation_margin:0.1666667",
+    "relation_validation_margin:0.1666667,",
+    "relation_validation_tolerance:one_heldout_row,",
+    "fallback:domain_local_nearest_centroid",
     sep = ""
   ),
   paste(

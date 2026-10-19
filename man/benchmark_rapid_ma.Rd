@@ -89,10 +89,18 @@ domain features (at most \code{ncomp} components, computed without labels); all
 feature columns contribute.
 
 The \code{rapid_ma_semisup} row's relation-safety gate scores relation subsets on
-genuinely out-of-fold teacher probabilities: for each observed label row,
-the whole probability matrix of its domain is recomputed without that label
+leave-one-label-out teacher probabilities: for each observed label row, the
+centroid probabilities of its domain are recomputed without that label
 before propagation, so neighbours never carry the held-out label. Rows whose
-removal would leave a class without any label are not scored.
+removal would leave a class without any label are not scored. The gate's
+no-transfer reference is the domain-local nearest centroid trained only on
+that domain's labels (for the target, exactly the \code{target_centroid}
+comparator), recomputed in the same folds; it replaces the teacher when the
+full relation set is out-of-fold worse than it by more than one held-out
+row and no relation subset beats it (see \code{\link[=rapid_ma_semisup]{rapid_ma_semisup()}}). The
+shared-embedding part of the seed comes from the core fit, which used every
+training label, and is not refitted per fold, so its fold scores can be
+optimistic. Held-out labels are never read.
 
 The bundled LeMA implementation is an independent dense equation-level
 benchmark oracle and is not available as a production backend. Reported

@@ -17,6 +17,7 @@ rapid_ma_semisup_control(
   relation_consistency = TRUE,
   relation_validation = FALSE,
   relation_validation_margin = 1/6,
+  relation_validation_tolerance = NULL,
   relation_validation_max_relations = 6L,
   propagation_steps = 2L,
   propagation_strength = 0.35,
@@ -56,10 +57,29 @@ confident candidates are kept.}
 relation neighbours.}
 
 \item{relation_validation}{Whether explicitly supplied out-of-fold
-probabilities guard against misleading relation channels.}
+probabilities guard against misleading relation channels and against a
+transferred teacher seed that is worse than a no-transfer fallback (see
+\code{\link[=rapid_ma_semisup]{rapid_ma_semisup()}}).}
 
-\item{relation_validation_margin}{Minimum balanced-accuracy improvement over
-the full relation set before selecting a safer subset.}
+\item{relation_validation_margin}{Minimum out-of-fold class-balanced
+accuracy improvement that a data-selected alternative (a relation subset,
+no relations, or the no-transfer fallback) needs over the gate's
+comparator before it replaces it; the alternative's class-balanced
+log-loss must also be no worse than the comparator's. The comparator is the
+full relation set when that set is out-of-fold non-inferior to the
+no-transfer reference, and the no-transfer reference otherwise (see
+\code{\link[=rapid_ma_semisup]{rapid_ma_semisup()}}). With four labels in each of three classes, the
+default \code{1/6} is two held-out rows.}
+
+\item{relation_validation_tolerance}{Largest out-of-fold class-balanced
+accuracy deficit of the full relation set relative to the no-transfer
+reference that still counts as non-inferior. \code{NULL} (default) uses the
+resolution of each domain's validation labels: the balanced-accuracy
+weight of one held-out row of the largest scored class,
+\code{1 / (n_classes * max_class_count)} (\code{1/12} for four labels in each of
+three classes). A one-row difference is within leave-one-label-out noise,
+so the pre-specified full set is not discarded for it; \code{0} requires the
+full set to match the reference.}
 
 \item{relation_validation_max_relations}{Maximum highest-weight relations
 used to construct bounded single and pair candidates.}

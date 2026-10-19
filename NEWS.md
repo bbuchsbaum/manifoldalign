@@ -158,6 +158,22 @@ These fix defects found in a package review; several change fitted output.
   ablation effects, the small-n memory comparison with LeMA, and the
   sparse-baseline runtime crossover do not and are corrected there. The
   Chikusei blocked-inductive and million-node evidence was not rerun.
+* **RAPID-MA relation-safety gate**: `rapid_ma_semisup()` now compares
+  candidate relation sets with a no-transfer reference instead of the full
+  relation set; the old gate never scored a predictor equivalent to the
+  target-only baseline, so under misleading structure it fell below that
+  baseline. The new `fallback_probabilities` argument supplies the reference
+  (each validation fold must carry a matching out-of-fold `fallback`);
+  without it the reference is the seed without relations. The full relation
+  set is kept only when its out-of-fold class-balanced accuracy is within
+  `rapid_ma_semisup_control(relation_validation_tolerance)` of the reference
+  (default one held-out row); other candidates must beat the comparator by
+  `relation_validation_margin` without a worse class-balanced log-loss.
+  Domains without scorable validation labels keep the reference.
+  `fallback_probabilities` is rejected when `relation_validation = FALSE`.
+  Diagnostics record `reference`, `comparator`, `decision`, `teacher_seed`
+  and `noninferiority`. `benchmark_rapid_ma()`'s teacher preset uses the
+  domain-local nearest centroid as the fallback.
 * **`cv_alignment_rows()`**: targets are scored with the same projection as
   queries; folds are matched by name or position.
 * **Pseudolabelling**: greedy selection is farthest-first; the large-n path

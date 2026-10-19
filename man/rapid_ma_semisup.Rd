@@ -11,7 +11,8 @@ rapid_ma_semisup(
   mode = c("transductive", "inductive"),
   initial_probabilities = NULL,
   validation_probabilities = NULL,
-  control = rapid_ma_semisup_control()
+  control = rapid_ma_semisup_control(),
+  fallback_probabilities = NULL
 )
 }
 \arguments{
@@ -35,9 +36,19 @@ list of folds, each \verb{list(rows = <row indices>, probabilities = <matrix>)}
 whose full probability matrix was computed without the labels of its
 \code{rows}, or a single probability matrix, which must then be out-of-fold for
 every observed label row and all of its relation neighbours (see
-Details).}
+Details). For a domain with a fallback, every fold must also carry
+\code{fallback}, the fallback predictor's matrix computed without the labels
+of the fold's \code{rows}.}
 
 \item{control}{Settings returned by \code{\link[=rapid_ma_semisup_control]{rapid_ma_semisup_control()}}.}
+
+\item{fallback_probabilities}{Optional no-transfer reference predictor for
+the relation-safety gate: one named-class probability matrix per domain,
+or \code{NULL} for a domain without one. It must not use cross-domain
+information or relation propagation (for example, a nearest-centroid
+classifier on the domain's own features and labels). Requires
+\code{control$relation_validation = TRUE} and matching \code{fallback} matrices in
+the validation folds; it is rejected otherwise rather than ignored.}
 }
 \value{
 The updated \code{rapid_ma} object with refined probabilities and a
@@ -57,12 +68,28 @@ computed, and pseudo-labels are restricted to training rows.
 With \code{control$relation_validation = TRUE}, every candidate relation subset
 (none, all, each single relation, and each pair of the highest-weight
 relations) is scored by propagating \code{validation_probabilities} and measuring
-class-balanced accuracy on the observed labels. The full relation set is
-replaced only when a subset improves on it by at least
-\code{control$relation_validation_margin}. Because propagation mixes each row with
-its relation neighbours, replacing only a labelled row's own probability by a
-leave-one-out value is not out-of-fold: its neighbours' probabilities would
-still have used its label. Folds avoid this: each fold's whole matrix is
+class-balanced accuracy, then class-balanced log-loss, on the observed
+labels. The gate compares candidates with a no-transfer reference: the
+optional \code{fallback_probabilities} predictor (for example a domain-local
+classifier trained only on that domain's labels), scored without
+propagation, or, when no fallback is supplied, the seed probabilities
+without relations (\code{none}). The full relation set is the pre-specified
+teacher and is kept when it is out-of-fold non-inferior to the reference:
+its balanced accuracy is at most \code{control$relation_validation_tolerance}
+(by default one held-out row) below the reference's. Otherwise the
+reference becomes the comparator. Any other candidate, including the
+reference itself, replaces the comparator only when it improves balanced
+accuracy by at least \code{control$relation_validation_margin} without a worse
+log-loss. The selected teacher's out-of-fold balanced accuracy is therefore
+never more than the tolerance below the no-transfer reference's, and a
+domain whose labels cannot be scored keeps the reference. When the fallback is selected, it replaces that domain's
+initial probabilities and no relation is propagated there; later
+pseudo-label rounds (\code{control$rounds > 0}) still use transport and are
+guarded only by rollback.
+
+Because propagation mixes each row with its relation neighbours, replacing
+only a labelled row's own probability by a leave-one-out value is not
+out-of-fold: its neighbours' probabilities would still have used its label. Folds avoid this: each fold's whole matrix is
 propagated and only that fold's rows are scored, so per-row (leave-one-out)
 or grouped refits give genuinely out-of-fold scores. Rows outside every fold
 are not scored.
