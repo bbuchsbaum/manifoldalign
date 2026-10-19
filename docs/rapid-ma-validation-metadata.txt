@@ -1,0 +1,12 @@
+generated_utc=2026-10-19 03:04:33 UTC
+profile=full
+seeds=3001,3002,3003,3004,3005,3006,3007,3008,3009,3010,3011,3012,3013,3014,3015,3016,3017,3018,3019,3020
+method_timeout_sec=5
+status_values=ok,failed,timeout
+development_seeds=1:5,9,17,19,21,23,29,101:120,201:205,1001:1020
+test_label_tuning=false
+shared_embedding_classifier=nearest_centroid
+rapid_teacher_preset=seed_local_weight:0.75,rounds:0,propagation_steps:2,propagation_strength:1,relation_validation:true,relation_validation_margin:0.1666667
+memory_note=sampled peak RSS uses isolated forked methods at 20 ms intervals; absolute RSS includes inherited package state
+R.version=R version 4.5.3 (2026-03-11)
+platform=x86_64-conda-linux-gnu

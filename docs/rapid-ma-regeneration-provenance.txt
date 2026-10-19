@@ -1,0 +1,24 @@
+commit=78d33c9b34f0185b120920ae18ae5a150e17401a
+source=git archive HEAD of /home/user/manifoldalign
+installed_package=/tmp/rapid_evidence/lib/manifoldalign (R CMD INSTALL --no-docs --no-multiarch)
+working_dir=/tmp/rapid_evidence/run (no DESCRIPTION; runners used library(manifoldalign))
+env=OMP_NUM_THREADS=1 LANG=C.UTF-8 _R_CHECK_SYSTEM_CLOCK_=false R_LIBS=/tmp/rapid_evidence/lib
+cpu=Intel(R) Xeon(R) Processor @ 2.80GHz x 4 cores
+mem_total=16093 MB
+kernel=Linux 6.18.44-fc-v139
+## md5 of runner-listed sources (runners record these only when run from package root)
+f092af35dc3dcebda2aacd99d4f59bd1  R/rapid_ma_benchmark.R
+3e43380ab781139eec75b929048bc7e8  R/rapid_ma.R
+598c7bb90365153a992e49a7876dc05f  R/rapid_ma_semisup.R
+4a3d8128d7495539a1c39d57845086f9  R/adapters_rapid_ma.R
+45eda90b6a176a5d077e21f37b3316a6  inst/benchmarks/lema_reference.R
+a03da37d4759944ba1d9d73892b41c5c  inst/benchmarks/rapid_ma_accuracy.R
+48f94ec5a3c32974e8c076333a70b821  inst/benchmarks/rapid_ma_ablation.R
+e562a46fca8eab9fc63f82493f77f2c3  inst/benchmarks/rapid_ma_matching.R
+## installed lema_reference.R
+45eda90b6a176a5d077e21f37b3316a6  /tmp/rapid_evidence/lib/manifoldalign/benchmarks/lema_reference.R
+## note: the repository HEAD advanced to 7f669ad (2026-10-19 03:00:07 UTC, "Fix vignette headers and SSMA-dependent retrieval checks") while runs were in progress; that commit touches only tests/ and vignettes/ (no R/, src/, inst/ changes), so the measured package code equals 7f669ad's package code.
+## package versions (library paths): manifoldalign 0.1.0.9000 (/tmp/rapid_evidence/lib); eigencore 2.0.0; multivarious 0.4.0; adjoin 0.1.0; Matrix 1.7.6; RSpectra 0.16.2; kernlab 0.9.33; Rcpp 1.1.2; glmnet 5.0; ps 1.9.3; devtools 2.5.2 (all /opt/r45/lib/R/library)
+## BLAS/LAPACK: /opt/r45/lib/libopenblasp-r0.3.34.so (OMP_NUM_THREADS=1)
+## R: R version 4.5.3 (2026-03-11), platform x86_64-conda-linux-gnu
+## run timeline (UTC): accuracy 02:56:15-03:04:33; ablation 03:04:33-03:08:31; matching 03:08:31-03:11:22; all exit 0. Two other R jobs were running on other cores (load avg ~1.7-2.1).

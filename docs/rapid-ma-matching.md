@@ -1,16 +1,15 @@
 # RAPID-MA bounded node-matching validation
 
-> **Status note (2026-10-18): the reported numbers predate later fixes and
-> need regeneration.** The diffusion encoder no longer adds reverse channels to
-> undirected random-walk relations, so the RAPID-MA embeddings, prototype
-> supports and every RAPID matching row change. The raw table's constant
-> `dense_pairwise_allocated` column is replaced by a measured
-> `candidate_density`. The benchmark fixture no longer carries row names
-> (target attribute row names previously encoded the hidden permutation; no
-> matcher read them).
-> These numbers were produced by the code at the time of the frozen run and
-> are kept unchanged here; they must be regenerated with the documented runner
-> before they are cited again.
+> **Regenerated 2026-10-19** with the documented runner and frozen seeds
+> 7201--7220 at commit `78d33c9b34f0185b120920ae18ae5a150e17401a`, after the
+> diffusion-encoder, candidate-density and fixture row-name fixes. All 180
+> rows completed. The previous run (commit `8a1992b`, R 4.5.1 on
+> aarch64-apple-darwin) is superseded; every accuracy conclusion below still
+> holds. Fit and match times come from a different machine (4-core x86_64
+> Linux, R 4.5.3, OpenBLAS) and are not comparable with the previous run.
+> The runner was executed outside the package root, so its metadata lacks
+> source hashes and the commit; `rapid-ma-regeneration-provenance.txt` records
+> the commit, source md5s, package versions, CPU, and environment.
 
 Status: multi-view matcher improvement verified; exact correspondence remains
 an open accuracy problem.
@@ -18,13 +17,13 @@ an open accuracy problem.
 ## Bottom line
 
 On 20 untouched synthetic cross-modality seeds, the new RAPID-MA matcher
-reached 14.13% Hits@1 at 100% coverage. The legacy prototype-bucket matcher
-reached 3.50% Hits@1 at 65.60% coverage, and nearest-neighbor retrieval in the
-RAPID embedding reached 1.57% Hits@1. The multi-view matcher therefore improves
-overall exact retrieval by 4.04x over the legacy matcher and 9.02x over the
+reached 14.20% Hits@1 at 100% coverage. The legacy prototype-bucket matcher
+reached 3.00% Hits@1 at 63.45% coverage, and nearest-neighbor retrieval in the
+RAPID embedding reached 1.35% Hits@1. The multi-view matcher therefore improves
+overall exact retrieval by 4.73x over the legacy matcher and 10.52x over the
 embedding-only path.
 
-The result is materially better, but 14.13% is not solved node correspondence.
+The result is materially better, but 14.20% is not solved node correspondence.
 A position-only diagnostic reaches 18.53% Hits@1, showing that most of the
 available structural signal is now used while a meaningful gap remains.
 
@@ -34,8 +33,8 @@ The fixture has 300 source nodes with known mates among 360 target nodes,
 different source and target feature widths, nonlinear target features, noisy
 positions, mixed numeric/categorical attributes, missing attributes, class
 imbalance, and only four labels per class. Development used seeds 7101--7103.
-Implementation commit `8a1992b6fe7f8287b1444e79e5a23327298aa33a`
-was then evaluated on untouched seeds 7201--7220.
+Implementation commit `78d33c9b34f0185b120920ae18ae5a150e17401a`
+was evaluated on untouched seeds 7201--7220.
 
 Hits@1 below is normalized over all 300 source nodes; unmatched rows count as
 incorrect. "Matched Hits@1" conditions on rows for which a method returned a
@@ -43,15 +42,15 @@ valid target.
 
 | Method | Runs | Hits@1 | Matched Hits@1 | Coverage | Fit (s) | Match (s) |
 |---|---:|---:|---:|---:|---:|---:|
-| Position kNN diagnostic | 20/20 | **18.53%** | 18.53% | 100.00% | 0 | 0.0019 |
-| RAPID multi-view, independent | 20/20 | **14.13%** | 14.13% | **100.00%** | 0.386 | 0.242 |
-| RAPID multi-view, one-to-one | 20/20 | 14.02% | **15.93%** | 87.72% | 0.386 | 0.252 |
-| RAPID prototype, one-to-one | 20/20 | 3.50% | 5.32% | 65.60% | 0.386 | 0.242 |
-| RAPID embedding kNN | 20/20 | 1.57% | 1.57% | 100.00% | 0.386 | NA |
-| Spectral-MNN embedding kNN | 20/20 | 0.58% | 0.58% | 100.00% | 0.044 | NA |
-| Token-OT embedding kNN | 20/20 | 0.52% | 0.52% | 100.00% | 0.055 | NA |
-| SSMA embedding kNN | 20/20 | 0.27% | 0.27% | 100.00% | 0.032 | NA |
-| LeMA embedding kNN | 20/20 | 0.05% | 1.25% | 4.00% | 0.378 | NA |
+| Position kNN diagnostic | 20/20 | **18.53%** | 18.53% | 100.00% | 0 | 0.0061 |
+| RAPID multi-view, independent | 20/20 | **14.20%** | 14.20% | **100.00%** | 1.315 | 0.876 |
+| RAPID multi-view, one-to-one | 20/20 | 13.67% | **15.78%** | 86.50% | 1.315 | 0.860 |
+| RAPID prototype, one-to-one | 20/20 | 3.00% | 4.74% | 63.45% | 1.315 | 0.853 |
+| RAPID embedding kNN | 20/20 | 1.35% | 1.35% | 100.00% | 1.315 | NA |
+| Spectral-MNN embedding kNN | 20/20 | 0.55% | 0.55% | 100.00% | 0.118 | NA |
+| Token-OT embedding kNN | 20/20 | 0.52% | 0.52% | 100.00% | 0.184 | NA |
+| SSMA embedding kNN | 20/20 | 0.27% | 0.27% | 100.00% | 0.091 | NA |
+| LeMA embedding kNN | 20/20 | 0.05% | 1.25% | 4.00% | 1.269 | NA |
 
 LeMA receives the paired labeled-landmark correspondence expected by its
 reference formulation, but its source embedding is valid for only those 12
@@ -104,8 +103,8 @@ the API default for backward compatibility.
 
 The position-only diagnostic is not a learned alignment method. It establishes
 how much correspondence information the fixture's noisy coordinates make
-available to a bounded nearest-neighbor index. The 14.13% multi-view result is
-76% of that diagnostic Hits@1 while also using alignment, prototypes, and
+available to a bounded nearest-neighbor index. The 14.20% multi-view result is
+77% of that diagnostic Hits@1 while also using alignment, prototypes, and
 attributes.
 
 This benchmark shows that explicit structure fixes a real candidate-recall
@@ -129,7 +128,8 @@ RAPID_MA_PROFILE=full \
 SHA-256:
 
 ```text
-886bcee27443559fff90d370368e3dc6e482405a67cd9b9d16d01d23af984bc0  rapid-ma-matching-raw.csv
-d58322554702792449a3b442643f7c25b7564922d875aa7794194aeeb25c505e  rapid-ma-matching-summary.csv
-0d2fe446841fb2cda5b21cf1ecbea6d1eb2168e8ed69934c762dbae1aa13b743  rapid-ma-matching-metadata.txt
+a31ebd3e57e3d3a7ea3509f32f978cf3e65349a8804708ff0c5c9f50329ee9e1  rapid-ma-matching-raw.csv
+f27657dc909b5be202a90b2b7cff0e53fe7528761d11427273320bfbb1cdba77  rapid-ma-matching-summary.csv
+89e6217e79a7dc362c0d0d7ee9c73c058b6f0a474ad4df6c1cda2837355d823a  rapid-ma-matching-metadata.txt
+8fcbca6d80391b28bd7e6bc9fa108bd65dbc25bb0fb4ad71716a1b14f1da73cf  rapid-ma-regeneration-provenance.txt
 ```
