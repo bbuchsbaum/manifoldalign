@@ -105,12 +105,18 @@ errors because previous releases silently ignored it.}
 rejected.}
 
 \item{backend}{Backend for the original eigensolver. One of \code{"auto"},
-\code{"full_exact"}, \code{"reduced_exact"}, or \code{"operator_exact"}. The legacy
-\code{"operator_exact"} name requests the certified partial quotient solver,
-with a certified dense fallback for small quotients. Every backend,
-including \code{"operator_exact"}, materialises dense kernel blocks and dense
-quotient matrices; a memory guard (\code{backend_control$max_dense_bytes})
-rejects problems whose estimated dense footprint is too large.}
+\code{"full_exact"}, \code{"reduced_exact"}, or \code{"operator_exact"}. All backends
+solve the same nullspace-deflated quotient pencil. \code{"full_exact"} and
+\code{"reduced_exact"} form the dense \verb{r x r} quotient matrices (\code{r} the total
+kernel rank) and use a dense generalized solve for small quotients,
+otherwise preconditioned LOBPCG with a certified dense fallback.
+\code{"operator_exact"} applies the quotient matrix-free through the
+per-domain kernel factors (certified dense fallback only for very small
+quotients). Every backend still materialises the dense kernel blocks and
+their eigen factors; a memory guard (\code{backend_control$max_dense_bytes})
+estimates each backend's footprint before allocation, skips candidates
+that exceed it (recorded in \code{fit$fidelity_history}) and errors when none
+fits.}
 
 \item{backend_control}{Optional list controlling auto backend thresholds,
 fidelity checks and the dense-memory guard (passed through to

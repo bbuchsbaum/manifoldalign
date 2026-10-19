@@ -79,16 +79,29 @@ eigensolver uses that matrix as an inner-product metric.}
 
 \item{backend_control}{Optional list for backend auto-selection and fidelity
 diagnostics. Supported keys: \code{full_exact_max_n}, \code{reduced_exact_max_r},
-\code{dense_exact_max_dim},
+\code{dense_exact_max_dim}, \code{dense_fallback_max_dim},
 \code{fidelity_residual_tol}, \code{fidelity_orth_tol}, \code{fidelity_action},
 \code{eigencore_tol}, \code{eigencore_maxit}, \code{eigencore_seed}, \code{kernel_rank_tol},
-and \code{max_dense_bytes}. \code{eigencore_seed} (default 1) seeds the iterative
+and \code{max_dense_bytes}. Quotients of dimension at most
+\code{dense_exact_max_dim} (default 400) are solved by the dense generalized
+eigensolver; larger ones by shifted-Cholesky preconditioned LOBPCG
+(\code{eigencore_maxit}, \code{eigencore_tol}). A certified partial solve whose
+pairs miss the original-pencil residual target is repeated with
+\code{eigencore_tol} tightened by 100 (at most twice). When no partial solve
+succeeds, \code{full_exact} and \code{reduced_exact} retry with the dense
+generalized eigensolver if the dimension is at most
+\code{dense_fallback_max_dim} (default 2000); \code{operator_exact} only if it is
+at most \code{dense_exact_max_dim}. Every returned solve must pass the
+eigencore certificate and the fidelity gate. \code{eigencore_seed} (default 1) seeds the iterative
 partial eigensolver locally, so fits do not depend on, or change, the
-caller's RNG state. Every backend materialises dense kernel blocks, dense
-quotient matrices and dense label-comparison matrices, so memory grows as
-O(n r + r^2 + n_labelled^2); \code{max_dense_bytes} (default 8 GiB) bounds a
-coarse estimate of that footprint and the fit errors before allocating
-when it is exceeded. Use \code{Inf} to disable the guard.}
+caller's RNG state. Every backend materialises the dense kernel blocks,
+their eigen factors and dense label-comparison matrices
+(O(sum n_i r_i + n_labelled^2)); \code{full_exact} and \code{reduced_exact} also
+form dense O(r^2) quotient matrices, which \code{operator_exact} replaces by
+matrix-free products and per-domain O(r_i^2) preconditioner blocks.
+\code{max_dense_bytes} (default 8 GiB) bounds a coarse per-backend estimate of
+that footprint: candidates that exceed it are skipped before allocation
+and the fit errors when none fits. Use \code{Inf} to disable the guard.}
 
 \item{seed}{Optional seed for REKEMA landmark selection; \code{NULL} draws from
 the session RNG. A supplied seed leaves the caller's RNG stream untouched.}

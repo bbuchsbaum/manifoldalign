@@ -57,6 +57,21 @@ These fix defects found in a package review; several change fitted output.
   REKEMA landmarks) and `backend_control$max_dense_bytes` (errors before an
   oversized dense allocation). `validate_out_of_sample_reconstruction()` and
   `validate_kema_eigenvalues()` are now defunct.
+* **KEMA solvers**: quotient solves above `dense_exact_max_dim` use
+  shifted-Cholesky preconditioned LOBPCG with guard vectors and
+  residual-driven tolerance tightening; uncertified partial solves fall back
+  to the certified dense generalized solve up to the new
+  `backend_control$dense_fallback_max_dim` (default 2000). A 550-node
+  fixture that previously failed certification on every backend now fits;
+  certification and the 1e-6 fidelity gate are unchanged. `operator_exact`
+  no longer forms the dense rank-by-rank quotient (memory
+  O(sum n_i r_i + sum r_i^2); the per-domain kernel blocks are still dense).
+  `backend_control$max_dense_bytes` is applied per backend from a
+  recalibrated estimate (the dense-backend estimate roughly doubled);
+  candidates over the limit are skipped before allocation and recorded in
+  `fit$fidelity_history`. `fit$fidelity` reports `dense_quotient_formed`,
+  `preconditioner`, `lobpcg_block_size`, `eigensolver_iterations`,
+  `partial_attempts` and `dense_memory_estimates`.
 * **SSMA**: the dense eigen fallback no longer discards the smallest
   eigenvalues; returning fewer than `ncomp` components warns and is recorded,
   and trivial null-space vectors are never substituted. Label
