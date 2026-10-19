@@ -16,7 +16,20 @@
   )
 }
 
+# A general dgCMatrix with sorted row indices and no stored zeros or NAs is
+# already in the canonical form the slow path below rebuilds, so it is returned
+# as is (with any cached factorizations cleared). This avoids a triplet round
+# trip on every relation and coupling of every RAPID-MA evaluation.
+.rapid_is_canonical_dgC <- function(A) {
+  identical(class(A), structure("dgCMatrix", package = "Matrix")) &&
+    !anyNA(A@x) && !any(A@x == 0)
+}
+
 .rapid_force_dgC <- function(A) {
+  if (.rapid_is_canonical_dgC(A)) {
+    if (length(A@factors)) A@factors <- list()
+    return(A)
+  }
   if (!inherits(A, "Matrix")) {
     A <- Matrix::Matrix(A, sparse = TRUE)
   }
@@ -121,12 +134,14 @@
   }
   center <- colMeans(Z)
   center[!is.finite(center)] <- 0
-  Zc <- sweep(Z, 2L, center, "-")
+  # Column-recycled arithmetic performs the same elementwise operations as
+  # sweep() without its aperm() copy.
+  Zc <- if (nrow(Z)) Z - rep(center, each = nrow(Z)) else sweep(Z, 2L, center, "-")
   denom <- max(nrow(Zc) - 1L, 1L)
   scale <- sqrt(colSums(Zc * Zc) / denom)
   active <- is.finite(scale) & scale > 1e-12
   scale[!active] <- 1
-  out <- sweep(Zc, 2L, scale, "/")
+  out <- if (nrow(Zc)) Zc / rep(scale, each = nrow(Zc)) else sweep(Zc, 2L, scale, "/")
   out[!is.finite(out)] <- 0
   if (isTRUE(drop_constant)) {
     out <- out[, active, drop = FALSE]
@@ -383,11 +398,41 @@
   )
 }
 
+# Keep only reciprocated edges, weighted by the mean of the two directions:
+# ((A + t(A)) / 2) restricted to the pattern of (A != 0) & (t(A) != 0). The
+# computation works on the O(nnz) triplets of A, which gives the same values
+# ((a_ij + a_ji) / 2, IEEE addition being commutative) as the sparse matrix
+# arithmetic it replaces without the intermediate sparse products.
 .rapid_mutual_relation <- function(A) {
   if (!length(A@x)) return(A)
+  A <- .rapid_force_dgC(A)
+  if (!length(A@x)) return(A)
+  if (nrow(A) != ncol(A)) stop("A mutual relation must be square.", call. = FALSE)
+  n_row <- as.double(nrow(A))
   At <- Matrix::t(A)
-  mask <- (A != 0) * (At != 0)
-  .rapid_force_dgC(Matrix::drop0(((A + At) / 2) * mask))
+  # Column-major keys of the stored entries; CSC storage keeps both sorted.
+  column_key <- function(M) {
+    as.double(M@i) + n_row * as.double(rep.int(seq_len(ncol(M)) - 1L, diff(M@p)))
+  }
+  key <- column_key(A)
+  key_t <- column_key(At)
+  position <- findInterval(key, key_t)
+  found <- position > 0L
+  found[found] <- key_t[position[found]] == key[found]
+  value <- (A@x[found] + At@x[position[found]]) / 2
+  nonzero <- value != 0
+  keep <- which(found)[nonzero]
+  # The kept entries are a subsequence of A's CSC storage, so they are
+  # already in canonical column-major order.
+  column <- as.integer(key[keep] %/% n_row) + 1L
+  methods::new(
+    "dgCMatrix",
+    i = A@i[keep],
+    p = c(0L, cumsum(tabulate(column, nbins = ncol(A)))),
+    x = value[nonzero],
+    Dim = A@Dim,
+    Dimnames = A@Dimnames
+  )
 }
 
 .rapid_cap_out_degree <- function(A, degree_cap) {
@@ -408,6 +453,81 @@
     dims = dim(A),
     dimnames = dimnames(A)
   )
+}
+
+# Lexicographic rank of each row of a dense view (row index breaks exact
+# duplicates). It is a permutation, so (distance, rank) orders candidates
+# uniquely and independently of row order.
+.rapid_view_tie_rank <- function(view) {
+  nv <- nrow(view)
+  tie_args <- lapply(seq_len(ncol(view)), function(j) view[, j])
+  tie_args[[length(tie_args) + 1L]] <- seq_len(nv)
+  tie_args$method <- "radix"
+  tie_order <- do.call(order, tie_args)
+  tie_rank <- integer(nv)
+  tie_rank[tie_order] <- seq_len(nv)
+  tie_rank
+}
+
+# Views with at least this many columns use the blocked exact backend. A
+# kd-tree loses its pruning power as the dimension grows (on the scaling
+# fixture RANN::nn2 is effectively quadratic for the 10- and 24-column feature
+# views), while low-dimensional views such as 2-D or 3-D coordinates keep the
+# kd-tree, which is fastest there.
+.rapid_knn_blocked_min_dim <- 5L
+
+.rapid_knn_backend <- function(n_columns) {
+  if (n_columns >= .rapid_knn_blocked_min_dim) "blocked_exact" else "rann"
+}
+
+# Exact `limit` nearest other rows of every row of a finite dense view.
+# Returns query-major vectors (query, candidate, distance) with each query's
+# neighbours in ascending (distance, lexicographic row rank) order.
+#
+# "blocked_exact" (src/rapid_exact_knn.cpp) is exact with a deterministic tie
+# break: it returns the same neighbours and bit-identical distances as the
+# kd-tree whenever the `limit`-th distance is not tied. "rann" is the ANN
+# kd-tree; on an exact distance tie at the boundary it keeps whichever tied
+# rows the tree reports.
+.rapid_self_knn <- function(view, limit, backend = c("blocked_exact", "rann")) {
+  backend <- match.arg(backend)
+  nv <- nrow(view)
+  tie_rank <- .rapid_view_tie_rank(view)
+  if (identical(backend, "blocked_exact")) {
+    found <- rapid_exact_knn_cpp(view, tie_rank, as.integer(limit))
+    return(list(
+      query = rep(seq_len(nv), each = limit),
+      candidate = found$index,
+      distance = found$distance,
+      backend = backend
+    ))
+  }
+
+  request_k <- min(nv, limit + 1L)
+  nn <- RANN::nn2(data = view, query = view, k = request_k)
+  # Flatten the bounded ANN result row-wise. This avoids an O(n) interpreter
+  # loop while retaining O(n * degree_cap) memory.
+  query <- rep(seq_len(nv), each = request_k)
+  candidate <- as.integer(c(t(nn$nn.idx)))
+  distance <- as.numeric(c(t(nn$nn.dists)))
+  keep <- candidate != query & candidate >= 1L & candidate <= nv &
+    is.finite(distance)
+  query <- query[keep]
+  candidate <- candidate[keep]
+  distance <- distance[keep]
+  if (length(query)) {
+    ord <- order(query, distance, tie_rank[candidate], candidate, method = "radix")
+    query <- query[ord]
+    candidate <- candidate[ord]
+    distance <- distance[ord]
+    within_query <- sequence(rle(query)$lengths)
+    keep <- within_query <= limit
+    query <- query[keep]
+    candidate <- candidate[keep]
+    distance <- distance[keep]
+  }
+  list(query = query, candidate = candidate, distance = distance,
+       backend = backend)
 }
 
 .rapid_build_neighbor_relation <- function(view,
@@ -460,37 +580,16 @@
   }
 
   limit <- if (is.null(radius)) min(k, degree_cap, nv - 1L) else min(degree_cap, nv - 1L)
-  request_k <- min(nv, limit + 1L)
   data_valid <- view[valid_idx, , drop = FALSE]
-  nn <- RANN::nn2(data = data_valid, query = data_valid, k = request_k)
-
-  # Flatten the bounded ANN result row-wise. This avoids an O(n) interpreter
-  # loop while retaining O(n * degree_cap) memory. Lexicographic ranks of the
-  # node views provide a permutation-stable tie break for distinct rows.
-  query <- rep(seq_len(nv), each = request_k)
-  candidate <- as.integer(c(t(nn$nn.idx)))
-  distance <- as.numeric(c(t(nn$nn.dists)))
-  keep <- candidate != query & candidate >= 1L & candidate <= nv &
-    is.finite(distance)
-  if (!is.null(radius)) keep <- keep & distance <= radius
-  query <- query[keep]
-  candidate <- candidate[keep]
-  distance <- distance[keep]
-
-  if (length(query)) {
-    tie_args <- lapply(seq_len(ncol(data_valid)), function(j) data_valid[, j])
-    tie_args[[length(tie_args) + 1L]] <- seq_len(nv)
-    tie_args$method <- "radix"
-    tie_order <- do.call(order, tie_args)
-    tie_rank <- integer(nv)
-    tie_rank[tie_order] <- seq_len(nv)
-
-    ord <- order(query, distance, tie_rank[candidate], candidate, method = "radix")
-    query <- query[ord]
-    candidate <- candidate[ord]
-    distance <- distance[ord]
-    within_query <- sequence(rle(query)$lengths)
-    keep <- within_query <= limit
+  backend <- .rapid_knn_backend(ncol(data_valid))
+  neighbours <- .rapid_self_knn(data_valid, limit, backend)
+  query <- neighbours$query
+  candidate <- neighbours$candidate
+  distance <- neighbours$distance
+  if (!is.null(radius)) {
+    # Both backends return each query's neighbours in ascending
+    # (distance, tie rank) order, so filtering keeps that order.
+    keep <- distance <= radius
     query <- query[keep]
     candidate <- candidate[keep]
     distance <- distance[keep]
@@ -533,6 +632,7 @@
       missing_rows = as.integer(which(!valid)),
       degree_cap = degree_cap,
       nnz_directed = as.integer(nnz_directed),
+      neighbor_backend = backend,
       deterministic = TRUE
     )
   )

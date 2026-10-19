@@ -206,6 +206,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// rapid_exact_knn_cpp
+Rcpp::List rapid_exact_knn_cpp(const Rcpp::NumericMatrix& X, const Rcpp::IntegerVector& tie_rank, int k, int leaf_size);
+RcppExport SEXP _manifoldalign_rapid_exact_knn_cpp(SEXP XSEXP, SEXP tie_rankSEXP, SEXP kSEXP, SEXP leaf_sizeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::NumericMatrix& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type tie_rank(tie_rankSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    Rcpp::traits::input_parameter< int >::type leaf_size(leaf_sizeSEXP);
+    rcpp_result_gen = Rcpp::wrap(rapid_exact_knn_cpp(X, tie_rank, k, leaf_size));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sinkhorn_unified
 arma::mat sinkhorn_unified(const arma::mat& cost, const arma::vec& a, const arma::vec& b, double epsilon, int max_iter, double tol, bool stabilized);
 RcppExport SEXP _manifoldalign_sinkhorn_unified(SEXP costSEXP, SEXP aSEXP, SEXP bSEXP, SEXP epsilonSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP stabilizedSEXP) {
@@ -555,6 +569,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_manifoldalign_solve_sylvester_rwr_cpp", (DL_FUNC) &_manifoldalign_solve_sylvester_rwr_cpp, 7},
     {"_manifoldalign_compute_rwr_vectorized_cpp", (DL_FUNC) &_manifoldalign_compute_rwr_vectorized_cpp, 5},
     {"_manifoldalign_compute_parrot_cost_cpp", (DL_FUNC) &_manifoldalign_compute_parrot_cost_cpp, 9},
+    {"_manifoldalign_rapid_exact_knn_cpp", (DL_FUNC) &_manifoldalign_rapid_exact_knn_cpp, 4},
     {"_manifoldalign_sinkhorn_unified", (DL_FUNC) &_manifoldalign_sinkhorn_unified, 7},
     {"_manifoldalign_sinkhorn_unified_potentials", (DL_FUNC) &_manifoldalign_sinkhorn_unified_potentials, 9},
     {"_manifoldalign_solve_sinkhorn_stabilized_cpp", (DL_FUNC) &_manifoldalign_solve_sinkhorn_stabilized_cpp, 4},

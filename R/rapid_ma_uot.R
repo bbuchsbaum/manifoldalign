@@ -348,6 +348,19 @@
       stop("Transport constraints leave source row(s) without a candidate: ",
            paste(head(offending, 8L), collapse = ", "), ".", call. = FALSE)
     }
+    if (q >= ncol(cost)) {
+      # Every finite candidate is kept. The q selection passes below would
+      # store the same edges in a different order, and the CSR/CSC layout is
+      # sorted by (row, prototype), so the support is identical.
+      finite <- which(is.finite(cost))
+      count <- length(finite)
+      target <- cursor + seq_len(count)
+      edge_i[target] <- rows[(finite - 1L) %% nrow(cost) + 1L]
+      edge_j[target] <- initial_prototypes[(finite - 1L) %/% nrow(cost) + 1L]
+      edge_cost[target] <- cost[finite]
+      cursor <- cursor + count
+      next
+    }
     for (pass in seq_len(q)) {
       chosen <- max.col(-cost, ties.method = "first")
       valid <- available >= pass
