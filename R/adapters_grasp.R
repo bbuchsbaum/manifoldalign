@@ -37,6 +37,13 @@ grasp_aligner <- function() {
 #' @param sigma Bandwidth parameter for descriptor weighting
 #' @param lambda Regularization parameter for rotation alignment
 #' @param use_laplacian Logical; if TRUE use graph Laplacian, else adjacency
+#' @param graph_metric Distance used to build each domain's kNN graph:
+#'   \code{"euclidean"} (default) uses Euclidean distances between rows, so
+#'   the graph is invariant to rotations and translations of the features;
+#'   \code{"correlation"} first standardises each row across its features
+#'   (needs at least three features) and suits rows whose features are
+#'   comparable profiles. The heat-kernel bandwidth of each graph is the
+#'   median distance to the k-th neighbour under the same metric.
 #' @param solver Assignment solver: `"linear"` or `"hungarian"`; both run the
 #'   exact linear assignment solver.
 #' @param ... Additional arguments (unused)
@@ -64,11 +71,14 @@ fit_pair.grasp_aligner <- function(algo, X_i, X_j, links = NULL,
                                    lambda = 0.1,
                                    use_laplacian = TRUE,
                                    solver = c("linear", "hungarian"),
+                                   graph_metric = c("euclidean", "correlation"),
                                    ...) {
   solver <- match.arg(solver)
+  graph_metric <- match.arg(graph_metric)
 
   strata <- list(list(x = as.matrix(X_i)), list(x = as.matrix(X_j)))
-  bases <- compute_grasp_basis(strata, ncomp = ncomp, use_laplacian = use_laplacian)
+  bases <- compute_grasp_basis(strata, ncomp = ncomp, use_laplacian = use_laplacian,
+                               graph_metric = graph_metric)
   descs <- compute_grasp_descriptors(bases, q_descriptors = q_descriptors, sigma = sigma)
 
   align_res <- align_grasp_bases(bases[[1]], bases[[2]], descs[[1]], descs[[2]], lambda = lambda)

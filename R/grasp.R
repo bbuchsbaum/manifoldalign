@@ -12,6 +12,13 @@
 #'   objective \eqn{\mathrm{off}(M^\top \Lambda_2 M) + \lambda
 #'   \|F^\top \Phi_1 - G^\top \Phi_2 M\|_F^2} (default: 0.1).
 #' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
+#' @param graph_metric Distance used to build each domain's kNN graph:
+#'   \code{"euclidean"} (default) uses Euclidean distances between rows, so
+#'   the graph is invariant to rotations and translations of the features;
+#'   \code{"correlation"} first standardises each row across its features
+#'   (needs at least three features) and suits rows whose features are
+#'   comparable profiles. The heat-kernel bandwidth of each graph is the
+#'   median distance to the k-th neighbour under the same metric.
 #' @param solver Assignment method: "linear" (default) or its synonym
 #'   "hungarian", both the exact Hungarian solver. "auction" is not available.
 #' @param max_iter Maximum Riemannian gradient iterations of the base
@@ -73,7 +80,9 @@ grasp.hyperdesign <- function(data,
                              solver = "linear",
                              max_iter = 200,
                              tol = 1e-8,
+                             graph_metric = c("euclidean", "correlation"),
                              ...) {
+  graph_metric <- match.arg(graph_metric)
   
   # Input validation (following package patterns + your suggestions)
   chk::chk_number(ncomp)
@@ -122,16 +131,16 @@ grasp.hyperdesign <- function(data,
 
   grasp_fit(pdata, proc, ncomp, q_descriptors, sigma, lambda,
             use_laplacian, solver, feature_block_indices(pdata),
-            max_iter = max_iter, tol = tol)
+            max_iter = max_iter, tol = tol, graph_metric = graph_metric)
 }
 
 #' @keywords internal
 grasp_fit <- function(strata, proc, ncomp, q_descriptors, sigma, lambda,
                      use_laplacian, solver, feature_blocks,
-                     max_iter = 200, tol = 1e-8) {
+                     max_iter = 200, tol = 1e-8, graph_metric = "euclidean") {
   
   # Block A: Spectral basis construction
-  bases <- compute_grasp_basis(strata, ncomp, use_laplacian)
+  bases <- compute_grasp_basis(strata, ncomp, use_laplacian, graph_metric)
   
   # Block B: Multi-scale descriptors  
   descriptors <- compute_grasp_descriptors(bases, q_descriptors, sigma)
@@ -178,14 +187,48 @@ grasp_fit <- function(strata, proc, ncomp, q_descriptors, sigma, lambda,
   )
 }
 
+# Rows used to build a GRASP graph. "correlation" standardises each row across
+# its features (as adjoin's "normalized" weights do); with fewer than three
+# features every standardised row takes at most two values, so it is refused.
+.grasp_graph_rows <- function(X, graph_metric) {
+  X <- as.matrix(X)
+  if (identical(graph_metric, "euclidean")) return(X)
+  if (ncol(X) < 3L) {
+    stop("graph_metric = \"correlation\" needs at least three features; with ",
+         ncol(X), " every standardised row takes at most two values. Use ",
+         "graph_metric = \"euclidean\".", call. = FALSE)
+  }
+  Xc <- X - rowMeans(X)
+  s <- sqrt(rowSums(Xc * Xc) / (ncol(X) - 1L))
+  s[!is.finite(s) | s == 0] <- 1
+  Xc / s
+}
+
+# Heat-kernel bandwidth: median distance from each row to its k-th nearest
+# neighbour (exact kd-tree search). Deterministic, invariant to row order and
+# to isometries of the rows, and independent of the caller's RNG.
+.grasp_knn_bandwidth <- function(X, k) {
+  k <- as.integer(min(k, nrow(X) - 1L))
+  if (k < 1L) return(1)
+  nn <- RANN::nn2(X, k = k + 1L, eps = 0)
+  d <- nn$nn.dists[, k + 1L]
+  d <- d[is.finite(d) & d > 0]
+  sigma <- if (length(d)) stats::median(d) else NA_real_
+  if (!is.finite(sigma) || sigma <= 0) 1 else sigma
+}
+
 #' Block A: Spectral Basis Construction - Corrected
 #' 
 #' @param strata List of data domains 
 #' @param ncomp Number of spectral components
 #' @param use_laplacian Whether to use Laplacian normalization
+#' @param graph_metric \code{"euclidean"} or \code{"correlation"}; see
+#'   \code{\link{grasp}}.
 #' @return List of spectral bases for each domain
 #' @keywords internal
-compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
+compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE,
+                                graph_metric = c("euclidean", "correlation")) {
+  graph_metric <- match.arg(graph_metric)
   # Validate input
   if (!is.list(strata) || length(strata) == 0) {
     stop("strata must be a non-empty list", call. = FALSE)
@@ -206,15 +249,17 @@ compute_grasp_basis <- function(strata, ncomp, use_laplacian = TRUE) {
       stop("GRASP requires at least 3 samples per domain", call. = FALSE)
     }
     
-    # Construct graph using package patterns (Patch 2)
-    # Auto-tune sigma for graph construction via median distance heuristic
-    sigma_g <- tryCatch(choose_sigma(stratum$x), error = function(e) 0.5)
+    # Heat-kernel kNN graph on the rows of the chosen metric, with a
+    # deterministic bandwidth from the same distances.
+    X_graph <- .grasp_graph_rows(stratum$x, graph_metric)
+    k_graph <- min(max(5, nrow(X_graph) %/% 3), nrow(X_graph) - 1)
+    sigma_g <- .grasp_knn_bandwidth(X_graph, k_graph)
     graph_weights <- tryCatch(
       adjoin::graph_weights(
-        stratum$x,
-        weight_mode = "normalized",
+        X_graph,
+        weight_mode = "heat",
         neighbor_mode = "knn",
-        k = min(max(5, nrow(stratum$x) %/% 3), nrow(stratum$x) - 1),
+        k = k_graph,
         type = "normal",
         sigma = sigma_g
       ),

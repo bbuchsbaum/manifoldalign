@@ -100,6 +100,17 @@ These fix defects found in a package review; several change fitted output.
   works. GRASP's `lambda`, `max_iter` and `tol` now take effect, unequal node
   counts work, and `grasp_multiset()` handles four or more domains of unequal
   size. `solver = "auction"` now errors everywhere (it never worked).
+* **GRASP graphs**: `grasp()`, `grasp_multiset()` and `grasp_aligner()` build
+  Euclidean heat-kernel kNN graphs by default (`graph_metric = "euclidean"`)
+  instead of graphs on row-standardised features. The old graphs were not
+  invariant to rotations of the features and collapsed with two features, so
+  GRASP matched a rotated copy of a domain at chance level; it now recovers
+  rotated, permuted copies exactly. The bandwidth is the median k-th-neighbour
+  distance under the graph's own metric (previously a random subsample of raw
+  distances, which also consumed the caller's random numbers).
+  `graph_metric = "correlation"` keeps row-standardised graphs and requires
+  at least three features. GRASP results change; tournament rows for GRASP
+  predate this.
 * **Eigensolvers**: graph-alignment methods share one symmetric eigensolver
   that returns the requested end of the spectrum and checks convergence;
   coupled diagonalisation uses the smallest algebraic eigenvalues.

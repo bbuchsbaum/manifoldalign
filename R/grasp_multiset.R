@@ -11,6 +11,13 @@
 #' @param sigma Diffusion parameter (default: 0.73)
 #' @param lambda Regularization parameter (default: 0.1)
 #' @param use_laplacian Whether to use Laplacian normalization (default: TRUE)
+#' @param graph_metric Distance used to build each domain's kNN graph:
+#'   \code{"euclidean"} (default) uses Euclidean distances between rows, so
+#'   the graph is invariant to rotations and translations of the features;
+#'   \code{"correlation"} first standardises each row across its features
+#'   (needs at least three features) and suits rows whose features are
+#'   comparable profiles. The heat-kernel bandwidth of each graph is the
+#'   median distance to the k-th neighbour under the same metric.
 #' @param anchor Index of reference graph (1-based) or "mean" (default: 1)
 #' @param solver Assignment solver. Only \code{"linear"} (the exact Hungarian
 #'   solver from \code{clue::solve_LSAP()}) is available; \code{"auction"} is
@@ -66,10 +73,12 @@ grasp_multiset.hyperdesign <- function(data,
                                      max_iter = 100,
                                      tol = 1e-6,
                                      verbose = FALSE,
+                                     graph_metric = c("euclidean", "correlation"),
                                      ...) {
 
   # Validate input
   chk::chk_s3_class(data, "hyperdesign")
+  graph_metric <- match.arg(graph_metric)
   chk::chk_flag(verbose)
 
   domains <- lapply(unclass(data), function(d) list(x = as.matrix(d$x), design = d$design))
@@ -119,7 +128,7 @@ grasp_multiset.hyperdesign <- function(data,
   }
 
   # Blocks A & B: Use existing helpers from grasp.R
-  bases <- compute_grasp_basis(domains, ncomp, use_laplacian)
+  bases <- compute_grasp_basis(domains, ncomp, use_laplacian, graph_metric)
   descriptors <- compute_grasp_descriptors(bases, q_descriptors, sigma)
 
   # New: Joint basis alignment (with robust anchor-pairwise fallback)

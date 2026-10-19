@@ -435,16 +435,19 @@ test_that("GRASP achieves strict assignment accuracy on structured data", {
   message("[toy-benchmarks] GRASP assignment accuracy test")
   set.seed(789)
 
-  # GRASP builds row-standardised (correlation) kNN graphs. A linear map of
-  # the features changes those graphs, and with two features every
-  # standardised row is +/-(1, -1)/sqrt(2), so the two-feature linear-affine
-  # views are not isomorphic graphs and GRASP is at chance level on them.
-  # Graph matching is tested where the graphs agree: view 2 is a row-permuted,
-  # slightly noisy copy of a 10-feature view 1.
-  n <- 45
-  view1 <- matrix(rnorm(n * 10), n) %*% matrix(rnorm(100), 10)
+  # GRASP matches graphs. A non-orthogonal linear map of the features changes
+  # the kNN graph, so the two linear-affine views are not isomorphic graphs
+  # and GRASP is at chance level on them. Graph matching is tested where the
+  # graphs agree: view 2 is a rotated, row-permuted, slightly noisy copy of
+  # view 1, which leaves Euclidean kNN graphs unchanged.
+  linear_data <- gen_linear_triplet(n = 45, noise = 0.01, seed = 789)
+  view1 <- linear_data$view1
+  n <- nrow(view1)
+  p <- ncol(view1)
+  rot <- qr.Q(qr(matrix(rnorm(p * p), p)))
   perm <- sample(n)
-  view2 <- view1[perm, , drop = FALSE] + matrix(rnorm(n * 10, sd = 1e-3), n)
+  view2 <- (view1 %*% rot)[perm, , drop = FALSE] +
+    matrix(rnorm(n * p, sd = 1e-3), n)
   grasp_data <- list(
     view1 = view1,
     view2 = view2,
@@ -542,16 +545,18 @@ test_that("Algorithm runtime performance regression checks", {
   latent_dist <- as.matrix(dist(linear_data$latent))
   T_sim <- exp(-latent_dist^2 / median(latent_dist^2))
   
+  # 25 updates are a timing budget, not enough to converge, so the fit is
+  # refused; the timing covers the 25 updates.
   runtime <- system.time({
-  result <- suppressWarnings(linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE, 
-                                              maxit = 25, verbose = FALSE))
+    expect_error(
+      suppressWarnings(linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE,
+                                        maxit = 25, verbose = FALSE)),
+      "failed to converge: MAXITER_REACHED"
+    )
   })
-  
+
   # Should complete in reasonable time (prevent O(n^3) regressions)
   expect_lt(runtime[["elapsed"]], 2)  # 2 seconds should be plenty for n=60
-  # 25 updates are a timing budget, not enough to converge; status must say so
-  expect_identical(result$convergence$message, "MAXITER_REACHED")
-  expect_equal(result$convergence$iterations, 25L)
 })
 
 # Remove always-passing summary tests - convert to vignette material

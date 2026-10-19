@@ -139,7 +139,10 @@ test_that("grasp_multiset produces reasonable alignment quality", {
   
   # Create graphs with known correspondence (shuffled versions)
   n <- 30
-  angles <- 2 * pi * seq_len(n) / n
+  # Unevenly spaced angles: equally spaced points on a closed curve form a
+  # cycle graph whose rotations and reflections are automorphisms, so the
+  # correspondence would only be identifiable up to that symmetry.
+  angles <- 2 * pi * (seq_len(n) / n)^1.3
   base_graph <- cbind(
     cos(angles),
     sin(angles),
@@ -177,9 +180,10 @@ test_that("grasp_multiset produces reasonable alignment quality", {
   correct1 <- sum(recovered1 == 1:n)
   correct2 <- sum(recovered2 == 1:n)
   
-  # With noise, we don't expect perfect recovery, but should do better than random
-  expect_gt(correct1, n / 12)  # Better than random (≈1 match expected by chance)
-  expect_gt(correct2, n / 12)
+  # The graphs are identifiable, so most rows must be recovered (chance
+  # level is about one row).
+  expect_gte(correct1, 0.8 * n)
+  expect_gte(correct2, 0.8 * n)
 })
 
 test_that("grasp_multiset handles solver options", {
