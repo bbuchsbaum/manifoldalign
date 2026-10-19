@@ -9,7 +9,7 @@ class LinearSimEmbed : public roptim::Functor {
 public:
   LinearSimEmbed(const arma::mat& X, const arma::mat& T, const arma::mat& M, 
                  const double sigma_P, const int ncomp, const double alpha_p)
-    : X_(X), T_(T), M_(M), sigma_P_(sigma_P), ncomp_(ncomp), alpha_p_(alpha_p) {
+    : X_(X), T_(T), M_(M), ncomp_(ncomp), sigma_P_(sigma_P), alpha_p_(alpha_p) {
     
     if (!std::isfinite(sigma_P_) || sigma_P_ <= 0) {
       Rcpp::stop("sigma_P must be finite and positive");

@@ -32,7 +32,7 @@ jobs:
 
       - name: Check serial network-simplex transport oracle
         run: |
-          c++ -std=c++17 -U_OPENMP -Werror=unknown-pragmas -Isrc \
+          c++ -std=c++17 -U_OPENMP -Werror=unknown-pragmas -Werror=reorder -Isrc \
             tools/tests/network-simplex-serial.cpp -o "$RUNNER_TEMP/simplex-serial"
           "$RUNNER_TEMP/simplex-serial"
 

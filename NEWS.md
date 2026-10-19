@@ -1,5 +1,8 @@
 # Development validation repairs
 
+- Match native constructor initializer lists to member declaration order,
+  retaining compiler warnings and clean Windows package installation.
+
 - Preserve LF bytes in frozen text evidence on Windows and use native R
   file hashing; exact checksum and byte-count checks remain enforced.
 

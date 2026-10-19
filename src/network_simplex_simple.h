@@ -248,10 +248,11 @@ namespace lemon {
 		/// but it is usually slower. Therefore it is disabled by default.
 		NetworkSimplexSimple(const GR& graph, bool arc_mixing, int nbnodes, ArcsType nb_arcs, size_t maxiters = 0) :
 			_graph(graph),  //_arc_id(graph),
-			_arc_mixing(arc_mixing), _init_nb_nodes(nbnodes), _init_nb_arcs(nb_arcs),
+			_arc_mixing(arc_mixing),
 			MAX(std::numeric_limits<Value>::max()),
 			INF(std::numeric_limits<Value>::has_infinity ?
-				std::numeric_limits<Value>::infinity() : MAX)
+				std::numeric_limits<Value>::infinity() : MAX),
+			_init_nb_nodes(nbnodes), _init_nb_arcs(nb_arcs)
 		{
 			// Reset data structures
 			reset();
