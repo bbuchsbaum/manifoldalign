@@ -1,5 +1,9 @@
 # Development validation repairs
 
+- Remove redundant multiscale dictionary coordinates before its eigensolve,
+  preserving the node kernel and coefficient ridge penalty; the method remains
+  deprecated. Generate website files separately from tracked evidence.
+
 - Resolve required PRIMME from a pinned CRAN-mirror source; replace the
   archived pryr memory helper with maintained lobstr, and declare the
   preprocessing-test dependency.
