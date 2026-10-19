@@ -82,7 +82,13 @@ Fields of the nested components:
 \code{normalization} (\code{"random_walk"}, \code{"symmetric"}), \code{weight_mode}
 (\code{"heat"}, \code{"binary"}), \code{degree_cap}, \code{custom_symmetrize}, \code{dense_max_n}.
 When \code{feature_sketch_dim} is \code{NULL} the feature sketch width is
-\code{min(ncol(X), max(128, 4 * ncomp))}.
+\code{min(ncol(X), max(128, 4 * ncomp))}. Generated neighbour graphs are
+exact. Views with at least five columns use a blocked exact search that
+breaks ties at the \code{k}-th distance by lexicographic row order, so the
+graph does not depend on row order; narrower views (for example 2-D
+coordinates) use the RANN kd-tree. The fitted
+\code{relations[[domain]]$metadata[[relation]]$neighbor_backend} records which
+search was used.
 \item \code{diffusion}: \code{steps}, \code{sketch_dim}, \code{output_dim}, \code{gate} (\code{"energy"},
 \code{"uniform"}, \code{"fixed"}), \code{relation_weights}, \code{gate_temperature},
 \code{label_gate_weight}, \code{include_position}, \code{include_attribute},

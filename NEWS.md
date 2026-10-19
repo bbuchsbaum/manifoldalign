@@ -173,6 +173,16 @@ These fix defects found in a package review; several change fitted output.
   ablation effects, the small-n memory comparison with LeMA, and the
   sparse-baseline runtime crossover do not and are corrected there. The
   Chikusei blocked-inductive and million-node evidence was not rerun.
+* **RAPID-MA speed**: fits are faster (about 2.6x at 50,000 common nodes on
+  the scaling fixture; the 100,000-node task now completes within the
+  240-second cap) with bit-identical results on the benchmark fixtures.
+  Feature, spatial and attribute neighbour graphs on views with at least five
+  columns use a new exact blocked search (`neighbor_backend =
+  "blocked_exact"` in the relation metadata) instead of the RANN kd-tree.
+  Exact distance ties at the k-th neighbour are broken by lexicographic row
+  order, so these graphs no longer depend on row order. Mutual-edge,
+  prototype-relation, sparse-transport and scaling helpers avoid redundant
+  sparse-matrix work.
 * **RAPID-MA relation-safety gate**: `rapid_ma_semisup()` now compares
   candidate relation sets with a no-transfer reference instead of the full
   relation set; the old gate never scored a predictor equivalent to the
