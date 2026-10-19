@@ -41,3 +41,13 @@ test_that("real-data scripts pin resume, license, and evidence-scope contracts",
   expect_true(any(grepl("full_frozen_split", runner, fixed = TRUE)))
   expect_true(any(grepl("select_balanced", extract, fixed = TRUE)))
 })
+
+
+test_that("vignette metadata is parsed with a clean UTF-8 encoding", {
+  root <- test_path("..", "..")
+  meta <- tools::pkgVignettes(dir = root)
+  files <- list.files(file.path(root, "vignettes"), pattern = "[.]Rmd$")
+  expect_length(meta$docs, length(files))
+  expect_true(all(meta$encodings == "UTF-8"))
+  expect_true(all(meta$engines == "knitr::rmarkdown"))
+})

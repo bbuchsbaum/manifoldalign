@@ -30,6 +30,12 @@ jobs:
             any::pkgload
           needs: check
 
+      - name: Check serial network-simplex transport oracle
+        run: |
+          c++ -std=c++17 -U_OPENMP -Werror=unknown-pragmas -Isrc \
+            tools/tests/network-simplex-serial.cpp -o "$RUNNER_TEMP/simplex-serial"
+          "$RUNNER_TEMP/simplex-serial"
+
       - name: Enforce PR computational-oracle tier
         run: Rscript tools/run-alignment-test-tier.R pr
 

@@ -54,7 +54,9 @@
 #endif
 //#include "core.h"
 //#include "lmath.h"
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <cmath>
 
 
@@ -65,6 +67,24 @@
 #define INVALID (-1)
 
 namespace lemon {
+
+    // R may compile without OpenMP (notably Apple Clang). Keep the same
+    // pivot search with one worker in that case, without an omp.h dependency.
+    inline int simplex_max_threads() {
+#ifdef _OPENMP
+        return omp_get_max_threads();
+#else
+        return 1;
+#endif
+    }
+    inline int simplex_thread_num() {
+#ifdef _OPENMP
+        return omp_get_thread_num();
+#else
+        return 0;
+#endif
+    }
+
 
 
 	template <typename T>
@@ -466,7 +486,7 @@ namespace lemon {
 			bool findEnteringArc() {
 				Cost min_val = 0;
 
-				ArcsType N = omp_get_max_threads();
+				ArcsType N = simplex_max_threads();
 				std::vector<Cost> minArray(N, 0);
 				std::vector<ArcsType> arcId(N);
 				ArcsType bs = (ArcsType)ceil(_block_size / (double)N);
@@ -475,11 +495,15 @@ namespace lemon {
 
 					ArcsType e;
 					ArcsType j;
+#ifdef _OPENMP
 #pragma omp parallel
+#endif
 					{
-						int t = omp_get_thread_num();
+						int t = simplex_thread_num();
 
+#ifdef _OPENMP
 #pragma omp for schedule(static, bs) lastprivate(e)
+#endif
 						for (j = 0; j < std::min(i + _block_size, _search_arc_num) - i; j++) {
 							e = (_next_arc + i + j); if (e >= _search_arc_num) e -= _search_arc_num;
 							Cost c = _state[e] * (_cost[e] + _pi[_source[e]] - _pi[_target[e]]);
@@ -514,7 +538,7 @@ namespace lemon {
 			// Find next entering arc 
 			/*bool findEnteringArc() {
 				Cost min_val = 0;
-				int N = omp_get_max_threads();
+				int N = simplex_max_threads();
 				std::vector<Cost> minArray(N);
 				std::vector<ArcsType> arcId(N);
 
@@ -523,13 +547,17 @@ namespace lemon {
 
 					ArcsType maxJ = std::min(i + _block_size, _search_arc_num) - i;
 					ArcsType j;
+#ifdef _OPENMP
 #pragma omp parallel
+#endif
 					{
-						int t = omp_get_thread_num();
+						int t = simplex_thread_num();
 						Cost minV = 0;
 						ArcsType arcStart = _next_arc + i;
 						ArcsType arc = -1;
+#ifdef _OPENMP
 #pragma omp for schedule(static, bs)
+#endif
 						for (j = 0; j < maxJ; j++) {
 							ArcsType e = arcStart + j; if (e >= _search_arc_num) e -= _search_arc_num;
 							Cost c = _state[e] * (_cost[e] + _pi[_source[e]] - _pi[_target[e]]);
@@ -894,7 +922,9 @@ namespace lemon {
 				num_big_subsequences = _arc_num % mixingCoeff;
 				num_total_big_subsequence_numbers = subsequence_length * num_big_subsequences;
 
+#ifdef _OPENMP
 #pragma omp parallel for schedule(static)
+#endif
 				for (Arc a = 0; a <= _graph.maxArcId(); a++) {   // --a <=> _graph.next(a)  , -1 == INVALID 
 					ArcsType i = sequence(_graph.maxArcId()-a);
 					_source[i] = _node_id(_graph.source(a));
@@ -1448,7 +1478,9 @@ namespace lemon {
 				} else {
 					arc_vector.resize(demand_nodes.size());
 					// Find the min. cost incomming arc for each demand node
+#ifdef _OPENMP
 #pragma omp parallel for
+#endif
 					for (ArcsType i = 0; i < ArcsType(demand_nodes.size()); ++i) {
 						Node v = demand_nodes[i];
 						Cost min_cost = std::numeric_limits<Cost>::max();
@@ -1468,7 +1500,9 @@ namespace lemon {
 			} else {
 				arc_vector.resize(supply_nodes.size());
 				// Find the min. cost outgoing arc for each supply node
+#ifdef _OPENMP
 #pragma omp parallel for
+#endif
 				for (int i = 0; i < int(supply_nodes.size()); ++i) {
 					Node u = supply_nodes[i];
 					Cost min_cost = std::numeric_limits<Cost>::max();

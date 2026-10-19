@@ -1,8 +1,10 @@
 ---
 title: Multiset Manifold Alignment with mma_align_multiple
 output: rmarkdown::html_vignette
-vignette: '%\VignetteIndexEntry{Multiset Manifold Alignment with mma_align_multiple}
-  %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}'
+vignette: >
+  %\VignetteIndexEntry{Multiset Manifold Alignment with mma_align_multiple}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 params:
   family: red
   preset: homage

@@ -5,6 +5,8 @@
   preprocessing-test dependency.
 - Run checkout-resource audits as an explicit mandatory PR-tier phase and
   keep installed-package tests independent of checkout paths.
+- Compile network-simplex transport without OpenMP when unavailable, with
+  a standalone serial exhaustive oracle in CI.
 - Repair the GPCA alignment fixture's per-coordinate means, vignette engine
   metadata, withdrawn FPGW example, and exported print-method documentation.
 - ADAM now evaluates its objective at every iterate regardless of verbosity;
