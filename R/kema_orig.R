@@ -57,16 +57,29 @@ kema_orig <- function(data, y, ...) {
 #'   `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`.
 #' @param backend_control Optional list for backend auto-selection and fidelity
 #'   diagnostics. Supported keys: `full_exact_max_n`, `reduced_exact_max_r`,
-#'   `dense_exact_max_dim`,
+#'   `dense_exact_max_dim`, `dense_fallback_max_dim`,
 #'   `fidelity_residual_tol`, `fidelity_orth_tol`, `fidelity_action`,
 #'   `eigencore_tol`, `eigencore_maxit`, `eigencore_seed`, `kernel_rank_tol`,
-#'   and `max_dense_bytes`. `eigencore_seed` (default 1) seeds the iterative
+#'   and `max_dense_bytes`. Quotients of dimension at most
+#'   `dense_exact_max_dim` (default 400) are solved by the dense generalized
+#'   eigensolver; larger ones by shifted-Cholesky preconditioned LOBPCG
+#'   (`eigencore_maxit`, `eigencore_tol`). A certified partial solve whose
+#'   pairs miss the original-pencil residual target is repeated with
+#'   `eigencore_tol` tightened by 100 (at most twice). When no partial solve
+#'   succeeds, `full_exact` and `reduced_exact` retry with the dense
+#'   generalized eigensolver if the dimension is at most
+#'   `dense_fallback_max_dim` (default 2000); `operator_exact` only if it is
+#'   at most `dense_exact_max_dim`. Every returned solve must pass the
+#'   eigencore certificate and the fidelity gate. `eigencore_seed` (default 1) seeds the iterative
 #'   partial eigensolver locally, so fits do not depend on, or change, the
-#'   caller's RNG state. Every backend materialises dense kernel blocks, dense
-#'   quotient matrices and dense label-comparison matrices, so memory grows as
-#'   O(n r + r^2 + n_labelled^2); `max_dense_bytes` (default 8 GiB) bounds a
-#'   coarse estimate of that footprint and the fit errors before allocating
-#'   when it is exceeded. Use `Inf` to disable the guard.
+#'   caller's RNG state. Every backend materialises the dense kernel blocks,
+#'   their eigen factors and dense label-comparison matrices
+#'   (O(sum n_i r_i + n_labelled^2)); `full_exact` and `reduced_exact` also
+#'   form dense O(r^2) quotient matrices, which `operator_exact` replaces by
+#'   matrix-free products and per-domain O(r_i^2) preconditioner blocks.
+#'   `max_dense_bytes` (default 8 GiB) bounds a coarse per-backend estimate of
+#'   that footprint: candidates that exceed it are skipped before allocation
+#'   and the fit errors when none fits. Use `Inf` to disable the guard.
 #' @export
 kema_orig.multidesign <- function(data, y,
                                   subject,
@@ -208,7 +221,11 @@ kema_orig.hyperdesign <- function(data, y,
     stop("kema_orig requires at least 2 distinct class labels.", call. = FALSE)
   }
 
-  # Dense-memory guard: every backend below materialises dense objects.
+  # Backend candidates and dense-memory guard. Every backend materialises the
+  # dense kernel blocks and their eigen factors; the dense quotient backends
+  # also form r_total x r_total quotient matrices, which operator_exact
+  # applies matrix-free. Candidates whose estimate exceeds the guard are
+  # recorded as skipped, before any kernel is allocated.
   n_per_block <- vapply(pdata, function(d) nrow(d$x), integer(1))
   landmarks <- .kema_select_landmarks(n_per_block, sample_frac, seed = seed)
   r_per_block <- if (is.null(landmarks)) {
@@ -216,12 +233,45 @@ kema_orig.hyperdesign <- function(data, y,
   } else {
     vapply(landmarks, length, integer(1))
   }
-  .kema_check_dense_memory(
+  auto_backend <- if (identical(backend, "auto")) {
+    choose_kema_orig_backend(
+      sample_frac, sum(n_per_block), sum(r_per_block), control
+    )
+  } else {
+    backend
+  }
+  candidates <- kema_orig_backend_candidates(
+    requested_backend = backend,
+    auto_backend = auto_backend,
+    sample_frac = sample_frac,
+    fidelity_action = "fallback"
+  )
+  memory <- .kema_check_dense_memory(
     n_per_block = n_per_block,
     r_per_block = r_per_block,
     n_labeled = sum(!is.na(labels)),
-    max_bytes = control$max_dense_bytes
+    max_bytes = control$max_dense_bytes,
+    candidates = candidates,
+    ncomp = ncomp
   )
+  attempts <- lapply(setdiff(candidates, memory$admissible), function(b) {
+    list(
+      backend = b,
+      solved = FALSE,
+      passed = FALSE,
+      skipped = "max_dense_bytes",
+      message = paste0(
+        "skipped before allocation: estimated dense footprint ",
+        format(structure(memory$estimates[[b]], class = "object_size"),
+               units = "auto"),
+        " exceeds backend_control$max_dense_bytes"
+      )
+    )
+  })
+  candidates <- memory$admissible
+  if (!identical(control$fidelity_action, "fallback")) {
+    candidates <- candidates[1L]
+  }
 
   # concat_pre_processors() expects the feature (column) indices of each block.
   feat_sizes <- vapply(pdata, function(b) ncol(b$x), integer(1))
@@ -275,29 +325,16 @@ kema_orig.hyperdesign <- function(data, y,
 
   component_basis <- kema_graph_component_basis(W + mu * Ws)
 
+  # compute_kernels() returns dgCMatrix blocks without explicit zeros, already
+  # symmetrised for full KEMA, so they are used without further copies.
   Ks <- compute_kernels(pdata, kernel, landmarks = landmarks)
-  Ks_sparse <- lapply(Ks, function(k) {
-    if (!methods::is(k, "sparseMatrix")) {
-      k <- Matrix::Matrix(k, sparse = TRUE)
-    } else {
-      k <- k
-    }
-    if (sample_frac >= 1) {
-      k <- (k + Matrix::t(k)) / 2
-    }
-    Matrix::drop0(k)
-  })
-  r_total <- sum(vapply(Ks_sparse, ncol, integer(1)))
+  Ks_sparse <- Ks
 
-  Z_cache <- NULL
-  get_Z <- function() {
-    if (is.null(Z_cache)) {
-      Z_cache <<- Matrix::bdiag(Ks_sparse)
-      if (nrow(Z_cache) != n_total) {
-        stop("Kernel and graph dimensions do not match.", call. = FALSE)
-      }
-    }
-    Z_cache
+  # Block-diagonal kernel map Z = blockdiag(K_i), applied block by block so no
+  # second (block-diagonal) copy of the kernel entries is formed.
+  Z <- .kema_kernel_operator(Ks_sparse)
+  if (Z$nrow != n_total) {
+    stop("Kernel and graph dimensions do not match.", call. = FALSE)
   }
 
   quotient <- build_kema_kernel_quotient(
@@ -307,19 +344,6 @@ kema_orig.hyperdesign <- function(data, y,
     rank_tol = control$kernel_rank_tol
   )
 
-  auto_backend <- if (identical(backend, "auto")) {
-    choose_kema_orig_backend(sample_frac, n_total, r_total, control)
-  } else {
-    backend
-  }
-  candidates <- kema_orig_backend_candidates(
-    requested_backend = backend,
-    auto_backend = auto_backend,
-    sample_frac = sample_frac,
-    fidelity_action = control$fidelity_action
-  )
-
-  attempts <- list()
   eig <- NULL
   chosen_backend <- NULL
   selected_fidelity <- NULL
@@ -328,7 +352,7 @@ kema_orig.hyperdesign <- function(data, y,
       switch(
         candidate,
         full_exact = solve_kema_orig_full(
-          Z = get_Z(),
+          Z = Z,
           quotient = quotient,
           L = L,
           Ls = Ls,
@@ -339,7 +363,7 @@ kema_orig.hyperdesign <- function(data, y,
           control = control
         ),
         reduced_exact = solve_kema_orig_rekema(
-          Z = get_Z(),
+          Z = Z,
           quotient = quotient,
           L = L,
           Ls = Ls,
@@ -350,7 +374,7 @@ kema_orig.hyperdesign <- function(data, y,
           control = control
         ),
         operator_exact = solve_kema_orig_operator(
-          Z = get_Z(),
+          Z = Z,
           quotient = quotient,
           L = L,
           Ls = Ls,
@@ -432,7 +456,7 @@ kema_orig.hyperdesign <- function(data, y,
   # domain i is k(x, R_i) alpha_i, where R_i are the kernel's reference rows
   # (all rows for full KEMA, the landmark rows for REKEMA). The encoder keeps
   # exactly those ingredients so out-of-sample rows use the same map.
-  scores <- get_Z() %*% vectors
+  scores <- Z$apply(vectors)
   if (!is.matrix(scores) && !methods::is(scores, "Matrix")) {
     scores <- matrix(scores, ncol = 1L)
   }
@@ -497,6 +521,12 @@ kema_orig.hyperdesign <- function(data, y,
     eigencore_certificate_passed = isTRUE(
       eig$eigensolver_stats$certificate$passed
     ),
+    dense_quotient_formed = eig$eigensolver_stats$dense_quotient_formed,
+    preconditioner = eig$eigensolver_stats$preconditioner,
+    lobpcg_block_size = eig$eigensolver_stats$block_size,
+    eigensolver_iterations = eig$eigensolver_stats$iterations,
+    partial_attempts = eig$eigensolver_stats$partial_attempts,
+    dense_memory_estimates = memory$estimates,
     max_rel_residual = fidelity$max_rel_residual,
     max_b_orth_offdiag = fidelity$max_b_orth_offdiag,
     min_b_gram_diag = fidelity$min_b_gram_diag,
@@ -614,6 +644,7 @@ default_kema_backend_control <- function() {
     full_exact_max_n = 1200L,
     reduced_exact_max_r = 5000L,
     dense_exact_max_dim = 400L,
+    dense_fallback_max_dim = 2000L,
     fidelity_residual_tol = 1e-6,
     fidelity_orth_tol = 1e-6,
     fidelity_action = "fallback",
@@ -654,6 +685,7 @@ normalize_kema_backend_control <- function(control) {
   out$full_exact_max_n <- as.integer(out$full_exact_max_n)
   out$reduced_exact_max_r <- as.integer(out$reduced_exact_max_r)
   out$dense_exact_max_dim <- as.integer(out$dense_exact_max_dim)
+  out$dense_fallback_max_dim <- as.integer(out$dense_fallback_max_dim)
   out$eigencore_maxit <- as.integer(out$eigencore_maxit)
   if (length(out$fidelity_action) != 1L ||
       !is.character(out$fidelity_action) ||
@@ -666,6 +698,7 @@ normalize_kema_backend_control <- function(control) {
   chk::chk_true(out$full_exact_max_n > 2)
   chk::chk_true(out$reduced_exact_max_r > 2)
   chk::chk_true(out$dense_exact_max_dim > 2)
+  chk::chk_true(out$dense_fallback_max_dim > 2)
   chk::chk_number(out$fidelity_residual_tol)
   chk::chk_true(out$fidelity_residual_tol > 0)
   chk::chk_number(out$fidelity_orth_tol)
@@ -894,16 +927,30 @@ build_kema_kernel_quotient <- function(Ks, full_form, component_basis,
     full_form = full_form,
     rank_tol = rank_tol
   )
-  U <- Matrix::bdiag(lapply(pieces, function(x) Matrix::Matrix(x$U, sparse = TRUE)))
-  V <- Matrix::bdiag(lapply(pieces, function(x) Matrix::Matrix(x$V, sparse = TRUE)))
-  singular_values <- unlist(lapply(pieces, `[[`, "d"), use.names = FALSE)
-  H <- U %*% Matrix::Diagonal(x = singular_values)
+  # The quotient basis is block diagonal, H = blockdiag(U_i diag(d_i)) and
+  # V = blockdiag(V_i). Only the dense per-domain factors are stored (for the
+  # full form V_i is the same object as U_i, so it costs no extra memory);
+  # products with H and V are applied block by block, and a sparse
+  # block-diagonal H is formed only by the dense quotient backends.
+  U_blocks <- lapply(pieces, `[[`, "U")
+  V_blocks <- lapply(pieces, `[[`, "V")
+  d_blocks <- lapply(pieces, `[[`, "d")
+  singular_values <- unlist(d_blocks, use.names = FALSE)
+  row_sizes <- vapply(U_blocks, nrow, integer(1))
 
   component_basis <- Matrix::Matrix(component_basis, sparse = TRUE)
-  if (nrow(component_basis) != nrow(U)) {
+  if (nrow(component_basis) != sum(row_sizes)) {
     stop("Kernel and graph-component dimensions do not match.", call. = FALSE)
   }
-  UtC <- as.matrix(Matrix::crossprod(U, component_basis))
+  row_ends <- cumsum(row_sizes)
+  row_starts <- c(1L, utils::head(row_ends, -1L) + 1L)
+  UtC <- do.call(rbind, lapply(seq_along(U_blocks), function(i) {
+    rows <- seq.int(row_starts[i], length.out = row_sizes[i])
+    as.matrix(Matrix::crossprod(
+      U_blocks[[i]],
+      component_basis[rows, , drop = FALSE]
+    ))
+  }))
   residual_gram <- as.matrix(
     Matrix::crossprod(component_basis) - Matrix::crossprod(UtC)
   )
@@ -929,9 +976,12 @@ build_kema_kernel_quotient <- function(Ks, full_form, component_basis,
     matrix(numeric(0), nrow = length(singular_values), ncol = 0L)
   }
 
-  list(
-    H = H,
-    V = V,
+  structure(list(
+    U_blocks = U_blocks,
+    d_blocks = d_blocks,
+    V_blocks = V_blocks,
+    row_sizes = row_sizes,
+    col_sizes = vapply(V_blocks, nrow, integer(1)),
     constraints = constraints,
     rank = length(singular_values),
     original_rank = sum(vapply(pieces, `[[`, integer(1), "original_rank")),
@@ -944,29 +994,142 @@ build_kema_kernel_quotient <- function(Ks, full_form, component_basis,
     nullity_deflated = ncol(constraints),
     block_ranks = vapply(pieces, `[[`, integer(1), "rank"),
     block_thresholds = vapply(pieces, `[[`, numeric(1), "threshold")
-  )
+  ), class = "kema_kernel_quotient")
 }
 
-#' Form and solve the nullspace-safe KEMA quotient pencil
+#' Block offsets of a KEMA kernel quotient
 #'
 #' @keywords internal
 #' @noRd
-solve_kema_quotient <- function(quotient, M, Ld, lambda, ncomp, control,
-                                force_partial = FALSE,
-                                original_A_apply = NULL,
-                                original_B_apply = NULL) {
-  H <- quotient$H
-  q <- ncol(H)
-  available <- q - ncol(quotient$constraints)
-  if (available < ncomp) {
-    stop(
-      "KEMA quotient has only ", available,
-      " positive-dimensional direction(s) after nullspace deflation; need ",
-      ncomp, ".",
-      call. = FALSE
-    )
-  }
+.kema_quotient_offsets <- function(sizes) {
+  sizes <- as.integer(sizes)
+  ends <- cumsum(sizes)
+  starts <- c(1L, utils::head(ends, -1L) + 1L)
+  lapply(seq_along(sizes), function(i) seq.int(starts[i], length.out = sizes[i]))
+}
 
+#' Sparse block-diagonal quotient basis `H = blockdiag(U_i diag(d_i))`
+#'
+#' Used by the dense quotient backends and by tests; `operator_exact` never
+#' forms it.
+#'
+#' @keywords internal
+#' @noRd
+.kema_quotient_H <- function(quotient) {
+  Matrix::bdiag(lapply(seq_along(quotient$U_blocks), function(i) {
+    Matrix::Matrix(
+      sweep(quotient$U_blocks[[i]], 2L, quotient$d_blocks[[i]], "*"),
+      sparse = TRUE
+    )
+  }))
+}
+
+#' Sparse block-diagonal coefficient map `V = blockdiag(V_i)`
+#'
+#' @keywords internal
+#' @noRd
+.kema_quotient_V <- function(quotient) {
+  Matrix::bdiag(lapply(quotient$V_blocks, Matrix::Matrix, sparse = TRUE))
+}
+
+#' Blockwise products with the quotient factors
+#'
+#' `.kema_quotient_H_apply(q, X)` returns `H X` (`n x k`),
+#' `.kema_quotient_Ht_apply(q, Y)` returns `t(H) Y` (`rank x k`) and
+#' `.kema_quotient_map(q, X)` returns `V X` (original coefficients). All are
+#' dense BLAS products over the per-domain factors.
+#'
+#' @keywords internal
+#' @noRd
+.kema_quotient_H_apply <- function(quotient, X) {
+  X <- as.matrix(X)
+  cols <- .kema_quotient_offsets(quotient$block_ranks)
+  do.call(rbind, lapply(seq_along(quotient$U_blocks), function(i) {
+    quotient$U_blocks[[i]] %*%
+      (quotient$d_blocks[[i]] * X[cols[[i]], , drop = FALSE])
+  }))
+}
+
+#' @keywords internal
+#' @noRd
+.kema_quotient_Ht_apply <- function(quotient, Y) {
+  Y <- as.matrix(Y)
+  rows <- .kema_quotient_offsets(quotient$row_sizes)
+  do.call(rbind, lapply(seq_along(quotient$U_blocks), function(i) {
+    quotient$d_blocks[[i]] *
+      crossprod(quotient$U_blocks[[i]], Y[rows[[i]], , drop = FALSE])
+  }))
+}
+
+#' @keywords internal
+#' @noRd
+.kema_quotient_map <- function(quotient, X) {
+  X <- as.matrix(X)
+  cols <- .kema_quotient_offsets(quotient$block_ranks)
+  do.call(rbind, lapply(seq_along(quotient$V_blocks), function(i) {
+    quotient$V_blocks[[i]] %*% X[cols[[i]], , drop = FALSE]
+  }))
+}
+
+#' Block-diagonal kernel map applied block by block
+#'
+#' Represents `Z = blockdiag(K_1, ..., K_m)` through the list of kernel blocks:
+#' `apply(X)` returns `Z X` and `crossprod(Y)` returns `t(Z) Y`, both as dense
+#' matrices, without forming a block-diagonal copy or a transpose of `Z`.
+#'
+#' @keywords internal
+#' @noRd
+.kema_kernel_operator <- function(Ks) {
+  row_sizes <- vapply(Ks, nrow, integer(1))
+  col_sizes <- vapply(Ks, ncol, integer(1))
+  rows <- .kema_quotient_offsets(row_sizes)
+  cols <- .kema_quotient_offsets(col_sizes)
+  list(
+    nrow = sum(row_sizes),
+    ncol = sum(col_sizes),
+    apply = function(X) {
+      X <- as.matrix(X)
+      do.call(rbind, lapply(seq_along(Ks), function(i) {
+        as.matrix(Ks[[i]] %*% X[cols[[i]], , drop = FALSE])
+      }))
+    },
+    crossprod = function(Y) {
+      Y <- as.matrix(Y)
+      do.call(rbind, lapply(seq_along(Ks), function(i) {
+        as.matrix(Matrix::crossprod(Ks[[i]], Y[rows[[i]], , drop = FALSE]))
+      }))
+    }
+  )
+}
+
+#' LOBPCG block width for a KEMA quotient solve
+#'
+#' The partial solver iterates on a block wider than `ncomp` (guard vectors):
+#' convergence of the `ncomp`-th eigenpair is then governed by its gap to the
+#' first eigenvalue outside the block rather than to its nearest neighbour,
+#' and residual-rejected pairs can be skipped as in the dense solve. The block
+#' is capped so the LOBPCG search space (three blocks) fits in the deflated
+#' quotient.
+#'
+#' @keywords internal
+#' @noRd
+.kema_lobpcg_block_size <- function(ncomp, available) {
+  ncomp <- as.integer(ncomp)
+  wanted <- max(2L * ncomp, ncomp + 4L)
+  cap <- max(ncomp, as.integer(floor(available / 3)))
+  as.integer(min(wanted, cap))
+}
+
+#' Dense KEMA quotient pencil `(H' M H, H' Ld H + lambda I)`
+#'
+#' Used by `full_exact` and `reduced_exact` (and by the small-quotient dense
+#' fallback of `operator_exact`).
+#'
+#' @keywords internal
+#' @noRd
+.kema_dense_quotient_pencil <- function(quotient, M, Ld, lambda) {
+  H <- .kema_quotient_H(quotient)
+  q <- ncol(H)
   A <- as.matrix(Matrix::crossprod(H, M %*% H))
   B <- as.matrix(
     Matrix::crossprod(H, Ld %*% H) +
@@ -976,84 +1139,525 @@ solve_kema_quotient <- function(quotient, M, Ld, lambda, ncomp, control,
   B <- (B + t(B)) / 2
   storage.mode(A) <- "double"
   storage.mode(B) <- "double"
+  list(A = A, B = B)
+}
 
-  use_full <- !isTRUE(force_partial) && q <= control$dense_exact_max_dim
-  fit <- if (use_full) {
-    eigencore::eig_full(A, B = B, structure = eigencore::hermitian())
-  } else {
-    constraints <- quotient$constraints
-    if (!ncol(constraints)) {
-      constraints <- NULL
+#' Shifted-Cholesky preconditioner for the smallest pencil eigenpairs
+#'
+#' Factors `A_i + shift * B_i` for each diagonal block (a single block for the
+#' dense quotient, one block per domain for the operator path) and returns a
+#' function applying `blockdiag(A_i + shift B_i)^{-1}`. The shift is a small
+#' multiple of `trace(A) / trace(B)`, the B-weighted mean generalized
+#' eigenvalue; the preconditioner only changes the LOBPCG search directions,
+#' never the pencil or its certification. Returns `NULL` when no block
+#' factorisation succeeds, in which case LOBPCG runs unpreconditioned.
+#'
+#' @param trace_A,trace_B Traces of the full pencil matrices.
+#' @param block_matrix `function(i, shift)` returning block `i` of
+#'   `A + shift * B` (only its upper triangle is read by `chol()`).
+#' @param index List of row indices of each block.
+#' @keywords internal
+#' @noRd
+.kema_shifted_cholesky_preconditioner <- function(trace_A, trace_B,
+                                                  block_matrix, index) {
+  base <- trace_A / trace_B
+  if (!is.finite(base) || base <= 0) {
+    base <- 1
+  }
+  for (shift in base * c(1e-3, 1)) {
+    factors <- tryCatch(
+      lapply(seq_along(index), function(i) chol(block_matrix(i, shift))),
+      error = function(e) NULL
+    )
+    if (!is.null(factors)) {
+      return(list(
+        apply = .kema_block_cholesky_apply(factors, index),
+        shift = shift
+      ))
     }
-    eigencore::eig_partial(
-      A,
-      B = B,
-      k = ncomp,
-      target = eigencore::smallest(),
-      method = eigencore::lobpcg(
-        maxit = control$eigencore_maxit,
-        constraints = constraints
-      ),
-      tol = control$eigencore_tol,
-      seed = control$eigencore_seed,
-      allow_dense_fallback = "never"
+  }
+  NULL
+}
+
+#' Closures handed to eigencore
+#'
+#' eigencore hashes the solver method descriptor, including a preconditioner
+#' closure and everything its environment references, when it plans and
+#' validates a solve. These factories therefore build closures whose
+#' environments hold only the data the closure needs (never the quotient,
+#' the pencil or the graph matrices), which keeps that transient
+#' serialisation proportional to the preconditioner factors.
+#'
+#' @keywords internal
+#' @noRd
+.kema_block_cholesky_apply <- function(factors, index) {
+  force(factors)
+  force(index)
+  function(X) {
+    X <- as.matrix(X)
+    for (i in seq_along(factors)) {
+      idx <- index[[i]]
+      X[idx, ] <- backsolve(
+        factors[[i]],
+        backsolve(factors[[i]], X[idx, , drop = FALSE], transpose = TRUE)
+      )
+    }
+    X
+  }
+}
+
+#' @keywords internal
+#' @noRd
+.kema_identity_plus_low_rank_apply <- function(Q, identity_scale, low_rank_scale) {
+  force(Q)
+  force(identity_scale)
+  force(low_rank_scale)
+  function(X) {
+    X <- as.matrix(X)
+    identity_scale * X + Q %*% (low_rank_scale * crossprod(Q, X))
+  }
+}
+
+#' @keywords internal
+#' @noRd
+.kema_sandwich_apply <- function(outer, inner) {
+  force(outer)
+  force(inner)
+  function(X) outer(inner(outer(X)))
+}
+
+#' Column chunks of a KEMA domain factor
+#'
+#' @keywords internal
+#' @noRd
+.kema_column_chunks <- function(r, chunk = 256L) {
+  starts <- seq.int(1L, r, by = chunk)
+  lapply(starts, function(s) seq.int(s, min(r, s + chunk - 1L)))
+}
+
+#' Diagonal of `d * t(U) S U * d` for one domain block
+#'
+#' @keywords internal
+#' @noRd
+.kema_quotient_block_diag <- function(U, d, S, chunk = 256L) {
+  out <- numeric(ncol(U))
+  for (cols in .kema_column_chunks(ncol(U), chunk)) {
+    Uc <- U[, cols, drop = FALSE]
+    out[cols] <- colSums(Uc * as.matrix(S %*% Uc))
+  }
+  d^2 * out
+}
+
+#' Congruence `d * t(U) S U * d + diag_add * I` of one domain block
+#'
+#' Computed in column chunks so the transient `S U` product holds at most
+#' `n_i x chunk` entries; the result is the only `r_i x r_i` allocation. Only
+#' its upper triangle is consumed (by `chol()`).
+#'
+#' @keywords internal
+#' @noRd
+.kema_quotient_block_gram <- function(U, d, S, diag_add = 0, chunk = 256L) {
+  r <- ncol(U)
+  out <- matrix(0, r, r)
+  for (cols in .kema_column_chunks(r, chunk)) {
+    block <- crossprod(U, as.matrix(S %*% U[, cols, drop = FALSE]))
+    out[, cols] <- d * sweep(block, 2L, d[cols], "*")
+  }
+  diag(out) <- diag(out) + diag_add
+  out
+}
+
+#' Square root of the KEMA quotient metric without forming it
+#'
+#' The quotient metric is `B = lambda I + t(H) Ld H`. `Ld` is a graph
+#' Laplacian supported on the labelled rows, so `t(H) Ld H = G t(G)` with
+#' `G = t(H_L) S` (`H_L` the labelled rows of `H`, `Ld_LL = S t(S)`), which has
+#' at most `n_labelled` columns. With the thin SVD `G = Q diag(s) W'`,
+#' `B^{1/2} = sqrt(lambda) I + Q diag(sqrt(lambda + s^2) - sqrt(lambda)) Q'`
+#' and `B^{-1/2}` is analogous; both cost `O(rank * n_labelled)` per column.
+#'
+#' @keywords internal
+#' @noRd
+.kema_quotient_metric_sqrt <- function(quotient, Ld, lambda) {
+  q <- quotient$rank
+  labelled <- which(Matrix::diag(Ld) > 0)
+  Q <- matrix(0, q, 0L)
+  s2 <- numeric(0)
+  if (length(labelled)) {
+    Ld_LL <- as.matrix(Ld[labelled, labelled, drop = FALSE])
+    Ld_LL <- (Ld_LL + t(Ld_LL)) / 2
+    eig_L <- eigen(Ld_LL, symmetric = TRUE)
+    keep <- which(eig_L$values > 0)
+    if (length(keep)) {
+      S <- sweep(
+        eig_L$vectors[, keep, drop = FALSE], 2L,
+        sqrt(eig_L$values[keep]), "*"
+      )
+      rows <- .kema_quotient_offsets(quotient$row_sizes)
+      cols <- .kema_quotient_offsets(quotient$block_ranks)
+      H_L <- matrix(0, length(labelled), q)
+      for (i in seq_along(rows)) {
+        local <- match(labelled, rows[[i]])
+        hit <- which(!is.na(local))
+        if (length(hit)) {
+          H_L[hit, cols[[i]]] <- sweep(
+            quotient$U_blocks[[i]][local[hit], , drop = FALSE], 2L,
+            quotient$d_blocks[[i]], "*"
+          )
+        }
+      }
+      G <- crossprod(H_L, S)
+      sv <- svd(G, nu = ncol(G), nv = 0L)
+      positive <- which(sv$d > 0)
+      Q <- sv$u[, positive, drop = FALSE]
+      s2 <- sv$d[positive]^2
+    }
+  }
+  root_lambda <- sqrt(lambda)
+  list(
+    apply = .kema_identity_plus_low_rank_apply(
+      Q, root_lambda, sqrt(lambda + s2) - root_lambda
+    ),
+    apply_inverse = .kema_identity_plus_low_rank_apply(
+      Q, 1 / root_lambda, 1 / sqrt(lambda + s2) - 1 / root_lambda
+    ),
+    rank = ncol(Q)
+  )
+}
+
+#' Matrix-free KEMA quotient problem for `operator_exact`
+#'
+#' The quotient matrices `A = H' M H` and `B = H' Ld H + lambda I` are applied
+#' as operators through the per-domain kernel factors (`H X`, a sparse product
+#' with `M` or `Ld`, then `t(H) Y`), so no `rank x rank` quotient matrix is
+#' formed. The pencil is solved in the equivalent standard form
+#' `C y = theta y`, `C = B^{-1/2} A B^{-1/2}`, `x = B^{-1/2} y`, using the
+#' low-rank metric square root above: eigencore can then verify target
+#' completeness (that the returned pairs are the smallest ones) without
+#' materialising `B`. Constraints in the `B` inner product map to Euclidean
+#' constraints `B^{1/2} c`. The preconditioner is the block-Jacobi
+#' (per-domain) shifted Cholesky factor of the pencil, transformed the same
+#' way; the omitted off-diagonal blocks come only from the label graphs and
+#' have rank at most twice the number of labelled rows.
+#'
+#' @keywords internal
+#' @noRd
+.kema_operator_quotient_pencil <- function(quotient, M, Ld, lambda) {
+  q <- quotient$rank
+  A_apply <- function(X) {
+    X <- as.matrix(X)
+    HX <- .kema_quotient_H_apply(quotient, X)
+    .kema_quotient_Ht_apply(quotient, as.matrix(M %*% HX))
+  }
+  B_apply <- function(X) {
+    X <- as.matrix(X)
+    HX <- .kema_quotient_H_apply(quotient, X)
+    .kema_quotient_Ht_apply(quotient, as.matrix(Ld %*% HX)) + lambda * X
+  }
+  metric <- .kema_quotient_metric_sqrt(quotient, Ld, lambda)
+  C_apply <- function(Y) {
+    metric$apply_inverse(A_apply(metric$apply_inverse(Y)))
+  }
+
+  rows <- .kema_quotient_offsets(quotient$row_sizes)
+  cols <- .kema_quotient_offsets(quotient$block_ranks)
+  M_blocks <- lapply(rows, function(idx) M[idx, idx, drop = FALSE])
+  Ld_blocks <- lapply(rows, function(idx) Ld[idx, idx, drop = FALSE])
+  trace_A <- sum(vapply(seq_along(rows), function(i) {
+    sum(.kema_quotient_block_diag(
+      quotient$U_blocks[[i]], quotient$d_blocks[[i]], M_blocks[[i]]
+    ))
+  }, numeric(1)))
+  trace_B <- lambda * q + sum(vapply(seq_along(rows), function(i) {
+    sum(.kema_quotient_block_diag(
+      quotient$U_blocks[[i]], quotient$d_blocks[[i]], Ld_blocks[[i]]
+    ))
+  }, numeric(1)))
+  pencil_preconditioner <- .kema_shifted_cholesky_preconditioner(
+    trace_A,
+    trace_B,
+    function(i, shift) {
+      .kema_quotient_block_gram(
+        quotient$U_blocks[[i]],
+        quotient$d_blocks[[i]],
+        M_blocks[[i]] + shift * Ld_blocks[[i]],
+        diag_add = shift * lambda
+      )
+    },
+    cols
+  )
+  rm(M_blocks, Ld_blocks)
+  preconditioner <- if (is.null(pencil_preconditioner)) {
+    NULL
+  } else {
+    list(
+      apply = .kema_sandwich_apply(metric$apply, pencil_preconditioner$apply),
+      shift = pencil_preconditioner$shift
     )
   }
 
-  cert <- eigencore::certificate(fit)
-  if (!isTRUE(cert$passed) && !use_full && q <= control$dense_exact_max_dim) {
-    fit <- eigencore::eig_full(
-      A,
-      B = B,
-      structure = eigencore::hermitian()
-    )
-    cert <- eigencore::certificate(fit)
-    use_full <- TRUE
-  }
-  if (!isTRUE(cert$passed)) {
+  list(
+    C = eigencore::linear_operator(
+      dim = c(q, q),
+      apply = function(X, alpha = 1, beta = 0, Y = NULL) {
+        Z <- alpha * C_apply(X)
+        if (is.null(Y) || beta == 0) Z else Z + beta * Y
+      },
+      structure = eigencore::hermitian(),
+      name = "KEMA quotient pencil in metric-whitened standard form"
+    ),
+    to_original = metric$apply_inverse,
+    constraints_to_standard = metric$apply,
+    A_apply = A_apply,
+    B_apply = B_apply,
+    metric_rank = metric$rank,
+    preconditioner = preconditioner
+  )
+}
+
+#' Form and solve the nullspace-safe KEMA quotient pencil
+#'
+#' Solver routes. Every returned result must pass the eigencore certificate;
+#' its pairs are then screened by the original-pencil relative residual
+#' (`fidelity_residual_tol`) and the caller applies the full fidelity gate.
+#' * dense quotient (`operator = FALSE`): the full dense generalized solve when
+#'   the quotient dimension is at most `dense_exact_max_dim` (and
+#'   `force_partial` is `FALSE`), otherwise shifted-Cholesky preconditioned
+#'   LOBPCG with guard vectors.
+#' * operator (`operator = TRUE`): block-Jacobi preconditioned LOBPCG on the
+#'   matrix-free quotient pencil in metric-whitened standard form.
+#' A certified partial solve whose pairs miss the original-pencil residual
+#' target is repeated with a tolerance tightened by 100 (twice at most, not
+#' below 1e-14): eigencore's normwise backward error does not bound the
+#' per-pair relative residual of small eigenvalues. When no partial solve
+#' succeeds, the dense generalized solve is used if the dimension is at most
+#' `dense_fallback_max_dim` (`dense_exact_max_dim` for `operator_exact`);
+#' otherwise the last failure is reported.
+#'
+#' @keywords internal
+#' @noRd
+solve_kema_quotient <- function(quotient, M, Ld, lambda, ncomp, control,
+                                force_partial = FALSE,
+                                original_A_apply = NULL,
+                                original_B_apply = NULL,
+                                operator = FALSE) {
+  q <- quotient$rank
+  n_constraints <- ncol(quotient$constraints)
+  available <- q - n_constraints
+  if (available < ncomp) {
     stop(
-      "eigencore failed to certify the KEMA quotient solve (method: ",
-      fit$method, ", max backward error: ",
-      signif(cert$max_backward_error, 4), ").",
+      "KEMA quotient has only ", available,
+      " positive-dimensional direction(s) after nullspace deflation; need ",
+      ncomp, ".",
       call. = FALSE
     )
   }
-  values <- as.numeric(Re(eigencore::values(fit)))
-  vectors <- as.matrix(Re(eigencore::vectors(fit)))
-  mapped_vectors <- quotient$V %*% vectors
+  constraints <- if (n_constraints) quotient$constraints else NULL
+  block_size <- .kema_lobpcg_block_size(ncomp, available)
   use_original_residual <- is.function(original_A_apply) &&
     is.function(original_B_apply)
-  residuals_rel <- if (use_original_residual) {
-    compute_kema_relative_residuals(
+
+  dense_pencil <- NULL
+  get_dense_pencil <- function() {
+    if (is.null(dense_pencil)) {
+      dense_pencil <<- .kema_dense_quotient_pencil(quotient, M, Ld, lambda)
+    }
+    dense_pencil
+  }
+  dense_apply <- function(which) {
+    function(x) get_dense_pencil()[[which]] %*% x
+  }
+  solve_dense_full <- function() {
+    pencil <- get_dense_pencil()
+    eigencore::eig_full(
+      pencil$A,
+      B = pencil$B,
+      structure = eigencore::hermitian()
+    )
+  }
+  certification_error <- function(fit, cert) {
+    paste0(
+      "eigencore failed to certify the KEMA quotient solve (method: ",
+      fit$method, ", max backward error: ",
+      signif(cert$max_backward_error, 4),
+      if (!is.null(cert$target_completeness)) {
+        paste0(", target completeness: ", cert$target_completeness)
+      },
+      ")."
+    )
+  }
+  # Certified pairs -> original coefficients, residuals and selection.
+  finish <- function(fit, to_original, A_apply, B_apply) {
+    values <- as.numeric(Re(eigencore::values(fit)))
+    vectors <- as.matrix(Re(eigencore::vectors(fit)))
+    if (!is.null(to_original)) {
+      vectors <- to_original(vectors)
+    }
+    mapped_vectors <- .kema_quotient_map(quotient, vectors)
+    residuals_rel <- if (use_original_residual) {
+      compute_kema_relative_residuals(
+        values, mapped_vectors,
+        A_apply = original_A_apply, B_apply = original_B_apply
+      )
+    } else {
+      compute_kema_relative_residuals(
+        values, vectors, A_apply = A_apply, B_apply = B_apply
+      )
+    }
+    select_nontrivial_eigenpairs(
       values,
       mapped_vectors,
-      A_apply = original_A_apply,
-      B_apply = original_B_apply
-    )
-  } else {
-    compute_kema_relative_residuals(
-      values,
-      vectors,
-      A_apply = function(x) A %*% x,
-      B_apply = function(x) B %*% x
+      ncomp,
+      spectral_scale = max(abs(values), 0),
+      residuals_rel = residuals_rel,
+      residual_tol = control$fidelity_residual_tol
     )
   }
-  selected <- select_nontrivial_eigenpairs(
-    values,
-    if (use_original_residual) mapped_vectors else vectors,
-    ncomp,
-    spectral_scale = max(abs(values), 0),
-    residuals_rel = residuals_rel,
-    residual_tol = control$fidelity_residual_tol
+
+  # Partial (LOBPCG) problem for this route.
+  preconditioner <- NULL
+  partial <- NULL
+  if (isTRUE(operator)) {
+    operator_pencil <- .kema_operator_quotient_pencil(quotient, M, Ld, lambda)
+    preconditioner <- operator_pencil$preconditioner
+    partial <- list(
+      route = "operator_lobpcg",
+      A = operator_pencil$C,
+      B = NULL,
+      constraints = if (is.null(constraints)) {
+        NULL
+      } else {
+        operator_pencil$constraints_to_standard(constraints)
+      },
+      to_original = operator_pencil$to_original,
+      A_apply = operator_pencil$A_apply,
+      B_apply = operator_pencil$B_apply
+    )
+    dense_fallback_max_dim <- control$dense_exact_max_dim
+  } else if (isTRUE(force_partial) || q > control$dense_exact_max_dim) {
+    pencil <- get_dense_pencil()
+    preconditioner <- .kema_shifted_cholesky_preconditioner(
+      sum(diag(pencil$A)),
+      sum(diag(pencil$B)),
+      function(i, shift) pencil$A + shift * pencil$B,
+      list(seq_len(q))
+    )
+    partial <- list(
+      route = "dense_lobpcg",
+      A = pencil$A,
+      B = pencil$B,
+      constraints = constraints,
+      to_original = NULL,
+      A_apply = dense_apply("A"),
+      B_apply = dense_apply("B")
+    )
+    rm(pencil)
+    dense_fallback_max_dim <- control$dense_fallback_max_dim
+  }
+
+  partial_attempts <- list()
+  selected <- NULL
+  fit <- NULL
+  cert <- NULL
+  route <- NULL
+  last_error <- NULL
+  if (!is.null(partial)) {
+    tolerances <- control$eigencore_tol * c(1, 1e-2, 1e-4)
+    tolerances <- c(
+      tolerances[1L],
+      tolerances[-1L][tolerances[-1L] >= 1e-14]
+    )
+    for (tol in tolerances) {
+      fit_try <- eigencore::eig_partial(
+        partial$A,
+        B = partial$B,
+        k = block_size,
+        target = eigencore::smallest(),
+        method = eigencore::lobpcg(
+          maxit = control$eigencore_maxit,
+          constraints = partial$constraints,
+          preconditioner = preconditioner$apply
+        ),
+        tol = tol,
+        seed = control$eigencore_seed,
+        allow_dense_fallback = "never"
+      )
+      cert_try <- eigencore::certificate(fit_try)
+      attempt <- list(
+        tol = tol,
+        method = fit_try$method,
+        certified = isTRUE(cert_try$passed),
+        max_backward_error = cert_try$max_backward_error,
+        target_completeness = cert_try$target_completeness
+      )
+      if (!isTRUE(cert_try$passed)) {
+        last_error <- certification_error(fit_try, cert_try)
+        attempt$message <- last_error
+        partial_attempts[[length(partial_attempts) + 1L]] <- attempt
+        break
+      }
+      outcome <- tryCatch(
+        finish(fit_try, partial$to_original, partial$A_apply, partial$B_apply),
+        error = function(e) e
+      )
+      if (inherits(outcome, "error")) {
+        last_error <- conditionMessage(outcome)
+        attempt$message <- last_error
+        partial_attempts[[length(partial_attempts) + 1L]] <- attempt
+        next
+      }
+      partial_attempts[[length(partial_attempts) + 1L]] <- attempt
+      selected <- outcome
+      fit <- fit_try
+      cert <- cert_try
+      route <- partial$route
+      break
+    }
+  }
+
+  if (is.null(selected)) {
+    dense_allowed <- is.null(partial) || q <= dense_fallback_max_dim
+    if (!dense_allowed) {
+      stop(
+        paste(
+          unique(vapply(partial_attempts, `[[`, character(1), "message")),
+          collapse = " | "
+        ),
+        call. = FALSE
+      )
+    }
+    preconditioner <- NULL
+    fit <- solve_dense_full()
+    cert <- eigencore::certificate(fit)
+    if (!isTRUE(cert$passed)) {
+      stop(
+        certification_error(fit, cert),
+        if (length(partial_attempts)) {
+          paste0(
+            " Partial solve before the dense fallback: ",
+            paste(
+              unique(vapply(partial_attempts, `[[`, character(1), "message")),
+              collapse = " | "
+            )
+          )
+        },
+        call. = FALSE
+      )
+    }
+    selected <- finish(fit, NULL, dense_apply("A"), dense_apply("B"))
+    route <- "dense_full"
+  }
+
+  selected$eigensolver <- switch(
+    route,
+    dense_full = "eigencore_dense_full",
+    dense_lobpcg = "eigencore_lobpcg_deflated",
+    operator_lobpcg = "eigencore_lobpcg_operator"
   )
-  if (!use_original_residual) {
-    selected$vectors <- quotient$V %*% selected$vectors
-  }
-  selected$eigensolver <- if (use_full) {
-    "eigencore_dense_full"
-  } else {
-    "eigencore_lobpcg_deflated"
-  }
+  iterations <- tryCatch(
+    eigencore::diagnostics(fit)$iterations,
+    error = function(e) NULL
+  )
   selected$eigensolver_stats <- list(
     method = fit$method,
     certificate = cert,
@@ -1062,7 +1666,23 @@ solve_kema_quotient <- function(quotient, M, Ld, lambda, ncomp, control,
     kernel_rank_discarded = quotient$discarded_rank,
     graph_nullity = quotient$graph_nullity,
     nullity_deflated = quotient$nullity_deflated,
-    full_spectrum = use_full
+    full_spectrum = identical(route, "dense_full"),
+    dense_quotient_formed = !is.null(dense_pencil),
+    block_size = if (identical(route, "dense_full")) NA_integer_ else block_size,
+    iterations = if (is.numeric(iterations)) iterations else NA_integer_,
+    preconditioner = if (is.null(preconditioner)) {
+      "none"
+    } else if (isTRUE(operator)) {
+      "block_jacobi_shifted_cholesky"
+    } else {
+      "shifted_cholesky"
+    },
+    preconditioner_shift = if (is.null(preconditioner)) {
+      NA_real_
+    } else {
+      preconditioner$shift
+    },
+    partial_attempts = partial_attempts
   )
   selected
 }
@@ -1070,8 +1690,8 @@ solve_kema_quotient <- function(quotient, M, Ld, lambda, ncomp, control,
 #' @keywords internal
 #' @noRd
 solve_kema_orig_full <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, control) {
-  n <- nrow(Z)
-  if (n != ncol(Z)) {
+  n <- Z$nrow
+  if (n != Z$ncol) {
     stop("full_exact requires a square block-kernel matrix (set sample_frac = 1).", call. = FALSE)
   }
   if (ncomp >= n) {
@@ -1079,9 +1699,9 @@ solve_kema_orig_full <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, cont
   }
 
   M <- L + mu * Ls
-  A_apply <- function(x) Z %*% (M %*% (Matrix::t(Z) %*% x))
+  A_apply <- function(x) Z$apply(M %*% Z$crossprod(x))
   B_apply <- function(x) {
-    Z %*% (Ld %*% (Matrix::t(Z) %*% x)) + lambda * x
+    Z$apply(Ld %*% Z$crossprod(x)) + lambda * as.matrix(x)
   }
   selected <- solve_kema_quotient(
     quotient,
@@ -1095,7 +1715,7 @@ solve_kema_orig_full <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, cont
   )
   selected$A_apply <- A_apply
   selected$B_apply <- B_apply
-  selected$score_apply <- function(x) Z %*% x
+  selected$score_apply <- Z$apply
   selected$coefficient_space <- "full"
   selected$formulation <- "eq6_full_exact"
   selected
@@ -1104,15 +1724,15 @@ solve_kema_orig_full <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, cont
 #' @keywords internal
 #' @noRd
 solve_kema_orig_rekema <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, control) {
-  r <- ncol(Z)
+  r <- Z$ncol
   if (r <= ncomp) {
     stop("REKEMA landmark rank (", r, ") must be > ncomp (", ncomp, ").", call. = FALSE)
   }
 
   M <- L + mu * Ls
-  A_apply <- function(x) Matrix::crossprod(Z, M %*% (Z %*% x))
+  A_apply <- function(x) Z$crossprod(M %*% Z$apply(x))
   B_apply <- function(x) {
-    Matrix::crossprod(Z, Ld %*% (Z %*% x)) + lambda * x
+    Z$crossprod(Ld %*% Z$apply(x)) + lambda * as.matrix(x)
   }
   selected <- solve_kema_quotient(
     quotient,
@@ -1126,7 +1746,7 @@ solve_kema_orig_rekema <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, co
   )
   selected$A_apply <- A_apply
   selected$B_apply <- B_apply
-  selected$score_apply <- function(x) Z %*% x
+  selected$score_apply <- Z$apply
   selected$coefficient_space <- "reduced"
   selected$formulation <- "eq10_reduced_exact"
   selected
@@ -1135,40 +1755,15 @@ solve_kema_orig_rekema <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, co
 #' @keywords internal
 #' @noRd
 solve_kema_orig_operator <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, control) {
-  r <- ncol(Z)
+  r <- Z$ncol
   if (r <= ncomp) {
     stop("Operator rank (", r, ") must be > ncomp (", ncomp, ").", call. = FALSE)
   }
 
   M <- L + mu * Ls
-  to_dense_input <- function(x, nrow_target) {
-    if (is.matrix(x)) {
-      return(matrix(as.numeric(x), nrow = nrow_target))
-    }
-    if (methods::is(x, "Matrix")) {
-      return(matrix(as.numeric(as.matrix(x)), nrow = nrow_target))
-    }
-    matrix(as.numeric(x), nrow = nrow_target)
-  }
-  restore_shape <- function(x, template) {
-    if (is.matrix(template) || methods::is(template, "Matrix")) {
-      x
-    } else {
-      drop(x)
-    }
-  }
-
-  A_apply <- function(x) {
-    xin <- x
-    X <- to_dense_input(xin, nrow_target = r)
-    out <- Matrix::crossprod(Z, M %*% (Z %*% X))
-    restore_shape(matrix(as.numeric(out), nrow = r), xin)
-  }
+  A_apply <- function(x) Z$crossprod(M %*% Z$apply(x))
   B_apply <- function(x) {
-    xin <- x
-    X <- to_dense_input(xin, nrow_target = r)
-    out <- Matrix::crossprod(Z, Ld %*% (Z %*% X)) + lambda * X
-    restore_shape(matrix(as.numeric(out), nrow = r), xin)
+    Z$crossprod(Ld %*% Z$apply(x)) + lambda * as.matrix(x)
   }
 
   selected <- solve_kema_quotient(
@@ -1178,13 +1773,13 @@ solve_kema_orig_operator <- function(Z, quotient, L, Ls, Ld, mu, lambda, ncomp, 
     lambda,
     ncomp,
     control,
-    force_partial = TRUE,
     original_A_apply = A_apply,
-    original_B_apply = B_apply
+    original_B_apply = B_apply,
+    operator = TRUE
   )
   selected$A_apply <- A_apply
   selected$B_apply <- B_apply
-  selected$score_apply <- function(x) Z %*% x
+  selected$score_apply <- Z$apply
   selected$coefficient_space <- "reduced"
   selected$formulation <- "eq10_operator_exact"
   selected
