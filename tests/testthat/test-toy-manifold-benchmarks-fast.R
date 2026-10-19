@@ -154,7 +154,7 @@ test_that("[FAST] Linear Similarity Embedding on linear data", {
   latent_dist <- as.matrix(dist(linear_data$latent))
   T_sim <- exp(-latent_dist^2 / median(latent_dist^2))
 
-  # Reduced iterations from 25 to 10
+  # Allow measured convergence; stale-objective fits used to stop after one update.
   result_R <- linear_sim_embed(X1, T = T_sim, ncomp = 2, use_cpp = FALSE,
                               maxit = 500, verbose = FALSE)
 

@@ -12,8 +12,11 @@ test_that("linear_sim_embed has robust guards for edge cases", {
   # (b) Pathologically tiny target similarity – triggers scaling warning
   Ttiny <- matrix(1e-12, 80, 80); diag(Ttiny) <- 1
   expect_warning(
-    linear_sim_embed(X, T = Ttiny, ncomp = 2, sigma_P = 1),
-    "poorly scaled"
+    expect_warning(
+      linear_sim_embed(X, T = Ttiny, ncomp = 2, sigma_P = 1),
+      "poorly scaled"
+    ),
+    "too close to zero"
   )
 
   # (c) Predict with wrong dimensionality must stop
