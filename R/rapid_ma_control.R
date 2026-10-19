@@ -130,7 +130,13 @@
 #'   `normalization` (`"random_walk"`, `"symmetric"`), `weight_mode`
 #'   (`"heat"`, `"binary"`), `degree_cap`, `custom_symmetrize`, `dense_max_n`.
 #'   When `feature_sketch_dim` is `NULL` the feature sketch width is
-#'   `min(ncol(X), max(128, 4 * ncomp))`.
+#'   `min(ncol(X), max(128, 4 * ncomp))`. Generated neighbour graphs are
+#'   exact. Views with at least five columns use a blocked exact search that
+#'   breaks ties at the `k`-th distance by lexicographic row order, so the
+#'   graph does not depend on row order; narrower views (for example 2-D
+#'   coordinates) use the RANN kd-tree. The fitted
+#'   `relations[[domain]]$metadata[[relation]]$neighbor_backend` records which
+#'   search was used.
 #' * `diffusion`: `steps`, `sketch_dim`, `output_dim`, `gate` (`"energy"`,
 #'   `"uniform"`, `"fixed"`), `relation_weights`, `gate_temperature`,
 #'   `label_gate_weight`, `include_position`, `include_attribute`,

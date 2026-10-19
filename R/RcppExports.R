@@ -139,6 +139,10 @@ compute_parrot_cost_cpp <- function(X1, X2, R1, R2, W1, W2, alpha = 0.5, sigma =
     .Call(`_manifoldalign_compute_parrot_cost_cpp`, X1, X2, R1, R2, W1, W2, alpha, sigma, gamma)
 }
 
+rapid_exact_knn_cpp <- function(X, tie_rank, k, leaf_size = 256L) {
+    .Call(`_manifoldalign_rapid_exact_knn_cpp`, X, tie_rank, k, leaf_size)
+}
+
 #' Unified Sinkhorn algorithm with optional log-domain stabilization
 #'
 #' Solves balanced entropic OT with Gibbs kernel \code{exp(-cost / epsilon)}

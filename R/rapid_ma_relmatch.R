@@ -132,6 +132,14 @@
   if (use_sparse) .rapid_force_dgC(G) else as.matrix(G)
 }
 
+# Nodes incident to at least one stored edge of a dgCMatrix relation.
+.rapid_relation_incident <- function(A) {
+  incident <- logical(nrow(A))
+  incident[A@i + 1L] <- TRUE
+  incident[diff(A@p) > 0L] <- TRUE
+  incident
+}
+
 # Compute normalized Q' A Q using sparse node/prototype intermediates only.
 .rapid_prototype_relation <- function(A, coupling, control = NULL) {
   control <- .rapid_resolve_relmatch_control(control)
@@ -143,7 +151,7 @@
   }
   Q <- .rapid_relmatch_coupling(coupling, nrow(A), control)
   K <- ncol(Q)
-  row_support <- tabulate(Matrix::summary(Q)$i, nbins = nrow(Q))
+  row_support <- tabulate(Q@i + 1L, nbins = nrow(Q))
   q_max <- if (length(row_support)) max(row_support) else 0L
   coupling_mass <- sum(Q@x)
   relation_nnz <- Matrix::nnzero(A)
@@ -189,9 +197,7 @@
           relation_nnz = as.integer(relation_nnz),
           coupling_nnz = 0L,
           coupling_mass = as.numeric(coupling_mass),
-          unmatched_relation_nodes = as.integer(length(unique(c(
-            Matrix::summary(A)$i, Matrix::summary(A)$j
-          )))),
+          unmatched_relation_nodes = as.integer(sum(.rapid_relation_incident(A))),
           q_max = 0L,
           operation_bound = 0,
           intermediate_nnz = 0L,
@@ -203,13 +209,24 @@
     ))
   }
 
-  AQ <- A %*% Q
+  # With few prototypes the n x K intermediate A Q is nearly full, and a
+  # sparse-times-dense product avoids building it as a sparse matrix. Both
+  # products accumulate every entry over the same node order (an absent entry
+  # only adds an exact zero), so the projected graph is bit-identical. The
+  # dense intermediate is used only while it is no larger than a small
+  # multiple of the stored relation and coupling entries.
+  dense_intermediate <- as.double(nrow(A)) * K <=
+    4 * (as.double(length(A@x)) + as.double(length(Q@x)))
+  AQ <- if (dense_intermediate) {
+    A %*% as.matrix(Q)
+  } else {
+    A %*% Q
+  }
   raw <- .rapid_force_dgC(Matrix::crossprod(Q, AQ))
   normalized <- .rapid_normalize_prototype_relation(
     raw, control$normalization, control$min_mass
   )
-  incident <- unique(c(Matrix::summary(A)$i, Matrix::summary(A)$j))
-  unmatched <- sum(row_support[incident] == 0L)
+  unmatched <- sum(row_support[.rapid_relation_incident(A)] == 0L)
   status <- if (normalized$empty) "zero_projected_mass" else "ok"
 
   structure(
