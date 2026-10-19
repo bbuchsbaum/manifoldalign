@@ -134,7 +134,7 @@ test_that("SSMA solves the documented estimand: joint Laplacian and joint degree
   # The joint degree used by the fit is the row sum of the joint adjacency.
   deg <- manifoldalign:::.ssma_degree_list(
     list(list(degree = fx$D_within[1:25]), list(degree = fx$D_within[26:50])),
-    fx$fit$correspondences, c(25L, 25L), "joint"
+    fx$fit$correspondences, "joint"
   )
   expect_equal(unlist(deg), fx$D_joint, tolerance = 1e-12)
 
@@ -207,4 +207,43 @@ test_that("ssma_align does not disturb the caller's RNG stream", {
                     control = ssma_align_control(knn = 6, rank_per_domain = 5,
                                                  solver = "operator"))
   expect_identical(.Random.seed, before)
+})
+
+test_that("SSMA eigenpairs equal the smallest pairs of the uncompressed problem", {
+  # With rank_per_domain >= the feature count the compression is exact, so
+  # both solvers must return the smallest generalized eigenpairs of
+  # (Z' L Z, Z' D Z) for either degree matrix.
+  set.seed(11)
+  n <- 30
+  d <- 4
+  X1 <- matrix(rnorm(n * d), n)
+  X2 <- X1 %*% qr.Q(qr(matrix(rnorm(d * d), d))) + matrix(rnorm(n * d, sd = 0.05), n)
+  corr <- data.frame(domain_i = 1L, index_i = 1:12, domain_j = 2L, index_j = 1:12,
+                     weight = 3)
+  Xc <- list(scale(X1, scale = FALSE), scale(X2, scale = FALSE))
+  within <- lapply(Xc, function(x) {
+    manifoldalign:::.ssma_build_within_graph(x, knn = 6, sigma = 1)
+  })
+  Z <- as.matrix(Matrix::bdiag(Xc))
+  for (dm in c("joint", "within_domain")) {
+    for (solver in c("reduced", "operator")) {
+      fit <- ssma_align(
+        list(a = X1, b = X2), correspondences = corr,
+        preproc = multivarious::center(), ncomp = 3,
+        control = ssma_align_control(knn = 6, sigma = 1, rank_per_domain = 10,
+                                     regularization = 1e-12, corr_edge_weight = 3,
+                                     degree_matrix = dm, solver = solver)
+      )
+      L <- as.matrix(manifoldalign:::.ssma_build_joint_laplacian(
+        within, fit$correspondences, c(n, n)
+      ))
+      deg <- unlist(manifoldalign:::.ssma_degree_list(within, fit$correspondences, dm))
+      A <- crossprod(Z, L %*% Z)
+      B <- crossprod(Z, Z * deg)
+      Ri <- backsolve(chol(B), diag(ncol(B)))
+      ev <- sort(eigen(t(Ri) %*% A %*% Ri, symmetric = TRUE)$values)
+      expect_equal(fit$generalized_eigenvalues, ev[ev > 1e-8][1:3],
+                   tolerance = 1e-6, label = paste(dm, solver))
+    }
+  }
 })

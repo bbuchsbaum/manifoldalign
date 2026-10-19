@@ -454,7 +454,7 @@ resolve_ssma_align_control <- function(control = NULL) {
   methods::as(L_within + L_cross, "dgCMatrix")
 }
 
-.ssma_degree_list <- function(within_graphs, correspondences, domain_sizes,
+.ssma_degree_list <- function(within_graphs, correspondences,
                               degree_matrix = c("joint", "within_domain")) {
   degree_matrix <- match.arg(degree_matrix)
   deg <- lapply(within_graphs, function(g) as.numeric(g$degree))
@@ -816,7 +816,7 @@ resolve_ssma_align_control <- function(control = NULL) {
 
   complete <- FALSE
   if (requireNamespace("RSpectra", quietly = TRUE) && k_req < (r - 1L)) {
-    eig <- RSpectra::eigs_sym(S, k = k_req, which = "SA")
+    eig <- .ssma_quiet_eigs(RSpectra::eigs_sym(S, k = k_req, which = "SA"))
     vals <- as.numeric(eig$values)
     vecs <- as.matrix(eig$vectors)
     ord <- order(vals, decreasing = FALSE)
@@ -847,6 +847,18 @@ resolve_ssma_align_control <- function(control = NULL) {
     eigenvalues_all = vals,
     ridge = ridge
   )
+}
+
+# RSpectra warns when fewer than k pairs converge and returns only the
+# converged ones. Both SSMA solvers detect that from the number of returned
+# values and fall back (dense solve or a larger k), so the solver's own
+# warning is muffled rather than shown for a handled condition.
+.ssma_quiet_eigs <- function(expr) {
+  withCallingHandlers(expr, warning = function(w) {
+    if (grepl("converged", conditionMessage(w), fixed = TRUE)) {
+      invokeRestart("muffleWarning")
+    }
+  })
 }
 
 # Pick the `ncomp` smallest non-trivial generalized eigenpairs (eigenvalue >
@@ -1022,13 +1034,13 @@ resolve_ssma_align_control <- function(control = NULL) {
          vectors = as.matrix(eig$vectors[, ord, drop = FALSE]))
   }
   solve_iterative <- function(k) {
-    eig <- RSpectra::eigs_sym(
+    eig <- .ssma_quiet_eigs(RSpectra::eigs_sym(
       shifted_op,
       k = k,
       n = r_total,
       which = "LA",
       opts = list(maxitr = as.integer(operator_maxiter), tol = as.numeric(operator_tol))
-    )
+    ))
     vals <- c_shift * (1 - as.numeric(eig$values))
     vecs <- as.matrix(eig$vectors)
     ord <- order(vals, decreasing = FALSE)
@@ -1208,7 +1220,6 @@ ssma_align.hyperdesign <- function(
   degree_list <- .ssma_degree_list(
     within_graphs = within,
     correspondences = corr_df,
-    domain_sizes = domain_sizes,
     degree_matrix = ctrl$degree_matrix
   )
 
