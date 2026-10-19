@@ -36,12 +36,14 @@ gate_stub_control <- function(margin = 1 / 6) {
   )
 }
 
-# Six labels per class; a misleading relation sends row 2 (class a) to row 7
-# (class b). Every other row is its own neighbour.
-gate_stub_misleading <- function() {
+# Six labels per class; a misleading relation sends rows 2 and 3 (class a) to
+# row 7 (class b), or only row 2 with `n_bad = 1`. Every other row is its own
+# neighbour.
+gate_stub_misleading <- function(n_bad = 2L) {
   labels <- list(rep(c("a", "b"), each = 6L))
+  targets <- c(1L, rep(7L, n_bad), seq.int(2L + n_bad, 12L))
   bad <- Matrix::sparseMatrix(
-    i = 1:12, j = c(1L, 7L, 3:12), x = 1, dims = c(12L, 12L)
+    i = 1:12, j = targets, x = 1, dims = c(12L, 12L)
   )
   list(
     labels = labels,
@@ -68,16 +70,18 @@ misleading_benchmark_fixture <- function(seed) {
 
 test_that("harmful structure is compared with the no-relation reference", {
   # Regression: the full relation set used to be the comparator, so a
-  # harmful full set was kept unless a subset beat it by the margin (1/6).
-  # Here dropping the relation is better by one held-out row (1/12) only.
+  # harmful full set was kept unless a subset beat it by the margin. Here
+  # dropping the relation is better by two held-out rows (2/12), below a
+  # margin of 1/4, so the old gate kept the harmful set.
   stub <- gate_stub_misleading()
   probability <- gate_stub_probability(wrong_rows = 1L)
   gate <- manifoldalign:::.rapid_semisup_validate_relations(
-    stub$fit, list(probability), stub$labels, gate_stub_control()
+    stub$fit, list(probability), stub$labels, gate_stub_control(margin = 1 / 4)
   )
   diagnostics <- gate$diagnostics$d1
   expect_equal(diagnostics$scores["none", "accuracy"], 11 / 12)
-  expect_equal(diagnostics$scores["full", "accuracy"], 10 / 12)
+  expect_equal(diagnostics$scores["full", "accuracy"], 9 / 12)
+  expect_equal(diagnostics$noninferiority, 1 / 12)
   expect_identical(diagnostics$reference, "none")
   expect_identical(diagnostics$comparator, "none")
   expect_identical(diagnostics$selected, "none")
@@ -85,6 +89,50 @@ test_that("harmful structure is compared with the no-relation reference", {
   expect_true(diagnostics$switched)
   expect_length(gate$fit$relations[[1L]]$relations, 0L)
   expect_length(gate$fit$diffusion[[1L]]$relation_weights, 0L)
+})
+
+test_that("a one-row deficit is within the default non-inferiority tolerance", {
+  stub <- gate_stub_misleading(n_bad = 1L)
+  probability <- gate_stub_probability(wrong_rows = 1L)
+  validate <- manifoldalign:::.rapid_semisup_validate_relations
+  tolerant <- validate(
+    stub$fit, list(probability), stub$labels, gate_stub_control()
+  )$diagnostics$d1
+  expect_equal(tolerant$scores["full", "accuracy"], 10 / 12)
+  expect_equal(tolerant$noninferiority, 1 / 12)
+  expect_identical(tolerant$selected, "full")
+  expect_identical(tolerant$decision, "kept_full")
+
+  strict_control <- rapid_ma_semisup_control(
+    rounds = 0L, propagation_steps = 1L, propagation_strength = 1,
+    relation_gate_min = 0, relation_validation = TRUE,
+    relation_validation_tolerance = 0
+  )
+  strict <- validate(
+    stub$fit, list(probability), stub$labels, strict_control
+  )$diagnostics$d1
+  expect_identical(strict$noninferiority, 0)
+  expect_identical(strict$selected, "none")
+  expect_identical(strict$decision, "rejected_transfer")
+
+  expect_error(
+    rapid_ma_semisup_control(relation_validation_tolerance = -0.1),
+    "relation_validation_tolerance"
+  )
+  expect_error(
+    rapid_ma_semisup_control(relation_validation_tolerance = 2),
+    "must be <= 1"
+  )
+  expect_null(rapid_ma_semisup_control()$relation_validation_tolerance)
+  expect_equal(
+    manifoldalign:::.rapid_semisup_validation_resolution(
+      c("a", "a", "a", "b", NA, "zz"), c("a", "b")
+    ),
+    1 / 6
+  )
+  expect_identical(
+    manifoldalign:::.rapid_semisup_validation_resolution(NA_character_, "a"), 0
+  )
 })
 
 test_that("the gate selects the no-transfer fallback when structure misleads", {
@@ -157,23 +205,30 @@ test_that("the candidate selector never ends below the no-transfer reference", {
   choice <- select(score(c(0.5, 0.5, 0.75, 0.75), c(1, 1, 0.9, 0.9), names),
                    "fallback", 0)
   expect_identical(choice$selected, "fallback")
+  # Non-inferiority tolerance: full one row below the reference is kept
+  # within a one-row tolerance and rejected without it.
+  one_row <- score(c(0.5, 10 / 12, 0.5, 11 / 12), c(1, 1, 1, 1), names)
+  expect_identical(select(one_row, "fallback", 1 / 6, 1 / 12)$selected, "full")
+  expect_identical(select(one_row, "fallback", 1 / 6, 0)$selected, "fallback")
 
   # Property: over random score tables, the selected candidate's balanced
-  # accuracy is at least the reference's, and a switch away from the
-  # comparator always clears the margin without a worse log-loss.
+  # accuracy is at most the tolerance below the reference's, and a switch
+  # away from the comparator always clears the margin without a worse
+  # log-loss.
   manifoldalign:::.with_local_seed(20261019L, {
     for (i in seq_len(300L)) {
       accuracy <- sample((0:12) / 12, 4L, replace = TRUE)
       log_loss <- round(stats::runif(4L, 0.2, 1.5), 2)
       accuracy[stats::runif(4L) < 0.1] <- NA
       margin <- sample(c(0, 1 / 12, 1 / 6), 1L)
+      noninferiority <- sample(c(0, 1 / 12), 1L)
       table <- score(accuracy, log_loss, names)
-      choice <- select(table, "fallback", margin)
+      choice <- select(table, "fallback", margin, noninferiority)
       if (!is.finite(table["fallback", "accuracy"])) {
         expect_identical(choice$selected, "fallback")
         next
       }
-      expect_gte(table[choice$selected, "accuracy"] + 1e-12,
+      expect_gte(table[choice$selected, "accuracy"] + noninferiority + 1e-12,
                  table["fallback", "accuracy"])
       if (!identical(choice$selected, choice$comparator)) {
         expect_gte(

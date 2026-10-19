@@ -32,7 +32,17 @@
 #'   log-loss must also be no worse than the comparator's. The comparator is the
 #'   full relation set when that set is out-of-fold non-inferior to the
 #'   no-transfer reference, and the no-transfer reference otherwise (see
-#'   [rapid_ma_semisup()]).
+#'   [rapid_ma_semisup()]). With four labels in each of three classes, the
+#'   default `1/6` is two held-out rows.
+#' @param relation_validation_tolerance Largest out-of-fold class-balanced
+#'   accuracy deficit of the full relation set relative to the no-transfer
+#'   reference that still counts as non-inferior. `NULL` (default) uses the
+#'   resolution of each domain's validation labels: the balanced-accuracy
+#'   weight of one held-out row of the largest scored class,
+#'   `1 / (n_classes * max_class_count)` (`1/12` for four labels in each of
+#'   three classes). A one-row difference is within leave-one-label-out noise,
+#'   so the pre-specified full set is not discarded for it; `0` requires the
+#'   full set to match the reference.
 #' @param relation_validation_max_relations Maximum highest-weight relations
 #'   used to construct bounded single and pair candidates.
 #' @param propagation_steps Fixed number of sparse relation-propagation steps.
@@ -57,6 +67,7 @@ rapid_ma_semisup_control <- function(
   relation_consistency = TRUE,
   relation_validation = FALSE,
   relation_validation_margin = 1 / 6,
+  relation_validation_tolerance = NULL,
   relation_validation_max_relations = 6L,
   propagation_steps = 2L,
   propagation_strength = 0.35,
@@ -128,6 +139,15 @@ rapid_ma_semisup_control <- function(
       is.na(relation_validation)) {
     stop("`relation_validation` must be TRUE or FALSE.", call. = FALSE)
   }
+  if (!is.null(relation_validation_tolerance)) {
+    relation_validation_tolerance <- .rapid_number_scalar(
+      relation_validation_tolerance, "relation_validation_tolerance",
+      lower = 0
+    )
+    if (relation_validation_tolerance > 1) {
+      stop("`relation_validation_tolerance` must be <= 1.", call. = FALSE)
+    }
+  }
 
   structure(
     list(
@@ -144,6 +164,7 @@ rapid_ma_semisup_control <- function(
       relation_validation = relation_validation,
       relation_validation_margin =
         values_01[["relation_validation_margin"]],
+      relation_validation_tolerance = relation_validation_tolerance,
       relation_validation_max_relations = relation_validation_max_relations,
       propagation_steps = propagation_steps,
       propagation_strength = values_01[["propagation_strength"]],
@@ -554,15 +575,16 @@ rapid_ma_semisup_control <- function(
 # The no-transfer reference is the supplied fallback (scored without
 # propagation) or, without one, the seed without relations (`none`). The full
 # relation set is the pre-specified transfer teacher: it is the comparator when
-# its out-of-fold balanced accuracy is not below the reference's, and the
-# reference is the comparator otherwise. Every other candidate is a
-# data-selected alternative and replaces the comparator only when it improves
-# balanced accuracy by at least `relation_validation_margin`, has a log-loss no
-# worse than the comparator's, and is strictly better on one of the two. The
-# selected teacher's out-of-fold balanced accuracy is therefore never below
-# the reference's. A domain without any scored row cannot be validated and
-# keeps the reference.
-.rapid_semisup_select_candidate <- function(score, reference, margin) {
+# its out-of-fold balanced accuracy is at most `noninferiority` below the
+# reference's, and the reference is the comparator otherwise. Every other
+# candidate is a data-selected alternative and replaces the comparator only
+# when it improves balanced accuracy by at least `relation_validation_margin`,
+# has a log-loss no worse than the comparator's, and is strictly better on one
+# of the two. The selected teacher's out-of-fold balanced accuracy is
+# therefore never more than `noninferiority` below the reference's. A domain
+# without any scored row cannot be validated and keeps the reference.
+.rapid_semisup_select_candidate <- function(score, reference, margin,
+                                            noninferiority = 0) {
   tolerance <- 1e-12
   finite <- is.finite(score[, "accuracy"]) & is.finite(score[, "log_loss"])
   if (!finite[[reference]]) {
@@ -572,7 +594,7 @@ rapid_ma_semisup_control <- function(
   accuracy <- score[, "accuracy"]
   log_loss <- score[, "log_loss"]
   full_noninferior <- "full" %in% rownames(score) && finite[["full"]] &&
-    accuracy[["full"]] + tolerance >= accuracy[[reference]]
+    accuracy[["full"]] + noninferiority + tolerance >= accuracy[[reference]]
   comparator <- if (full_noninferior) "full" else reference
   alternatives <- setdiff(rownames(score)[finite], comparator)
   gain <- accuracy[alternatives] - accuracy[[comparator]]
@@ -595,6 +617,16 @@ rapid_ma_semisup_control <- function(
     comparator = comparator,
     decision = "selected_alternative"
   )
+}
+
+# Balanced-accuracy weight of one scored row of the largest scored class: the
+# smallest nonzero change in class-balanced accuracy (0 without scored rows).
+.rapid_semisup_validation_resolution <- function(labels, classes) {
+  observed <- labels[!is.na(labels) & labels %in% classes]
+  counts <- table(factor(observed, levels = classes))
+  counts <- as.numeric(counts[counts > 0])
+  if (!length(counts)) return(0)
+  1 / (length(counts) * max(counts))
 }
 
 .rapid_semisup_validate_relations <- function(
@@ -693,8 +725,14 @@ rapid_ma_semisup_control <- function(
       )
     }
     reference <- if (has_fallback[[m]]) "fallback" else "none"
+    noninferiority <- control$relation_validation_tolerance
+    if (is.null(noninferiority)) {
+      noninferiority <- .rapid_semisup_validation_resolution(
+        scored_labels, classes
+      )
+    }
     choice <- .rapid_semisup_select_candidate(
-      score, reference, control$relation_validation_margin
+      score, reference, control$relation_validation_margin, noninferiority
     )
     selected <- choice$selected
     keep <- if (identical(selected, "fallback")) {
@@ -715,6 +753,7 @@ rapid_ma_semisup_control <- function(
       comparator = choice$comparator,
       teacher_seed = if (fallback_selected[[m]]) "fallback" else "initial",
       margin = control$relation_validation_margin,
+      noninferiority = noninferiority,
       scores = as.data.frame(score),
       candidate_relations = candidates,
       validation_rows = sum(!is.na(scored_labels) & scored_labels %in% classes),
@@ -939,14 +978,15 @@ rapid_ma_semisup_control <- function(
 #' classifier trained only on that domain's labels), scored without
 #' propagation, or, when no fallback is supplied, the seed probabilities
 #' without relations (`none`). The full relation set is the pre-specified
-#' teacher and is kept when its out-of-fold balanced accuracy is not below the
-#' reference's; otherwise the reference becomes the comparator. Any other
-#' candidate, including the reference itself, replaces the comparator only
-#' when it improves balanced accuracy by at least
-#' `control$relation_validation_margin` without a worse log-loss. The selected
-#' teacher therefore never has a lower out-of-fold balanced accuracy than the
-#' no-transfer reference, and a domain whose labels cannot be scored keeps the
-#' reference. When the fallback is selected, it replaces that domain's
+#' teacher and is kept when it is out-of-fold non-inferior to the reference:
+#' its balanced accuracy is at most `control$relation_validation_tolerance`
+#' (by default one held-out row) below the reference's. Otherwise the
+#' reference becomes the comparator. Any other candidate, including the
+#' reference itself, replaces the comparator only when it improves balanced
+#' accuracy by at least `control$relation_validation_margin` without a worse
+#' log-loss. The selected teacher's out-of-fold balanced accuracy is therefore
+#' never more than the tolerance below the no-transfer reference's, and a
+#' domain whose labels cannot be scored keeps the reference. When the fallback is selected, it replaces that domain's
 #' initial probabilities and no relation is propagated there; later
 #' pseudo-label rounds (`control$rounds > 0`) still use transport and are
 #' guarded only by rollback.

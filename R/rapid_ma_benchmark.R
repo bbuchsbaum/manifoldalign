@@ -532,8 +532,8 @@ rapid_ma_benchmark_fixture <- function(
 #' no-transfer reference is the domain-local nearest centroid trained only on
 #' that domain's labels (for the target, exactly the `target_centroid`
 #' comparator), recomputed in the same folds; it replaces the teacher when the
-#' full relation set is out-of-fold worse than it and no relation subset beats
-#' it (see [rapid_ma_semisup()]). The shared-embedding part of the seed comes
+#' full relation set is out-of-fold worse than it by more than one held-out
+#' row and no relation subset beats it (see [rapid_ma_semisup()]). The shared-embedding part of the seed comes
 #' from the core fit, which used every training label, and is not refitted
 #' per fold, so its fold scores can be optimistic. Held-out labels are never
 #' read.

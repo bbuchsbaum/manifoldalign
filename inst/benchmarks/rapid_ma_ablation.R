@@ -161,7 +161,7 @@ metadata <- c(
   "test_label_tuning=false",
   paste(
     "relation_gate=no-transfer reference (domain-local centroid);",
-    "full relation set kept when out-of-fold non-inferior;",
+    "full relation set kept when out-of-fold non-inferior within one row;",
     "alternatives need margin 1/6 and no worse log-loss"
   ),
   paste("R.version", R.version.string, sep = "="),
