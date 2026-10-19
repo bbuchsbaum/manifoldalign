@@ -542,7 +542,7 @@ partial_project.kema_fit <- function(x, new_data, ...) {
 #' @param backend Backend for the original eigensolver. One of `"auto"`,
 #'   `"full_exact"`, `"reduced_exact"`, or `"operator_exact"`. All backends
 #'   solve the same nullspace-deflated quotient pencil. `"full_exact"` and
-#'   `"reduced_exact"` form the dense `r x r` quotient matrices (`r` the total
+#'   `"reduced_exact"` form the dense r-by-r quotient matrices (r the total
 #'   kernel rank) and use a dense generalized solve for small quotients,
 #'   otherwise preconditioned LOBPCG with a certified dense fallback.
 #'   `"operator_exact"` applies the quotient matrix-free through the

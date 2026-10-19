@@ -107,7 +107,7 @@ rejected.}
 \item{backend}{Backend for the original eigensolver. One of \code{"auto"},
 \code{"full_exact"}, \code{"reduced_exact"}, or \code{"operator_exact"}. All backends
 solve the same nullspace-deflated quotient pencil. \code{"full_exact"} and
-\code{"reduced_exact"} form the dense \verb{r x r} quotient matrices (\code{r} the total
+\code{"reduced_exact"} form the dense r-by-r quotient matrices (r the total
 kernel rank) and use a dense generalized solve for small quotients,
 otherwise preconditioned LOBPCG with a certified dense fallback.
 \code{"operator_exact"} applies the quotient matrix-free through the
