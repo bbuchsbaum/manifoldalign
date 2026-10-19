@@ -40,7 +40,7 @@ none. \code{NULL} entries are recorded as an identity transform.}
 handle NA labels gracefully (e.g., created with createSimFun())}
 
 \item{mu}{Balance parameter between low-rank (μ=0) and similarity (μ=1)
-terms (default: 0.5)}
+terms (default: 0.5). Must be a single number in \verb{[0, 1]}.}
 
 \item{lambda}{Regularization parameter for glmnet. If NULL (default), uses
 cross-validation to select optimal lambda via cv.glmnet. If specified,
@@ -66,7 +66,10 @@ directions. Must be a finite non-negative number.}
 matrices and uses PRIMME when it is installed (otherwise a dense
 eigendecomposition for up to 2000 samples, or RSpectra), matching the
 original implementation. \code{"operator"} keeps low-rank factors and uses
-RSpectra with a matrix-vector operator to reduce memory and runtime.}
+RSpectra with a matrix-vector operator to reduce memory and runtime.
+Both restrict the eigenproblem to the complement of the per-domain
+constant vectors by projecting inside the matrix-vector product (the
+projector is never formed), so they target the same embedding.}
 }
 \value{
 The return value depends on the specific method. For hyperdesign
@@ -79,10 +82,25 @@ low-rank structure with similarity-based constraints. Supports
 semi-supervised learning with missing labels.
 }
 \details{
-Low-rank alignment optimizes the objective function Z = (1-μ) * M + 2μ * L
-where M captures low-rank structure and L is the graph Laplacian from
-similarity matrix. The method balances preserving low-rank structure
-(μ=0) with enforcing similarity constraints (μ=1).
+Low-rank alignment (Boucher, Carey, Mahadevan & Dyar, 2015) builds the
+matrix Z = (1-μ) * M + 2μ * L, where M = (I-R)ᵀ(I-R) is the block-diagonal
+low-rank reconstruction term (R_k = U_k diag(1 - 1/s²) U_kᵀ per domain) and
+L is the graph Laplacian of the cross-domain similarity matrix. The method
+balances preserving low-rank structure (μ=0) with enforcing similarity
+constraints (μ=1).
+
+\strong{Estimand.} The embedding F (n x ncomp, rows are samples of all domains
+stacked in order) minimises trace(Fᵀ Z F) subject to Fᵀ F = I and
+Fᵀ e_k = 0 for every domain indicator vector e_k, i.e. the \code{ncomp}
+smallest eigenvectors of Z restricted to the orthogonal complement of the
+per-domain constant vectors. Each domain's coordinates therefore have zero
+mean. As in Laplacian eigenmaps, this removes trivial solutions: with
+centred features every R_k annihilates the domain constant, so the global
+constant vector is an exact eigenvector of Z (eigenvalue 1-μ) and, without
+the constraint, it is returned as a zero-variance component whenever the
+label term dominates. Per-domain offsets carry no within-domain structure
+and cannot be reproduced by the no-intercept linear projection fitted to
+centred data. Both solvers solve this same restricted problem.
 
 \strong{Semi-supervised Learning Support:}
 The algorithm handles NA labels gracefully. Unlabeled samples:
@@ -90,8 +108,9 @@ The algorithm handles NA labels gracefully. Unlabeled samples:
 \item Still contribute to the low-rank structure term M through their data
 \item Do not participate in the similarity constraints (L term)
 \item Receive coordinates in the joint embedding space
-\item Create isolated nodes that produce zero eigenvalues (automatically
-skipped)
+\item Are isolated nodes of the similarity graph. For μ < 1, M is positive
+definite, so they do not create zero eigenvalues; for μ = 1 the zero
+eigenvalues of Z (null modes of L) are skipped.
 }
 
 The scale_M parameter controls whether to apply eigenvalue-based scaling:
@@ -114,10 +133,14 @@ Samples with NA labels are supported through the following mechanism:
 \itemize{
 \item They contribute to the low-rank reconstruction term M = (I-R)ᵀ(I-R)
 \item They do not participate in similarity constraints (zero rows/columns in C)
-\item They create isolated nodes with zero degree, producing zero eigenvalues
-\item The algorithm automatically detects and skips these zero modes
+\item They are isolated nodes with zero degree; zero eigenvalues of Z (which
+occur only for μ = 1) are skipped
 \item Final embedding includes coordinates for all samples (labeled and unlabeled)
 }
+
+Each domain needs at least two samples for its coordinates to carry
+within-domain structure; a single-sample domain is embedded at the origin,
+and an error is raised when no domain has two or more samples.
 }
 \examples{
 \donttest{

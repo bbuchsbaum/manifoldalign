@@ -134,6 +134,15 @@ These fix defects found in a package review; several change fitted output.
 * **Generalized Procrustes**: new `translation = "shared_tasks"` (default)
   centres partial-task designs on shared tasks; a stationarity
   `certificate` is returned; `final_diff` reports the last step.
+* **`lowrank_align()`** no longer returns trivial embedding components. With
+  per-domain centred features the constant vector is an exact eigenvector of
+  Z = (1 - mu) M + 2 mu L and was returned as a zero-variance score column
+  whenever the label term dominated. Both solvers now take the smallest
+  eigenvectors of Z on the orthogonal complement of the per-domain constant
+  vectors, so each domain's scores have zero mean and the explicit and
+  operator solvers target the same embedding. Scores change for all fits;
+  `mu` must be a single number in [0, 1]; the explicit solver with PRIMME can
+  be about 1.5x slower.
 * **`preproc = NULL`** now works in `gpca_align()`, `generalized_procrustes()`,
   `lowrank_align()` and `global_geo_align()`; `lowrank_align()` no longer builds
   a dense cross-domain mask.
