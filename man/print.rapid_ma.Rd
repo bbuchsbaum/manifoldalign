@@ -4,10 +4,10 @@
 \alias{print.rapid_ma}
 \title{Print RAPID-MA fit}
 \usage{
-print.rapid_ma(x, ...)
+\method{print}{rapid_ma}(x, ...)
 }
 \arguments{
-\item{x}{A `rapid_ma` object.}
+\item{x}{A \code{rapid_ma} object.}
 
 \item{...}{Unused additional arguments.}
 }

@@ -4,10 +4,10 @@
 \alias{print.rapid_ma_feature_scores}
 \title{Print RAPID-MA feature scores}
 \usage{
-print.rapid_ma_feature_scores(x, ...)
+\method{print}{rapid_ma_feature_scores}(x, ...)
 }
 \arguments{
-\item{x}{A `rapid_ma_feature_scores` object.}
+\item{x}{A \code{rapid_ma_feature_scores} object.}
 
 \item{...}{Unused additional arguments.}
 }

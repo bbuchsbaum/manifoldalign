@@ -36,7 +36,7 @@ Suggests:
     knitr,
     multidesign,
     proxy,
-    pryr,
+    lobstr,
     matrixStats,
     ps,
     pkgload,
@@ -63,7 +63,6 @@ BugReports: https://github.com/bbuchsbaum/manifoldalign/issues
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Remotes:
-    cran/pryr@df30afa194e1dddbddb2feff5d1c461a41e8a342,
     cran/PRIMME@7264c93fb8345a11c9fc31c7b37780b326b02581,
     bbuchsbaum/adjoin,
     bbuchsbaum/genpca,

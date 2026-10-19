@@ -1,7 +1,8 @@
 # Development validation repairs
 
-- Resolve required PRIMME and optional pryr from pinned CRAN-mirror sources;
-  declare memory-profiling and preprocessing-test dependencies.
+- Resolve required PRIMME from a pinned CRAN-mirror source; replace the
+  archived pryr memory helper with maintained lobstr, and declare the
+  preprocessing-test dependency.
 - Run checkout-resource audits as an explicit mandatory PR-tier phase and
   keep installed-package tests independent of checkout paths.
 - Repair the GPCA alignment fixture's per-coordinate means, vignette engine

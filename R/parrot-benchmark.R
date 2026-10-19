@@ -156,14 +156,14 @@ benchmark_parrot_scalability <- function(sizes = c(50, 100, 200, 500, 1000),
 #' @export
 profile_parrot_memory <- function(n_nodes = 100) {
   
-  if (!requireNamespace("pryr", quietly = TRUE)) {
-    warning("pryr package not available for memory profiling")
+  if (!requireNamespace("lobstr", quietly = TRUE)) {
+    warning("lobstr package not available for memory profiling")
     return(NULL)
   }
   
   # Initial memory
   gc()
-  mem_start <- pryr::mem_used()
+  mem_start <- lobstr::mem_used()
   
   # Generate test data
   angles <- 2 * pi * (1:n_nodes) / n_nodes
@@ -189,18 +189,18 @@ profile_parrot_memory <- function(n_nodes = 100) {
   hd <- multidesign::hyperdesign(list(domain1 = md1, domain2 = md2))
   
   # Memory after data creation
-  mem_data <- pryr::mem_used()
+  mem_data <- lobstr::mem_used()
   
   # Run PARROT
   result <- parrot(hd, anchors = anchors, max_iter = 10)
   
   # Peak memory
-  mem_peak <- pryr::mem_used()
+  mem_peak <- lobstr::mem_used()
   
   # Clean up and final memory
   rm(result)
   gc()
-  mem_final <- pryr::mem_used()
+  mem_final <- lobstr::mem_used()
   
   list(
     n_nodes = n_nodes,
@@ -386,7 +386,7 @@ generate_parrot_performance_report <- function(output_file = "parrot_performance
   cat("2. MEMORY USAGE ANALYSIS\n")
   cat("------------------------\n")
   
-  if (requireNamespace("pryr", quietly = TRUE)) {
+  if (requireNamespace("lobstr", quietly = TRUE)) {
     mem_results <- list()
     for (n in c(50, 100, 200)) {
       mem_results[[length(mem_results) + 1]] <- profile_parrot_memory(n)
@@ -395,7 +395,7 @@ generate_parrot_performance_report <- function(output_file = "parrot_performance
     mem_df <- do.call(rbind, lapply(mem_results, as.data.frame))
     print(mem_df[, c("n_nodes", "memory_peak", "memory_algorithm", "theoretical_transport_plan")])
   } else {
-    cat("Memory profiling requires 'pryr' package\n")
+    cat("Memory profiling requires 'lobstr' package\n")
   }
   
   cat("\n")
