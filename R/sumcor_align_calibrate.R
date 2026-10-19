@@ -89,7 +89,7 @@ calibrate_domain.default <- function(fit, data, ...) {
 #' scale, and the polar rotation is fitted to few events. In a simulation
 #' with three latent dimensions and basis rank 5, held-out events encoded
 #' after calibrating on 20 events matched the reference consensus with R^2
-#' about 0.89 (scores about 17\% too large), against 0.95 with 40 and 0.98
+#' about 0.89 (scores about 17% too large), against 0.95 with 40 and 0.98
 #' with 80 events, while the best linear map from the same encoding reached
 #' 0.99 in every case. Use [cv_alignment_transfer()] to measure this on real
 #' data.
