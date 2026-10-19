@@ -15,6 +15,7 @@ the results are directly comparable to the `cone_align`, `parrot`, and
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(multivarious)
@@ -27,6 +28,7 @@ library(scales)
 ## Loading the Benchmark Pair
 
 ``` r
+
 alignment_benchmark <- manifoldalign::alignment_benchmark
 pair_domains <- alignment_benchmark$domains[1:2]
 
@@ -43,6 +45,7 @@ hd_pair <- multidesign::hyperdesign(pair_multidesign)
 ## Running `grasp`
 
 ``` r
+
 grasp_internal <- grasp(
   hd_pair,
   ncomp = 20,
@@ -64,6 +67,7 @@ underlying class labels to quantify alignment quality—remember that the
 optimiser itself never sees these labels.
 
 ``` r
+
 assignment <- grasp_internal$assignment
 ref_design <- pair_multidesign[[1]]$design
 cmp_design <- pair_multidesign[[2]]$design
@@ -83,6 +87,7 @@ tibble(
 ```
 
 ``` r
+
 n_ref <- node_counts[1]
 embed1 <- grasp_internal$s[seq_len(n_ref), , drop = FALSE]
 embed2 <- grasp_internal$s[n_ref + seq_len(n_ref), , drop = FALSE]
@@ -105,6 +110,7 @@ We stack the aligned embeddings for both domains (as returned by
 and colour points by their latent class.
 
 ``` r
+
 embed1 <- grasp_internal$s[seq_len(n_ref), , drop = FALSE]
 embed2 <- grasp_internal$s[n_ref + seq_len(n_ref), , drop = FALSE]
 

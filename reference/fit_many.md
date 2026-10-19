@@ -43,6 +43,5 @@ md2 <- multidesign(X2, design2)
 hd <- hyperdesign(list(d1 = md1, d2 = md2))
 algo <- kema_aligner()
 result <- fit_many(algo, hd, y = labels, ncomp = 2)
-#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.946, max_B_orth_offdiag=4.32e-10
 # }
 ```

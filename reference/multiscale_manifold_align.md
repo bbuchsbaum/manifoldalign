@@ -1,9 +1,12 @@
 # Multiscale manifold alignment (Wang-Mahadevan style)
 
-Experimental multiset manifold alignment with a QR-free spectral
-hierarchy. The implementation builds a joint graph Laplacian, compresses
-each domain with truncated SVD, forms a reduced operator, and extracts
-nested multiscale bases from its spectrum.
+Deprecated experimental multiset manifold alignment with a QR-free
+spectral hierarchy. This implementation is retained temporarily for
+reproducibility, but it has unresolved solver/completion failures and is
+not recommended. Use \[rapid_ma()\] for supplied sparse relations and
+structured attributes, \[ssma_align()\] for semi-supervised feature
+manifolds, or \[spectral_mnn_align()\] for an unsupervised spectral
+baseline. Removal is scheduled for manifoldalign 1.0.0.
 
 ## Usage
 
@@ -78,3 +81,25 @@ multiscale_manifold_align(data, ...)
 
 A \`multiblock_biprojector\`-compatible object with subclass
 \`multiscale_manifold_align\`.
+
+## Migration
+
+Given a list \`domains\` of feature matrices, choose the replacement by
+input contract: “\`r \# Supplied sparse relations, positions, or
+structured attributes rapid_ma(domains, relations = relations, positions
+= positions, attributes = attributes)
+
+\# Semi-supervised feature manifolds ssma_align(domains, correspondences
+= correspondences)
+
+\# Unsupervised feature-derived spectral alignment
+spectral_mnn_align(domains) “\`
+
+## Bounded repair gate
+
+A repair will be considered only with a coherent algorithmic owner and
+specification, zero malformed-formula or convergence-code errors on all
+mandatory fixtures, at least 95 percent completion on applicable frozen
+cases, passing numerical invariants and an independent oracle, and
+evidence of a unique capability or non-dominated regime. Otherwise
+removal remains scheduled for manifoldalign 1.0.0.

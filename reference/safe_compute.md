@@ -52,7 +52,7 @@ Examples of good candidates:
   `safe_compute(PRIMME::eigs_sym(...), "Eigenvalue computation failed")`
 
 - Graph construction:
-  `safe_compute(neighborweights::graph_weights(...), "Graph construction failed")`
+  `safe_compute(adjoin::graph_weights(...), "Graph construction failed")`
 
 - Matrix operations: `safe_compute(solve(A), "Matrix solve failed")`
 

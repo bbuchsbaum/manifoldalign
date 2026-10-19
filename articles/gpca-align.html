@@ -7,11 +7,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Generalized PCA Alignment with gpca_align • manifoldalign</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
-<script src="../extra.js"></script><meta property="og:title" content="Generalized PCA Alignment with gpca_align">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><script src="../extra.js"></script><meta property="og:title" content="Generalized PCA Alignment with gpca_align">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -34,7 +35,8 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/cone-align-multiple.html">Multi-Domain Graph Alignment with cone_align_multiple</a></li>
+<li><a class="dropdown-item" href="../articles/benchmark-guidance.html">Benchmark Guidance by Problem Regime</a></li>
+    <li><a class="dropdown-item" href="../articles/cone-align-multiple.html">Multi-Domain Graph Alignment with cone_align_multiple</a></li>
     <li><a class="dropdown-item" href="../articles/cone-align.html">Pairwise Graph Alignment with cone_align</a></li>
     <li><a class="dropdown-item" href="../articles/coupled-diagonalization.html">Coupled Diagonalization across Modalities</a></li>
     <li><a class="dropdown-item" href="../articles/features-and-predictive-performance.html">Features, Correspondences, and Predictive Performance</a></li>
@@ -43,10 +45,12 @@
     <li><a class="dropdown-item" href="../articles/grasp-align.html">Spectral Graph Alignment with grasp</a></li>
     <li><a class="dropdown-item" href="../articles/kema-overview.html">Kernel Manifold Alignment with kema</a></li>
     <li><a class="dropdown-item" href="../articles/lowrank-align.html">Low-Rank Alignment with lowrank_align</a></li>
+    <li><a class="dropdown-item" href="../articles/method-selection-guide.html">Method Selection Guide</a></li>
     <li><a class="dropdown-item" href="../articles/mma-align.html">Multiset Manifold Alignment with mma_align_multiple</a></li>
     <li><a class="dropdown-item" href="../articles/parrot-align.html">Position-Aware OT Alignment with parrot</a></li>
     <li><a class="dropdown-item" href="../articles/performance-overview.html">Alignment Method Performance Overview</a></li>
     <li><a class="dropdown-item" href="../articles/quickstart-hyperdesign.html">Quickstart: Building a hyperdesign and running alignments</a></li>
+    <li><a class="dropdown-item" href="../articles/ssma-linear-constraints.html">SSMA with linear correspondence constraints</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -142,25 +146,25 @@ classes and moderate domain-specific transformations.</p>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="va">gpca_fit</span>, max.level <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="co">#&gt; List of 6</span></span>
-<span><span class="co">#&gt;  $ v            : num [1:12, 1:2] -0.342 -0.361 -0.294 -0.246 -0.306 ...</span></span>
+<span><span class="co">#&gt;  $ v            : num [1:12, 1:2] 0.342 0.361 0.294 0.246 0.306 ...</span></span>
 <span><span class="co">#&gt;   ..- attr(*, "dimnames")=List of 2</span></span>
 <span><span class="co">#&gt;  $ preproc      :List of 2</span></span>
 <span><span class="co">#&gt;   ..- attr(*, "class")= chr [1:2] "concat_pre_processor" "pre_processor"</span></span>
-<span><span class="co">#&gt;  $ s            : num [1:240, 1:2] -0.112 -0.153 -0.161 -0.201 -0.148 ...</span></span>
+<span><span class="co">#&gt;  $ s            : num [1:240, 1:2] 0.659 1.216 1.33 1.877 1.155 ...</span></span>
 <span><span class="co">#&gt;   ..- attr(*, "dimnames")=List of 2</span></span>
 <span><span class="co">#&gt;  $ sdev         : num [1:2] 5.94 5.22</span></span>
 <span><span class="co">#&gt;  $ block_indices:List of 3</span></span>
 <span><span class="co">#&gt;  $ labels       : Factor w/ 2 levels "class_A","class_B": 1 1 1 1 1 1 1 1 1 1 ...</span></span>
 <span><span class="co">#&gt;  - attr(*, "class")= chr [1:5] "gpca_align" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...</span></span>
-<span><span class="co">#&gt;  - attr(*, ".cache")=&lt;environment: 0x55b62d3e97f8&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt;  - attr(*, ".cache")=&lt;environment: 0x5567ae6c5e00&gt;</span></span></code></pre></div>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">rms_alignment</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">gpca_fit</span><span class="op">$</span><span class="va">s</span><span class="op">)</span>, <span class="va">domain_sizes</span>, <span class="va">domain_names</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
-<span><span class="co">#&gt;   domain_i domain_j    rms</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  0.205 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  0.231 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.033<span style="text-decoration: underline;">3</span></span></span></code></pre></div>
+<span><span class="co">#&gt;   domain_i domain_j   rms</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> domain1  domain2  2.20 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> domain1  domain3  2.48 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> domain2  domain3  0.400</span></span></code></pre></div>
 <p>The result is a <code>multiblock_biprojector</code>, so we can
 extract scores and feature loadings just like other
 <code>multivarious</code> models. For plotting below we z-score the
@@ -185,14 +189,14 @@ different feature dimensions.</p>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">scores</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 6 × 5</span></span></span>
-<span><span class="co">#&gt;    comp1 comp2 sample domain  condition</span></span>
-<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>  <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;fct&gt;</span>    </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> -<span style="color: #BB0000;">0.819</span> 0.674      1 domain1 class_A  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> -<span style="color: #BB0000;">1.48</span>  1.38       2 domain1 class_A  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> -<span style="color: #BB0000;">1.18</span>  1.11       3 domain1 class_A  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> -<span style="color: #BB0000;">1.95</span>  1.96       4 domain1 class_A  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> -<span style="color: #BB0000;">1.08</span>  0.997      5 domain1 class_A  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> -<span style="color: #BB0000;">1.45</span>  1.33       6 domain1 class_A</span></span></code></pre></div>
+<span><span class="co">#&gt;   comp1  comp2 sample domain  condition</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>  <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;fct&gt;</span>    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> 0.598 -<span style="color: #BB0000;">0.746</span>      1 domain1 class_A  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> 1.10  -<span style="color: #BB0000;">1.36</span>       2 domain1 class_A  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> 1.21  -<span style="color: #BB0000;">1.48</span>       3 domain1 class_A  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> 1.69  -<span style="color: #BB0000;">2.10</span>       4 domain1 class_A  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> 1.05  -<span style="color: #BB0000;">1.30</span>       5 domain1 class_A  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> 1.06  -<span style="color: #BB0000;">1.30</span>       6 domain1 class_A</span></span></code></pre></div>
 <div class="section level3">
 <h3 id="visualising-the-shared-embedding">Visualising the Shared Embedding<a class="anchor" aria-label="anchor" href="#visualising-the-shared-embedding"></a>
 </h3>
@@ -277,7 +281,7 @@ or expand chunks to benchmark larger settings.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

@@ -18,6 +18,7 @@ reference and consensus modes, and inspect diagnostics returned by
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(tibble)
@@ -28,6 +29,7 @@ library(ggplot2)
 ## Preparing the Multiset Example
 
 ``` r
+
 alignment_benchmark <- manifoldalign::alignment_benchmark
 raw_domains <- alignment_benchmark$domains
 
@@ -57,6 +59,7 @@ The latent classes shipped with the benchmark are used only for
 diagnostics.
 
 ``` r
+
 table(multi_domains[[1]]$design$condition)
 #> 
 #> class_A class_B 
@@ -70,6 +73,7 @@ hypersphere normalisation, and a final Hungarian pass to extract hard
 correspondences.
 
 ``` r
+
 set.seed(1)
 mma_ref <- mma_align_multiple(
   hd_multi,
@@ -106,6 +110,7 @@ str(mma_ref, max.level = 1)
 ```
 
 ``` r
+
 quality_ref <- alignment_quality(mma_ref)
 
 tibble::as_tibble(quality_ref$per_domain)
@@ -129,6 +134,7 @@ confidence, and MSE under both hard and soft correspondences. We can
 relate the assignments back to the hidden labels of the benchmark.
 
 ``` r
+
 ref_conditions <- multi_domains[[1]]$design$condition
 
 class_accuracy <- vapply(seq_along(multi_names)[-1], function(idx) {
@@ -160,6 +166,7 @@ recovered by
 [`mma_align_multiple()`](https://bbuchsbaum.github.io/manifoldalign/reference/mma_align_multiple.md).
 
 ``` r
+
 score_tbl <- as_tibble(as.matrix(mma_ref$s), .name_repair = "minimal")
 colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
 
@@ -185,6 +192,7 @@ domain sizes. We down-sample `domain3` to 60 nodes to illustrate the
 automatic choice of consensus centres (`min` by default).
 
 ``` r
+
 set.seed(42)
 consensus_domains <- raw_domains
 keep_idx <- sort(sample(seq_len(nrow(consensus_domains[[3]]$x)), 60))
@@ -213,6 +221,7 @@ tibble(
 ```
 
 ``` r
+
 set.seed(99)
 mma_consensus <- mma_align_multiple(
   hd_consensus,
@@ -247,6 +256,7 @@ list(
 ```
 
 ``` r
+
 quality_consensus <- alignment_quality(mma_consensus)
 
 tibble::as_tibble(quality_consensus$per_domain)
@@ -270,6 +280,7 @@ Each domain’s embeddings sit close to the learned centres even though
 `domain3` has fewer nodes.
 
 ``` r
+
 consensus_scores <- as_tibble(as.matrix(mma_consensus$s), .name_repair = "minimal")
 colnames(consensus_scores) <- paste0("comp", seq_len(ncol(consensus_scores)))
 

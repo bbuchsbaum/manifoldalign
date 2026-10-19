@@ -1,6 +1,7 @@
 # Fused-Partial Gromov-Wasserstein for Domain Alignment
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(tibble)
@@ -26,6 +27,7 @@ The simplest case aligns two domains using both feature and structural
 information:
 
 ``` r
+
 # Create synthetic data with different dimensions
 set.seed(123)
 n1 <- 30
@@ -93,6 +95,7 @@ print(result)
 The transport plan shows how samples from one domain map to another:
 
 ``` r
+
 # Extract transport plan
 P <- result$transport_plans[[1]]
 
@@ -118,6 +121,7 @@ When domains have outliers or noise, you may want to transport only a
 fraction of the mass:
 
 ``` r
+
 # Add outliers to domain 2
 X2_noisy <- rbind(X2, matrix(rnorm(10 * 5, sd = 5), 10, 5))
 design2_noisy <- data.frame(id = 1:(n2 + 10), 
@@ -132,22 +136,17 @@ result_partial <- fpgw(hd_noisy, omega1 = 0.5, rho = 0.8)
 # Check transported mass
 P_partial <- result_partial$transport_plans[[1]]
 cat("Total transported mass:", sum(P_partial), "\n")
-#> Total transported mass: 0.2564186
+#> Total transported mass: 0.79999
 ```
 
-### TV-Penalized FPGW
+### Selecting transported mass
 
-The total variation penalty provides a soft constraint on transported
-mass:
-
-``` r
-# Use TV penalty instead of hard mass constraint
-result_tv <- fpgw(hd_noisy, omega1 = 0.5, lambda = 0.1)
-
-P_tv <- result_tv$transport_plans[[1]]
-cat("Total transported mass with TV penalty:", sum(P_tv), "\n")
-#> Total transported mass with TV penalty: 0.2564186
-```
+The supported partial-transport solver fixes the transported mass
+through `rho`. Set it explicitly according to the expected shared
+support. The former TV-penalized mode (`lambda > 0`) is withdrawn and
+raises an error; it is not an alternative way to fit the current solver.
+The preceding `rho = 0.8` example uses the supported fixed-mass
+objective.
 
 ## Controlling Feature vs Structure Weight
 
@@ -155,6 +154,7 @@ The `omega1` parameter controls the balance between feature and
 structural alignment:
 
 ``` r
+
 # Pure structural alignment (small omega1)
 result_struct <- fpgw(hd, omega1 = 0.01)
 
@@ -178,6 +178,7 @@ cat("Feature emphasis distance:", result_feature$distances[1,2], "\n")
 FPGW can align multiple domains simultaneously:
 
 ``` r
+
 # Create three domains with varying dimensions
 X3 <- matrix(rnorm(25 * 4), 25, 4)
 X3[1:12, ] <- X3[1:12, ] + 2
@@ -208,6 +209,7 @@ print(result_multi$distances)
 The FPGW implementation uses optimized C++ code for performance:
 
 ``` r
+
 # Compare performance for different problem sizes
 sizes <- c(20, 50, 100)
 times <- numeric(length(sizes))
@@ -242,6 +244,7 @@ plot(sizes, times, type = "b",
 You can use different distance metrics for within-domain distances:
 
 ``` r
+
 # Use Manhattan distance instead of Euclidean
 result_manhattan <- fpgw(hd, omega1 = 0.5, metric = "manhattan")
 ```

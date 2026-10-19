@@ -25,6 +25,7 @@ it when exploring your own data.
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(multivarious)
@@ -41,6 +42,7 @@ operates on identical inputs. It contains three domains with two latent
 classes and moderate domain-specific transformations.
 
 ``` r
+
 alignment_benchmark <- manifoldalign::alignment_benchmark
 domain_list <- lapply(alignment_benchmark$domains, function(dom) {
   multidesign(dom$x, dom$design)
@@ -56,6 +58,7 @@ When `data` is a `hyperdesign`, call
 and supply the label column name via the `y` argument.
 
 ``` r
+
 base_preproc <- replicate(length(domain_names), multivarious::pass(), simplify = FALSE)
 
 gpca_fit <- gpca_align(
@@ -69,27 +72,28 @@ gpca_fit <- gpca_align(
 
 str(gpca_fit, max.level = 1)
 #> List of 6
-#>  $ v            : num [1:12, 1:2] -0.342 -0.361 -0.294 -0.246 -0.306 ...
+#>  $ v            : num [1:12, 1:2] 0.342 0.361 0.294 0.246 0.306 ...
 #>   ..- attr(*, "dimnames")=List of 2
 #>  $ preproc      :List of 2
 #>   ..- attr(*, "class")= chr [1:2] "concat_pre_processor" "pre_processor"
-#>  $ s            : num [1:240, 1:2] -0.112 -0.153 -0.161 -0.201 -0.148 ...
+#>  $ s            : num [1:240, 1:2] 0.659 1.216 1.33 1.877 1.155 ...
 #>   ..- attr(*, "dimnames")=List of 2
 #>  $ sdev         : num [1:2] 5.94 5.22
 #>  $ block_indices:List of 3
 #>  $ labels       : Factor w/ 2 levels "class_A","class_B": 1 1 1 1 1 1 1 1 1 1 ...
 #>  - attr(*, "class")= chr [1:5] "gpca_align" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...
-#>  - attr(*, ".cache")=<environment: 0x55b62d3e97f8>
+#>  - attr(*, ".cache")=<environment: 0x5567ae6c5e00>
 ```
 
 ``` r
+
 rms_alignment(as.matrix(gpca_fit$s), domain_sizes, domain_names)
 #> # A tibble: 3 × 3
-#>   domain_i domain_j    rms
-#>   <chr>    <chr>     <dbl>
-#> 1 domain1  domain2  0.205 
-#> 2 domain1  domain3  0.231 
-#> 3 domain2  domain3  0.0333
+#>   domain_i domain_j   rms
+#>   <chr>    <chr>    <dbl>
+#> 1 domain1  domain2  2.20 
+#> 2 domain1  domain3  2.48 
+#> 3 domain2  domain3  0.400
 ```
 
 The result is a `multiblock_biprojector`, so we can extract scores and
@@ -106,6 +110,7 @@ keeps preprocessing as the identity—which keeps this example lightweight
 while still supporting different feature dimensions.
 
 ``` r
+
 score_tbl <- as_tibble(zscore_columns(as.matrix(gpca_fit$s)), .name_repair = "minimal")
 colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
 
@@ -118,19 +123,20 @@ scores <- score_tbl %>%
 
 head(scores)
 #> # A tibble: 6 × 5
-#>    comp1 comp2 sample domain  condition
-#>    <dbl> <dbl>  <int> <chr>   <fct>    
-#> 1 -0.819 0.674      1 domain1 class_A  
-#> 2 -1.48  1.38       2 domain1 class_A  
-#> 3 -1.18  1.11       3 domain1 class_A  
-#> 4 -1.95  1.96       4 domain1 class_A  
-#> 5 -1.08  0.997      5 domain1 class_A  
-#> 6 -1.45  1.33       6 domain1 class_A
+#>   comp1  comp2 sample domain  condition
+#>   <dbl>  <dbl>  <int> <chr>   <fct>    
+#> 1 0.598 -0.746      1 domain1 class_A  
+#> 2 1.10  -1.36       2 domain1 class_A  
+#> 3 1.21  -1.48       3 domain1 class_A  
+#> 4 1.69  -2.10       4 domain1 class_A  
+#> 5 1.05  -1.30       5 domain1 class_A  
+#> 6 1.06  -1.30       6 domain1 class_A
 ```
 
 ### Visualising the Shared Embedding
 
 ``` r
+
  ggplot(scores, aes(x = comp1, y = comp2, colour = condition, shape = domain)) +
   geom_point(size = 2.2, alpha = 0.85) +
   labs(
@@ -152,6 +158,7 @@ Here we build a denser within-domain graph but down-weight the majority
 class via label balancing.
 
 ``` r
+
 ctrl <- gpca_align_control(
   knn = 10,
   knn_mode = "mutual",

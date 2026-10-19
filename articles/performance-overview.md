@@ -21,106 +21,106 @@ data size, structure, and supervision level.
 
 ### `gpca_align`
 
-| Aspect      | Details                                                                                                                           |
-|-------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(n³) eigendecomposition; Memory ~ O(n²) for full metric matrices                                                          |
-| Strengths   | Interpretable linear embeddings; handles within/between class graphs; supports semi-supervised labels                             |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(n³) eigendecomposition; Memory ~ O(n²) for full metric matrices |
+| Strengths | Interpretable linear embeddings; handles within/between class graphs; supports semi-supervised labels |
 | Limitations | Dense metric construction limits large `n`; requires meaningful similarity graph; less effective on strongly non-linear manifolds |
-| Tips        | Use `sample_frac` or stronger preprocessing when `n > 2000`; monitor PSD warnings for noisy similarity matrices                   |
+| Tips | Use `sample_frac` or stronger preprocessing when `n > 2000`; monitor PSD warnings for noisy similarity matrices |
 
 ### `grasp` / `grasp_multiset`
 
-| Aspect      | Details                                                                                                                      |
-|-------------|------------------------------------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(n³) for spectral decomposition + assignment; Memory ~ O(n²)                                                         |
-| Strengths   | Functional map formulation captures structural cues in graphs; multi-set version aligns \>2 domains                          |
-| Limitations | Sensitive to descriptor quality; alternating optimisation may hit max iterations; factor-of-two slower than pairwise GRASP   |
-| Tips        | Reduce `q_descriptors` or `ncomp` for large graphs; monitor convergence warnings; consider warm starts or anchor constraints |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(n³) for spectral decomposition + assignment; Memory ~ O(n²) |
+| Strengths | Functional map formulation captures structural cues in graphs; multi-set version aligns \>2 domains |
+| Limitations | Sensitive to descriptor quality; alternating optimisation may hit max iterations; factor-of-two slower than pairwise GRASP |
+| Tips | Reduce `q_descriptors` or `ncomp` for large graphs; monitor convergence warnings; consider warm starts or anchor constraints |
 
 ### `cone_align` / `cone_align_multiple`
 
-| Aspect      | Details                                                                                                                          |
-|-------------|----------------------------------------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(n² × iterations); Memory ~ O(n²)                                                                                        |
-| Strengths   | Simple alternating scheme; robust to label imbalance via balancing options; multi-set variant aligns several graphs              |
-| Limitations | Convergence depends on initial embedding; exact permutation recovery not guaranteed under noise                                  |
-| Tips        | Increase `max_iter` only when necessary; inspect assignment accuracy rather than expecting perfect permutations in noisy regimes |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(n² × iterations); Memory ~ O(n²) |
+| Strengths | Simple alternating scheme; robust to label imbalance via balancing options; multi-set variant aligns several graphs |
+| Limitations | Convergence depends on initial embedding; exact permutation recovery not guaranteed under noise |
+| Tips | Increase `max_iter` only when necessary; inspect assignment accuracy rather than expecting perfect permutations in noisy regimes |
 
 ### `lowrank_align`
 
-| Aspect      | Details                                                                                                 |
-|-------------|---------------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(n × r²) where `r` is the target rank; Memory ~ O(n × r)                                        |
-| Strengths   | Scales to larger problems via low-rank approximation; flexible with missing data                        |
-| Limitations | Requires tuning rank parameter; loses fidelity on highly curved manifolds                               |
-| Tips        | Start with small ranks (e.g., 10–20) and increase gradually; combine with preprocessing to reduce noise |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(n × r²) where `r` is the target rank; Memory ~ O(n × r) |
+| Strengths | Scales to larger problems via low-rank approximation; flexible with missing data |
+| Limitations | Requires tuning rank parameter; loses fidelity on highly curved manifolds |
+| Tips | Start with small ranks (e.g., 10–20) and increase gradually; combine with preprocessing to reduce noise |
 
 ### `linear_sim_embed`
 
-| Aspect      | Details                                                                                         |
-|-------------|-------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(n³) for dense solvers or O(iter × n²) with iterative methods; Memory ~ O(n²)           |
-| Strengths   | Targets similarity preservation directly; deterministic convergence diagnostics                 |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(n³) for dense solvers or O(iter × n²) with iterative methods; Memory ~ O(n²) |
+| Strengths | Targets similarity preservation directly; deterministic convergence diagnostics |
 | Limitations | Requires a precomputed similarity/affinity matrix; numerical issues for ill-conditioned targets |
-| Tips        | Cap `maxit` and monitor convergence; check Frobenius error against target similarity            |
+| Tips | Cap `maxit` and monitor convergence; check Frobenius error against target similarity |
 
 ## Kernel & Manifold Methods
 
 ### `kema`
 
-| Aspect      | Details                                                                                                                     |
-|-------------|-----------------------------------------------------------------------------------------------------------------------------|
-| Complexity  | Full kernel: time ~ O(n³); memory ~ O(n²). REKEMA variant: time ~ O(r³) with `r` landmarks                                  |
-| Strengths   | Handles semi-supervised labels; supports regression/exact solvers; REKEMA provides scalable approximation                   |
+| Aspect | Details |
+|----|----|
+| Complexity | Full kernel: time ~ O(n³); memory ~ O(n²). REKEMA variant: time ~ O(r³) with `r` landmarks |
+| Strengths | Handles semi-supervised labels; supports regression/exact solvers; REKEMA provides scalable approximation |
 | Limitations | Kernel choice critical; regression solver may produce poor subspaces (auto retry to exact helps); storing kernels is costly |
-| Tips        | Use `sample_frac` for large datasets; inspect `regression_quality`; choose `sigma` via `choose_sigma` or domain knowledge   |
+| Tips | Use `sample_frac` for large datasets; inspect `regression_quality`; choose `sigma` via `choose_sigma` or domain knowledge |
 
 ### `generalized_procrustes`
 
-| Aspect      | Details                                                                                                                |
-|-------------|------------------------------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(iter × n² × L); Memory ~ O(n × L) when sparse                                                                 |
-| Strengths   | Designed for partial task observations; orthogonal transforms maintain interpretability; handles missing data patterns |
-| Limitations | Iterative optimisation; local minima when initialisation poor; assumes comparable feature spaces                       |
-| Tips        | Use SVD initialisation; monitor objective drop per iteration; adjust regularisers when tasks highly imbalanced         |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(iter × n² × L); Memory ~ O(n × L) when sparse |
+| Strengths | Designed for partial task observations; orthogonal transforms maintain interpretability; handles missing data patterns |
+| Limitations | Iterative optimisation; local minima when initialisation poor; assumes comparable feature spaces |
+| Tips | Use SVD initialisation; monitor objective drop per iteration; adjust regularisers when tasks highly imbalanced |
 
 ### `coupled_diagonalization`
 
-| Aspect      | Details                                                                                                 |
-|-------------|---------------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(n³ + iter × n² × k); Memory ~ O(n × k)                                                         |
-| Strengths   | Jointly analyses multiple modalities; preserves shared latent factors; supports partial correspondences |
-| Limitations | Requires well-conditioned covariance matrices; convergence sensitive to tolerance                       |
-| Tips        | Pre-whiten inputs; inspect gradient norms; cap `ncomp` to maintain stability                            |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(n³ + iter × n² × k); Memory ~ O(n × k) |
+| Strengths | Jointly analyses multiple modalities; preserves shared latent factors; supports partial correspondences |
+| Limitations | Requires well-conditioned covariance matrices; convergence sensitive to tolerance |
+| Tips | Pre-whiten inputs; inspect gradient norms; cap `ncomp` to maintain stability |
 
 ## Optimal Transport Methods
 
 ### `parrot`
 
-| Aspect      | Details                                                                                                |
-|-------------|--------------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(iter × n²); Memory ~ O(n²) for transport plan                                                 |
-| Strengths   | Combines optimal transport with position-aware features; handles anchors; C++ Sinkhorn for speed       |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(iter × n²); Memory ~ O(n²) for transport plan |
+| Strengths | Combines optimal transport with position-aware features; handles anchors; C++ Sinkhorn for speed |
 | Limitations | Entropy parameter (`tau`) affects convergence and marginals; proximal loop can be slow on large graphs |
-| Tips        | Verify row/col sums ~ `1/n`; adjust `tau` for sharper plans; use `use_cpp = TRUE` when available       |
+| Tips | Verify row/col sums ~ `1/n`; adjust `tau` for sharper plans; use `use_cpp = TRUE` when available |
 
 ### `gromov_wasserstein`
 
-| Aspect      | Details                                                                                                |
-|-------------|--------------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(iter × n²); Memory ~ O(n²)                                                                    |
-| Strengths   | Pure structural alignment without features; suitable for heterogeneous spaces                          |
-| Limitations | Sensitive to initial transport plan; entropic regularisation needed for stability                      |
-| Tips        | Monitor marginals; compare objective across iterations; use coarse-to-fine strategies for large graphs |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(iter × n²); Memory ~ O(n²) |
+| Strengths | Pure structural alignment without features; suitable for heterogeneous spaces |
+| Limitations | Sensitive to initial transport plan; entropic regularisation needed for stability |
+| Tips | Monitor marginals; compare objective across iterations; use coarse-to-fine strategies for large graphs |
 
 ### `fpgw` (Fused/Partial GW)
 
-| Aspect      | Details                                                                                                                                                                      |
-|-------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Complexity  | Time ~ O(iter × n²); Memory ~ O(n²)                                                                                                                                          |
-| Strengths   | Mixes feature and structure costs; supports partial transport (`rho`) and TV penalties (`lambda`)                                                                            |
-| Limitations | More hyperparameters (`omega1`, `lambda`, `rho`); TV penalty increases runtime                                                                                               |
-| Tips        | Validate marginals (row/col sums ≤ inputs); check transported mass decreases as `lambda` grows; ensure dependencies (`multidesign`, `multivarious`, `lpSolve`) are available |
+| Aspect | Details |
+|----|----|
+| Complexity | Time ~ O(iter × n²); Memory ~ O(n²) |
+| Strengths | Mixes feature and structure costs; supports exact-mass partial transport through `rho` |
+| Limitations | Dense quadratic costs; does not consume supplied graph edges; the former `lambda > 0` penalized route is withdrawn |
+| Tips | Validate marginals (row/col sums ≤ inputs) and exact transported mass; use `rho` for partial overlap; the compiled transport backend does not require `lpSolve` |
 
 ### `fpgw` vs `gromov_wasserstein`
 
@@ -133,28 +133,28 @@ data size, structure, and supervision level.
 
 ### `pseudolabel`
 
-| Aspect      | Details                                                                                                    |
-|-------------|------------------------------------------------------------------------------------------------------------|
-| Complexity  | Depends on underlying aligner (often GPCA/KEMA); extra cost for iterative pseudo-labelling                 |
-| Strengths   | Propagates labels across aligned domains; integrates uncertainty thresholds                                |
-| Limitations | Quality tied to base alignment; pseudo-label drift if thresholds too low                                   |
-| Tips        | Inspect label confidence distributions; tune acceptance thresholds; cross-validate against held-out labels |
+| Aspect | Details |
+|----|----|
+| Complexity | Depends on underlying aligner (often GPCA/KEMA); extra cost for iterative pseudo-labelling |
+| Strengths | Propagates labels across aligned domains; integrates uncertainty thresholds |
+| Limitations | Quality tied to base alignment; pseudo-label drift if thresholds too low |
+| Tips | Inspect label confidence distributions; tune acceptance thresholds; cross-validate against held-out labels |
 
 ## Runtime Benchmarks (Qualitative)
 
-| Method                        | Small (n \< 500) | Medium (500–5000)              | Large (\>5000)           |
-|-------------------------------|------------------|--------------------------------|--------------------------|
-| `gpca_align`                  | ✓                | ⚠ requires sparsity/approx     | ✗ memory-bound           |
-| `kema` (full)                 | ✓                | ⚠ (retry to exact may be slow) | ✗                        |
-| `kema` (REKEMA)               | ✓                | ✓                              | ⚠ (landmark count grows) |
-| `grasp_multiset`              | ✓                | ⚠ (max_iter)                   | ✗                        |
-| `cone_align_multiple`         | ✓                | ✓ (with smaller `max_iter`)    | ⚠                        |
-| `lowrank_align`               | ✓                | ✓                              | ⚠ (rank tuning)          |
-| `parrot` (Sinkhorn C++)       | ✓                | ✓                              | ⚠ (memory)               |
-| `gromov_wasserstein` / `fpgw` | ✓                | ✓                              | ⚠                        |
-| `coupled_diagonalization`     | ✓                | ⚠                              | ✗                        |
-| `linear_sim_embed`            | ✓                | ⚠                              | ✗                        |
-| `pseudolabel`                 | ✓                | ✓ (if base aligner scales)     | ⚠                        |
+| Method | Small (n \< 500) | Medium (500–5000) | Large (\>5000) |
+|----|----|----|----|
+| `gpca_align` | ✓ | ⚠ requires sparsity/approx | ✗ memory-bound |
+| `kema` (full) | ✓ | ⚠ (retry to exact may be slow) | ✗ |
+| `kema` (REKEMA) | ✓ | ✓ | ⚠ (landmark count grows) |
+| `grasp_multiset` | ✓ | ⚠ (max_iter) | ✗ |
+| `cone_align_multiple` | ✓ | ✓ (with smaller `max_iter`) | ⚠ |
+| `lowrank_align` | ✓ | ✓ | ⚠ (rank tuning) |
+| `parrot` (Sinkhorn C++) | ✓ | ✓ | ⚠ (memory) |
+| `gromov_wasserstein` / `fpgw` | ✓ | ✓ | ⚠ |
+| `coupled_diagonalization` | ✓ | ⚠ | ✗ |
+| `linear_sim_embed` | ✓ | ⚠ | ✗ |
+| `pseudolabel` | ✓ | ✓ (if base aligner scales) | ⚠ |
 
 Legend: ✓ feasible; ⚠ requires care (approximation or parameter tuning);
 ✗ generally unsuitable.
@@ -184,6 +184,7 @@ The repository includes opt-in benchmark tests
 these methods on synthetic data. Enable them with:
 
 ``` r
+
 options(manifoldalign.run_benchmarks = TRUE)
 devtools::test_active_file("tests/testthat/test-toy-manifold-benchmarks.R")
 ```

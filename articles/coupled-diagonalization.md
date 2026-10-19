@@ -10,6 +10,7 @@ unsupervised; class labels appear only in diagnostics below.
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(multivarious)
@@ -21,6 +22,7 @@ library(ggplot2)
 ## Loading the Benchmark Domains
 
 ``` r
+
 bench <- manifoldalign::alignment_benchmark
 multi_domains <- lapply(bench$domains, function(dom) {
   multidesign::multidesign(dom$x, dom$design)
@@ -35,6 +37,7 @@ hd_multi <- multidesign::hyperdesign(multi_domains)
 ## Running Coupled Diagonalization
 
 ``` r
+
 cd_fit <- coupled_diagonalization(
   hd_multi,
   ncomp = 5,
@@ -65,6 +68,7 @@ We inspect the Frobenius norm of each coupled basis and pairwise
 Hilbert-Schmidt similarities to gauge alignment strength.
 
 ``` r
+
 basis_norms <- purrr::imap_dfr(cd_fit$coupled_bases, function(Ai, name) {
   tibble(domain = name, frobenius_norm = sqrt(sum(Ai^2)))
 })
@@ -100,6 +104,7 @@ similarity_tbl
 ### Visualising Coupled Components
 
 ``` r
+
 score_tbl <- as_tibble(as.matrix(cd_fit$s), .name_repair = "minimal")
 colnames(score_tbl) <- paste0("comp", seq_len(ncol(score_tbl)))
 

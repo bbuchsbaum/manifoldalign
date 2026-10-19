@@ -1,6 +1,7 @@
-# Control settings for \`ssma_align()\`
+# Control settings for `ssma_align()`
 
-Control settings for \`ssma_align()\`
+Control settings for
+[`ssma_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/ssma_align.md)
 
 ## Usage
 
@@ -22,7 +23,9 @@ ssma_align_control(
   operator_power_iter = 25L,
   seed = 1L,
   verbose = FALSE,
-  serial_control = ssma_serial_control()
+  serial_control = ssma_serial_control(),
+  compression = c("svd", "none"),
+  auto_correspondences = TRUE
 )
 ```
 
@@ -35,8 +38,9 @@ ssma_align_control(
 - sigma:
 
   Optional positive heat-kernel bandwidth for within-domain graph
-  weights. If \`NULL\`, per-domain auto-tuning via \[choose_sigma()\] is
-  used.
+  weights. If `NULL`, per-domain auto-tuning via
+  [`choose_sigma()`](https://bbuchsbaum.github.io/manifoldalign/reference/choose_sigma.md)
+  is used.
 
 - corr_edge_weight:
 
@@ -69,12 +73,12 @@ ssma_align_control(
 
 - regularization:
 
-  Positive ridge regularizer added to reduced \`B\` matrix before
+  Positive ridge regularizer added to reduced `B` matrix before
   whitening.
 
 - solver:
 
-  One of \`"auto"\`, \`"reduced"\`, or \`"operator"\`.
+  One of `"auto"`, `"reduced"`, or `"operator"`.
 
 - operator_tol:
 
@@ -98,8 +102,21 @@ ssma_align_control(
 
 - serial_control:
 
-  Serial-correlation handling settings from \[ssma_serial_control()\].
+  Serial-correlation handling settings from
+  [`ssma_serial_control()`](https://bbuchsbaum.github.io/manifoldalign/reference/ssma_serial_control.md).
+
+- compression:
+
+  `"svd"` (default) uses degree-weighted rank reduction; `"none"`
+  preserves all input features, for example externally reduced data. In
+  the latter mode rank_per_domain and svd_tol are inactive.
+
+- auto_correspondences:
+
+  Whether to discover label/MNN links when no positive explicit sample
+  links remain. Set FALSE for feature-constraint-only alignment or an
+  explicitly unlinked sample graph.
 
 ## Value
 
-A list of class \`ssma_align_control\`.
+A list of class `ssma_align_control`.

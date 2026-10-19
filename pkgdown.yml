@@ -1,7 +1,8 @@
-pandoc: 3.1.11
-pkgdown: 2.2.0
+pandoc: 3.8.3
+pkgdown: 2.2.1
 pkgdown_sha: ~
 articles:
+  benchmark-guidance: benchmark-guidance.html
   cone-align-multiple: cone-align-multiple.html
   cone-align: cone-align.html
   coupled-diagonalization: coupled-diagonalization.html
@@ -11,11 +12,13 @@ articles:
   grasp-align: grasp-align.html
   kema-overview: kema-overview.html
   lowrank-align: lowrank-align.html
+  method-selection-guide: method-selection-guide.html
   mma-align: mma-align.html
   parrot-align: parrot-align.html
   performance-overview: performance-overview.html
   quickstart-hyperdesign: quickstart-hyperdesign.html
-last_built: 2026-04-04T19:28Z
+  ssma-linear-constraints: ssma-linear-constraints.html
+last_built: 2026-10-19T14:32Z
 urls:
   reference: https://bbuchsbaum.github.io/manifoldalign/reference
   article: https://bbuchsbaum.github.io/manifoldalign/articles

@@ -7,13 +7,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Manifold Alignment for Multi-Domain Data • manifoldalign</title>
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><link href="extra.css" rel="stylesheet">
-<script src="extra.js"></script><meta property="og:title" content="Manifold Alignment for Multi-Domain Data">
+<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><script src="extra.js"></script><meta property="og:title" content="Manifold Alignment for Multi-Domain Data">
 <meta name="description" content="Provides tools for manifold alignment and domain adaptation across multiple data domains. Implements Kernel Manifold Alignment (KEMA) and related algorithms for aligning data manifolds while preserving local structure and class relationships. Features include semi-supervised learning support, efficient sparse matrix operations, and pseudolabeling for unsupervised domain adaptation. The package enables alignment of heterogeneous data types through kernel-based methods while maintaining computational efficiency for large-scale datasets.">
 <meta property="og:description" content="Provides tools for manifold alignment and domain adaptation across multiple data domains. Implements Kernel Manifold Alignment (KEMA) and related algorithms for aligning data manifolds while preserving local structure and class relationships. Features include semi-supervised learning support, efficient sparse matrix operations, and pseudolabeling for unsupervised domain adaptation. The package enables alignment of heterogeneous data types through kernel-based methods while maintaining computational efficiency for large-scale datasets.">
+<link href="albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -36,7 +37,8 @@
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="articles/cone-align-multiple.html">Multi-Domain Graph Alignment with cone_align_multiple</a></li>
+<li><a class="dropdown-item" href="articles/benchmark-guidance.html">Benchmark Guidance by Problem Regime</a></li>
+    <li><a class="dropdown-item" href="articles/cone-align-multiple.html">Multi-Domain Graph Alignment with cone_align_multiple</a></li>
     <li><a class="dropdown-item" href="articles/cone-align.html">Pairwise Graph Alignment with cone_align</a></li>
     <li><a class="dropdown-item" href="articles/coupled-diagonalization.html">Coupled Diagonalization across Modalities</a></li>
     <li><a class="dropdown-item" href="articles/features-and-predictive-performance.html">Features, Correspondences, and Predictive Performance</a></li>
@@ -45,10 +47,12 @@
     <li><a class="dropdown-item" href="articles/grasp-align.html">Spectral Graph Alignment with grasp</a></li>
     <li><a class="dropdown-item" href="articles/kema-overview.html">Kernel Manifold Alignment with kema</a></li>
     <li><a class="dropdown-item" href="articles/lowrank-align.html">Low-Rank Alignment with lowrank_align</a></li>
+    <li><a class="dropdown-item" href="articles/method-selection-guide.html">Method Selection Guide</a></li>
     <li><a class="dropdown-item" href="articles/mma-align.html">Multiset Manifold Alignment with mma_align_multiple</a></li>
     <li><a class="dropdown-item" href="articles/parrot-align.html">Position-Aware OT Alignment with parrot</a></li>
     <li><a class="dropdown-item" href="articles/performance-overview.html">Alignment Method Performance Overview</a></li>
     <li><a class="dropdown-item" href="articles/quickstart-hyperdesign.html">Quickstart: Building a hyperdesign and running alignments</a></li>
+    <li><a class="dropdown-item" href="articles/ssma-linear-constraints.html">SSMA with linear correspondence constraints</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
@@ -72,96 +76,156 @@
 
 <p><strong>manifoldalign</strong> is an R package for aligning data from multiple domains into a shared latent space. It implements a broad family of manifold alignment and domain adaptation methods — from kernel-based and spectral approaches to optimal transport — preserving local manifold structure while matching samples across domains.</p>
 <div class="section level2">
-<h2 id="alignment-methods">Alignment Methods<a class="anchor" aria-label="anchor" href="#alignment-methods"></a>
+<h2 id="alignment-methods">Alignment methods<a class="anchor" aria-label="anchor" href="#alignment-methods"></a>
 </h2>
+<p>No method is currently classified as stable or recommended. The table below states the input model instead of treating every method as an observed-graph aligner. See the <a href="https://bbuchsbaum.github.io/manifoldalign/METHOD_COMPARISON_TABLE.html">complete capability inventory</a> and <a href="https://github.com/bbuchsbaum/manifoldalign/blob/main/docs/ALIGNMENT_METHOD_SUNSET_REVIEW.md" class="external-link">lifecycle decision record</a>.</p>
 <table class="table">
 <colgroup>
 <col width="25%">
-<col width="32%">
-<col width="41%">
+<col width="25%">
+<col width="25%">
+<col width="25%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Method</th>
 <th>Function</th>
-<th>Description</th>
+<th>Input contract</th>
+<th>Lifecycle</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
+<td><strong>RAPID-MA</strong></td>
+<td>
+<code><a href="reference/rapid_ma.html">rapid_ma()</a></code>, <code><a href="reference/rapid_ma_feature_scores.html">rapid_ma_feature_scores()</a></code>
+</td>
+<td>Supplied sparse weighted relations, positions, and mixed attributes</td>
+<td>Experimental</td>
+</tr>
+<tr>
 <td><strong>KEMA</strong></td>
 <td><code><a href="reference/kema.html">kema()</a></code></td>
-<td>Kernel Manifold Alignment with exact and regression-based solvers</td>
+<td>Supervised feature-derived kernel manifolds</td>
+<td>Experimental</td>
 </tr>
-<tr class="even">
+<tr>
 <td><strong>GPCA</strong></td>
 <td><code><a href="reference/gpca_align.html">gpca_align()</a></code></td>
-<td>Generalized PCA alignment via shared subspace estimation</td>
+<td>Supervised feature manifolds</td>
+<td>Experimental</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><strong>GPA</strong></td>
 <td><code><a href="reference/generalized_procrustes.html">generalized_procrustes()</a></code></td>
-<td>Generalized Procrustes Analysis for partial observations</td>
+<td>Orthogonal feature-task alignment with partial observations</td>
+<td>Experimental</td>
 </tr>
-<tr class="even">
+<tr>
 <td><strong>CONE</strong></td>
 <td>
 <code><a href="reference/cone_align.html">cone_align()</a></code>, <code><a href="reference/cone_align_multiple.html">cone_align_multiple()</a></code>
 </td>
-<td>Spectral graph alignment with anchor-based matching</td>
+<td>Spectral graphs derived from features</td>
+<td>Legacy/reference</td>
 </tr>
-<tr class="odd">
+<tr>
+<td><strong>GlobalGeo</strong></td>
+<td><code><a href="reference/global_geo_align.html">global_geo_align()</a></code></td>
+<td>Correspondence-linked geometry derived from features</td>
+<td>Legacy/reference</td>
+</tr>
+<tr>
 <td><strong>GRASP</strong></td>
 <td>
 <code><a href="reference/grasp.html">grasp()</a></code>, <code><a href="reference/grasp_multiset.html">grasp_multiset()</a></code>
 </td>
-<td>Graph Spectral alignment using structural descriptors</td>
+<td>Functional maps on feature-derived graphs</td>
+<td>Experimental</td>
 </tr>
-<tr class="even">
+<tr>
 <td><strong>PARROT</strong></td>
 <td><code><a href="reference/parrot.html">parrot()</a></code></td>
-<td>Position-Aware Regularized OT alignment</td>
+<td>Anchor-guided dense OT on feature-derived networks</td>
+<td>Experimental</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><strong>FPGW</strong></td>
 <td><code><a href="reference/fpgw.html">fpgw()</a></code></td>
-<td>Fused Partial Gromov-Wasserstein transport</td>
+<td>Partial metric-measure OT</td>
+<td>Experimental</td>
 </tr>
-<tr class="even">
+<tr>
 <td><strong>Gromov-Wasserstein</strong></td>
 <td><code><a href="reference/gromov_wasserstein.html">gromov_wasserstein()</a></code></td>
-<td>Structure-preserving optimal transport</td>
+<td>Balanced metric-measure OT</td>
+<td>Experimental</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><strong>Low-Rank</strong></td>
 <td><code><a href="reference/lowrank_align.html">lowrank_align()</a></code></td>
-<td>Memory-efficient alignment via low-rank factorization</td>
+<td>Supervised low-rank feature manifolds</td>
+<td>Experimental</td>
 </tr>
-<tr class="even">
+<tr>
 <td><strong>MMA</strong></td>
 <td><code><a href="reference/mma_align_multiple.html">mma_align_multiple()</a></code></td>
-<td>Multiset Manifold Alignment for &gt;2 domains</td>
+<td>Multiset feature-derived manifolds</td>
+<td>Experimental</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><strong>Coupled Diag.</strong></td>
 <td><code><a href="reference/coupled_diagonalization.html">coupled_diagonalization()</a></code></td>
-<td>Joint diagonalization across modalities</td>
+<td>Joint feature-derived spectral bases</td>
+<td>Experimental</td>
 </tr>
-<tr class="even">
+<tr>
 <td><strong>Spectral MNN</strong></td>
 <td><code><a href="reference/spectral_mnn_align.html">spectral_mnn_align()</a></code></td>
-<td>Mutual nearest neighbor spectral alignment</td>
+<td>Feature-derived spectral graphs</td>
+<td>Experimental</td>
 </tr>
-<tr class="odd">
+<tr>
 <td><strong>Token-OT Graph</strong></td>
 <td><code><a href="reference/token_ot_graph_align.html">token_ot_graph_align()</a></code></td>
-<td>Token-level OT with graph structure</td>
+<td>Sparse OT on feature-derived graphs</td>
+<td>Experimental</td>
 </tr>
-<tr class="even">
+<tr>
 <td><strong>SSMA</strong></td>
 <td><code><a href="reference/ssma_align.html">ssma_align()</a></code></td>
-<td>Semi-Supervised Manifold Alignment</td>
+<td>Feature-derived manifolds with sample and linear feature-summary constraints</td>
+<td>Experimental</td>
+</tr>
+<tr>
+<td><strong>Multiset UOT</strong></td>
+<td><code><a href="reference/multiset_uot_align.html">multiset_uot_align()</a></code></td>
+<td>Unbalanced metric-measure/template OT</td>
+<td>Experimental</td>
+</tr>
+<tr>
+<td><strong>LSE</strong></td>
+<td><code><a href="reference/linear_sim_embed.html">linear_sim_embed()</a></code></td>
+<td>Single-domain target-similarity embedding</td>
+<td>Experimental utility</td>
+</tr>
+<tr>
+<td><strong>Multiscale</strong></td>
+<td><code><a href="reference/multiscale_manifold_align.html">multiscale_manifold_align()</a></code></td>
+<td>Incoherent experimental hierarchy retained for reproduction</td>
+<td>Deprecated; removal 1.0.0</td>
 </tr>
 </tbody>
 </table>
+</div>
+<div class="section level2">
+<h2 id="linear-constraints-in-ssma">Linear constraints in SSMA<a class="anchor" aria-label="anchor" href="#linear-constraints-in-ssma"></a>
+</h2>
+<p><code>ssma_align(..., constraints = list(...))</code> accepts <code><a href="reference/linear_correspondence.html">linear_correspondence()</a></code> objects for weighted agreement between linear feature summaries and <code><a href="reference/linear_penalty.html">linear_penalty()</a></code> objects for within-domain regularization. These add quadratic penalties without inserting synthetic observations or changing sample-graph normalization. Unequal feature counts, sparse maps, and external PCA composition are supported. Maps refer to processed feature coefficients; rank-truncation loss and fitted residuals are reported per constraint. See the <a href="vignettes/ssma-linear-constraints.Rmd">worked vignette</a> for coordinate, scaling, and validation contracts. SSMA remains experimental.</p>
+</div>
+<div class="section level2">
+<h2 id="current-evidence">Current evidence<a class="anchor" aria-label="anchor" href="#current-evidence"></a>
+</h2>
+<p>The frozen alignment tournament contains 588 typed rows: 42 attributed-graph cases by 14 methods, with zero missing result rows and zero validation problems. It records failures, unsupported tasks, runtime, peak RSS, controls, paired effects, and checksums for every published receipt file. Resumable binary checkpoints and the debug log remain local operational state. Read the <a href="https://github.com/bbuchsbaum/manifoldalign/blob/main/docs/evidence/alignment-tournament-v2/INTERPRETATION.md" class="external-link">checked interpretation</a> or inspect the <a href="https://github.com/bbuchsbaum/manifoldalign/blob/main/docs/evidence/alignment-tournament-v2/raw_results.csv" class="external-link">raw results</a>.</p>
+<p>RAPID-MA completed 42/42 and is the only tournament method that consumed the supplied weighted relations together with positions and mixed attributes. It is not a universal accuracy winner: a position-only control beat its node matching in every non-oracle regime. Its frozen downstream classification probe did beat source-only transfer in every non-oracle regime. The current full-scoring scale receipt reaches 22,600 total nodes; an older runner reached 220,000, while the one-million-node and blocked-inductive promotion gates failed. Those limitations are part of the public evidence contract.</p>
 </div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
@@ -190,25 +254,38 @@
 <span>  labels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">labels1</span>, <span class="va">labels2</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Align with KEMA</span></span>
-<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/kema.html">kema</a></span><span class="op">(</span><span class="va">hd</span>, ncomp <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="co"># Align with KEMA (an experimental supervised feature-manifold method)</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/kema.html">kema</a></span><span class="op">(</span><span class="va">hd</span>, y <span class="op">=</span> <span class="va">label</span>, ncomp <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Or align with Generalized Procrustes</span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/generalized_procrustes.html">generalized_procrustes</a></span><span class="op">(</span><span class="va">hd</span>, ncomp <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="unified-aligner-interface">Unified Aligner Interface<a class="anchor" aria-label="anchor" href="#unified-aligner-interface"></a>
+<h2 id="dual-feature-side-coordinates">Dual (feature-side) coordinates<a class="anchor" aria-label="anchor" href="#dual-feature-side-coordinates"></a>
 </h2>
-<p>All pairwise alignment methods share a consistent adapter interface:</p>
+<p>Embedding methods place samples in the shared latent space. For RAPID-MA, which is not a linear projector and therefore has no loadings, <code><a href="reference/rapid_ma_feature_scores.html">rapid_ma_feature_scores()</a></code> places each feature column (for example an activation map over voxels) at the weighted barycentre of the samples it loads on, so features from different domains can be compared in the same space:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fit</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/rapid_ma.html">rapid_ma</a></span><span class="op">(</span><span class="va">X</span>, relations <span class="op">=</span> <span class="va">relations</span>, ncomp <span class="op">=</span> <span class="fl">16</span><span class="op">)</span></span>
+<span><span class="va">dual</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rapid_ma_feature_scores.html">rapid_ma_feature_scores</a></span><span class="op">(</span><span class="va">fit</span>, <span class="va">X</span><span class="op">)</span></span>
+<span><span class="va">dual</span><span class="op">$</span><span class="va">scores</span><span class="op">$</span><span class="va">domain1</span>   <span class="co"># feature x component coordinates for one domain</span></span>
+<span><span class="va">dual</span><span class="op">$</span><span class="va">pooled</span>           <span class="co"># equal-weight mean across domains</span></span>
+<span><span class="va">dual</span><span class="op">$</span><span class="va">dispersion</span>       <span class="co"># how consistently each feature is placed across domains</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="unified-aligner-interface">Unified aligner interface<a class="anchor" aria-label="anchor" href="#unified-aligner-interface"></a>
+</h2>
+<p>Adapter-backed methods share a consistent interface:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create an aligner</span></span>
-<span><span class="va">aligner</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/parrot_aligner.html">parrot_aligner</a></span><span class="op">(</span>ncomp <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="va">aligner</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grasp_aligner.html">grasp_aligner</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Fit a pair of domains</span></span>
-<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_pair.html">fit_pair</a></span><span class="op">(</span><span class="va">aligner</span>, <span class="va">X1</span>, <span class="va">X2</span>, <span class="va">labels1</span>, <span class="va">labels2</span><span class="op">)</span></span>
+<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_pair.html">fit_pair</a></span><span class="op">(</span><span class="va">aligner</span>, <span class="va">X1</span>, <span class="va">X2</span>, ncomp <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Align many domains at once</span></span>
-<span><span class="fu"><a href="reference/fit_many.html">fit_many</a></span><span class="op">(</span><span class="va">aligner</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">X1</span>, <span class="va">X2</span>, <span class="va">X3</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">l1</span>, <span class="va">l2</span>, <span class="va">l3</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co"># Use a native multi-domain adapter when aligning more than two domains</span></span>
+<span><span class="va">X3</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">90</span> <span class="op">*</span> <span class="fl">10</span><span class="op">)</span>, <span class="fl">90</span>, <span class="fl">10</span><span class="op">)</span></span>
+<span><span class="va">multi_aligner</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/spectral_mnn_aligner.html">spectral_mnn_aligner</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/fit_many.html">fit_many</a></span><span class="op">(</span><span class="va">multi_aligner</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">X1</span>, <span class="va">X2</span>, <span class="va">X3</span><span class="op">)</span>, ncomp <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="articles">Articles<a class="anchor" aria-label="anchor" href="#articles"></a>
@@ -297,7 +374,7 @@
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

@@ -23,6 +23,7 @@ data.
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(multivarious)
@@ -39,6 +40,7 @@ domain to `multidesign` objects, and deliberately mask a subset of
 labels to illustrate the semi-supervised behaviour.
 
 ``` r
+
 alignment_benchmark <- manifoldalign::alignment_benchmark
 
 # Convert each domain to a multidesign object
@@ -83,6 +85,7 @@ which dovetails with the Laplacian masking performed inside
 [`lowrank_align()`](https://bbuchsbaum.github.io/manifoldalign/reference/lowrank_align.md).
 
 ``` r
+
 label_similarity <- function(labels) {
   labs <- as.character(labels)
   valid_levels <- unique(labs[!is.na(labs)])
@@ -119,6 +122,7 @@ operator-based solver keeps the computation sparse without forming dense
 matrices.
 
 ``` r
+
 lowrank_fit <- lowrank_align(
   semi_hd,
   y = condition,
@@ -142,7 +146,7 @@ str(lowrank_fit, max.level = 1)
 #>   ..- attr(*, "names")= chr [1:240] "domain11" "domain12" "domain13" "domain14" ...
 #>  $ mu           : num 0.35
 #>  - attr(*, "class")= chr [1:5] "lowrank_align" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...
-#>  - attr(*, ".cache")=<environment: 0x5565d4ceb810>
+#>  - attr(*, ".cache")=<environment: 0x558ae43a3890>
 lowrank_fit$sdev
 #> [1] 0.06468462 0.06468462 0.06468462
 ```
@@ -154,6 +158,7 @@ aligned scores and SQL-like metadata just like other `multivarious`
 models.
 
 ``` r
+
 scores_tbl <- as_tibble(as.matrix(lowrank_fit$s), .name_repair = "minimal")
 colnames(scores_tbl) <- paste0("comp", seq_len(ncol(scores_tbl)))
 
@@ -183,6 +188,7 @@ head(scores)
 ```
 
 ``` r
+
  ggplot(scores, aes(x = comp1, y = comp2, colour = condition, shape = domain)) +
   geom_point(aes(alpha = alpha), size = 2.1) +
   scale_alpha_identity() +
@@ -203,6 +209,7 @@ tightly the domains co-register in the shared space. Values near zero
 indicate strong agreement between domain pairs.
 
 ``` r
+
 rms_alignment(as.matrix(lowrank_fit$s), domain_sizes, domain_names)
 #> # A tibble: 3 × 3
 #>   domain_i domain_j   rms

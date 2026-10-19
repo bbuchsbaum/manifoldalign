@@ -1,7 +1,8 @@
-# Generate Synthetic Two-Domain Spiral Data
+# Generate a Synthetic Two-Domain Spiral Fixture
 
-Creates the synthetic spiral dataset used in KEMA paper Figure 2 for
-numerical validation.
+Creates a deterministic two-domain spiral fixture inspired by the
+qualitative examples used in manifold-alignment papers. It is not a
+digitized or exact reproduction of a published KEMA benchmark.
 
 ## Usage
 
@@ -17,19 +18,19 @@ generate_spiral_validation_data(
 
 - n_per_domain:
 
-  Number of samples per domain
+  Number of samples per domain.
 
 - noise_level:
 
-  Gaussian noise standard deviation
+  Gaussian noise standard deviation.
 
 - seed:
 
-  Random seed for reproducibility
+  Random seed for reproducibility.
 
 ## Value
 
-List with domain data and labels
+A list with domain data, labels, and combined strata.
 
 ## Examples
 

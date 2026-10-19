@@ -29,9 +29,5 @@ and final gradient.
 
 ## Details
 
-For TV penalty (lambda \> 0), the objective includes the smooth
-quadratic term: lambda \* (\|mu\|^2 + \|nu\|^2 - 2\|gamma\|^2) where
-\|gamma\| = sum(gamma) is the total transported mass. This is NOT an L1
-penalty but a smooth penalty that encourages partial transport. The
-Frank-Wolfe oracle remains standard OT, with the penalty handled in step
-size.
+`lambda` is retained in this internal signature for compatibility and
+must be zero. Supply `rho` for the fixed-mass partial feasible set.

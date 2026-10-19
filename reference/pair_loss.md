@@ -14,6 +14,9 @@ pair_loss(fit, X_i = NULL, X_j = NULL, ...)
 # S3 method for class 'parrot_pair_fit'
 pair_loss(fit, X_i = NULL, X_j = NULL, ...)
 
+# S3 method for class 'rapid_ma_pair_fit'
+pair_loss(fit, X_i = NULL, X_j = NULL, ...)
+
 # S3 method for class 'token_ot_graph_pair_fit'
 pair_loss(fit, X_i = NULL, X_j = NULL, ...)
 
@@ -52,7 +55,6 @@ X1 <- matrix(rnorm(50), 25, 2)
 X2 <- matrix(rnorm(50), 25, 2)
 algo <- grasp_aligner()
 fit <- fit_pair(algo, X1, X2)
-#> Error in h(simpleError(msg, call)): error in evaluating the argument 'x' in selecting a method for function 'colSums': non-conformable matrix dimensions in .Arith.Csparse(e1, e2, .Generic, class. = "dgCMatrix")
 loss <- pair_loss(fit)
 # }
 ```

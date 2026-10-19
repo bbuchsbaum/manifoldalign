@@ -223,6 +223,15 @@ Key parameters:
 
 - `knn`: Number of nearest neighbors for graph construction
 
+## Lifecycle
+
+CONE-Align and its multiple-domain wrapper are retained as
+legacy/reference methods. Pairwise CONE completed 10 of 12 intended
+frozen tournament cases; two equal-size closed-world cases stopped
+because domain embeddings exposed different latent dimensions to the
+Procrustes step. Restore experimental status only after dimension
+reconciliation passes all frozen cases.
+
 ## References
 
 Heimann, M., Shen, H., Safavi, T., & Koutra, D. (2018). REGAL:
@@ -316,7 +325,7 @@ X2 <- matrix(rnorm(100), 50, 2)  # 50 nodes, 2 features
 
 # Run CONE-Align directly on matrices
 result <- cone_align(list(X1, X2), ncomp = 5)
-#> Converged after 4 iterations.
+#> Converged after 7 iterations.
 
 # Access results
 assignments <- result$assignment

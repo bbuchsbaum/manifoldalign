@@ -1,7 +1,9 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/404.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/AGENTS.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/CLAUDE.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/LICENSE-text.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/benchmark-guidance.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/cone-align-multiple.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/cone-align.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/coupled-diagonalization.html</loc></url>
@@ -12,10 +14,12 @@
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/index.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/kema-overview.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/lowrank-align.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/method-selection-guide.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/mma-align.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/parrot-align.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/performance-overview.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/quickstart-hyperdesign.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/articles/ssma-linear-constraints.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/authors.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/index.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/news/index.html</loc></url>
@@ -27,6 +31,8 @@
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/align_many.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/aligner_capabilities.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/alignment_benchmark.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/alignment_lifecycle_policy.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/alignment_method_registry.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/alignment_quality.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/apply_transform.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/as.data.frame.pseudolabels.html</loc></url>
@@ -35,6 +41,7 @@
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/assign_pseudolabels.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/benchmark_graph_alignment_methods.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/benchmark_parrot_scalability.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/benchmark_rapid_ma.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/benchmark_token_ot_graph_align_scalability.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/block_indices.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/build_anchor.html</loc></url>
@@ -98,7 +105,6 @@
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/dot-select_diverse_subset_advanced.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/evaluate_parrot_accuracy.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/evaluate_pseudolabeling.html</loc></url>
-<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/extract_kema_eigenvalues.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/extract_parrot_networks.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/extract_transport_plan.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/feature_block_indices.html</loc></url>
@@ -108,6 +114,7 @@
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.ot_procrustes_aligner.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.parrot_aligner.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.rapid_ma_aligner.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/fit_pair.token_ot_graph_aligner.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/fitted.fpgw.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/fpgw-methods.html</loc></url>
@@ -149,6 +156,8 @@
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/kema_orig.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/label_factors.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/latent_dim.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/linear_correspondence.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/linear_penalty.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/linear_sim_embed.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/lowrank_align.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/make_Zop_from_Ks.html</loc></url>
@@ -164,6 +173,7 @@
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/new_alignment_result.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/normalize_plan_rows.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/oos_predict.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/oos_predict.rapid_ma.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/ot_procrustes_aligner.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/pair_loss.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/parrot-benchmark.html</loc></url>
@@ -182,10 +192,20 @@
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/prepare_ot_data.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/print.fpgw.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/print.pseudolabels.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/print.rapid_ma.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/print.rapid_ma_feature_scores.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/print.simembed.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/profile_parrot_memory.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/project_onto_simplex_doubly_stochastic.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/pseudolabeling.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/rapid_ma.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/rapid_ma_aligner.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/rapid_ma_benchmark_fixture.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/rapid_ma_control.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/rapid_ma_feature_scores.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/rapid_ma_match.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/rapid_ma_semisup.html</loc></url>
+<url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/rapid_ma_semisup_control.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/relative_transform.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/residuals.fpgw.html</loc></url>
 <url><loc>https://bbuchsbaum.github.io/manifoldalign/reference/resolve_cone_anchor_map.html</loc></url>

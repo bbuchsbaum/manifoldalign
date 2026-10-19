@@ -1,6 +1,9 @@
-# Comprehensive KEMA Numerical Validation
+# Run Enforced KEMA Numerical Validation
 
-Runs all numerical validation tests for KEMA implementation.
+Fits deterministic KEMA fixtures and records the same numerical
+contracts required of every returned fit: generalized-eigen backward
+residual, B-orthogonality, numerical-zero exclusion, and agreement
+between matrix and operator backends up to subspace indeterminacy.
 
 ## Usage
 
@@ -12,19 +15,25 @@ run_kema_validation_suite(verbose = TRUE)
 
 - verbose:
 
-  Whether to print detailed results
+  Whether to print a concise report.
 
 ## Value
 
-List with all validation results
+A list containing \`fidelity_validation\`, \`backend_agreement\`,
+\`withdrawn_validations\`, and \`overall_success\`.
+
+## Details
+
+Withdrawn paper-eigenvalue, regression-solver, and fabricated
+reconstruction checks are reported for auditability but do not
+contribute to \`overall_success\`.
 
 ## Examples
 
 ``` r
 # \donttest{
 results <- run_kema_validation_suite(verbose = FALSE)
-#> Warning: Eigenvalue extraction failed: upper value must be greater than lower value
-print(results$overall_success)
-#> [1] FALSE
+results$overall_success
+#> [1] TRUE
 # }
 ```

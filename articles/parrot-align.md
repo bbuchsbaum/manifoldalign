@@ -14,6 +14,7 @@ adding a small set of anchors to guide the semi-supervised transport.
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(multivarious)
@@ -27,6 +28,7 @@ library(tidyr)
 ## Preparing Anchored Domains
 
 ``` r
+
 alignment_benchmark <- manifoldalign::alignment_benchmark
 pair_domains <- alignment_benchmark$domains[1:2]
 
@@ -54,6 +56,7 @@ hd_pair <- multidesign::hyperdesign(pair_multidesign)
 ## Running `parrot`
 
 ``` r
+
 parrot_fit <- parrot(
   hd_pair,
   anchors = anchor_id,
@@ -94,6 +97,7 @@ latent classes are preserved. Labels are used only for post-hoc
 diagnostics; the optimisation itself only sees the anchor IDs.
 
 ``` r
+
 transport <- parrot_fit$transport_plan
 assignment <- apply(transport, 1, which.max)
 
@@ -122,6 +126,7 @@ tibble(
 ### Visualising the Transport Plan
 
 ``` r
+
 transport_norm <- as.matrix(transport / max(transport))
 transport_df <- as_tibble(transport_norm, .name_repair = ~ paste0("V", seq_along(.))) %>%
   mutate(source = dplyr::row_number()) %>%
@@ -151,6 +156,7 @@ highlighting how PARROT warps the second network while preserving class
 structure.
 
 ``` r
+
 X1 <- pair_multidesign[[1]]$x
 X2 <- pair_multidesign[[2]]$x
 X2_bary <- transport %*% X2
@@ -192,6 +198,7 @@ consensus. Diagnostics such as edge and cycle residuals and entropy
 metrics are returned.
 
 ``` r
+
 # Example (not run): align 3 domains and inspect diagnostics
 # (eval=FALSE to keep vignette light)
 

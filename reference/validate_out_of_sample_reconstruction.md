@@ -1,7 +1,10 @@
-# Test Out-of-Sample Reconstruction Accuracy
+# Withdrawn KEMA Out-of-Sample Reconstruction Validator
 
-Validates KEMA's out-of-sample reconstruction capability against the L2
-error reported in the paper appendix.
+This compatibility shim is retained temporarily so existing callers
+receive an explicit failure instead of a fabricated validation score.
+The former implementation did not fit KEMA or evaluate held-out
+predictions; it returned \`expected_error\` plus random noise and has
+therefore been withdrawn.
 
 ## Usage
 
@@ -17,26 +20,36 @@ validate_out_of_sample_reconstruction(
 
 - expected_error:
 
-  Expected L2 reconstruction error (default: 0.14)
+  Deprecated and ignored.
 
 - tolerance:
 
-  Numerical tolerance for comparison
+  Deprecated and ignored.
 
 - test_fraction:
 
-  Fraction of data to use for testing
+  Deprecated and ignored.
 
 ## Value
 
-List with reconstruction validation results
+This function emits a deprecation warning and then errors.
+
+## Details
+
+No direct reconstruction replacement is currently available because
+KEMA's out-of-sample projection has not passed an independent
+reconstruction oracle. Use \[cv_alignment_rows()\] for leakage-safe
+held-out alignment scoring. Historical results from this function are
+invalid.
+
+## See also
+
+\[cv_alignment_rows()\]
 
 ## Examples
 
 ``` r
-# \donttest{
-result <- validate_out_of_sample_reconstruction()
-print(result$success)
-#> [1] TRUE
-# }
+if (FALSE) { # \dontrun{
+validate_out_of_sample_reconstruction()
+} # }
 ```

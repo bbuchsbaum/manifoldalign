@@ -2,8 +2,8 @@
 
 Computes the Fused-Partial Gromov-Wasserstein (FPGW) distance between
 domains in a hyperdesign object. This method extends Gromov-Wasserstein
-by combining feature and structural information, and supporting partial
-transport.
+by combining feature and structural information. Partial transport is
+supported through an explicit transported-mass budget, `rho`.
 
 ## Usage
 
@@ -40,17 +40,15 @@ fpgw(
     structural term weight omega2 = 1 - omega1 is computed automatically
     (default: 0.001)
 
-  - `lambda`: Non-negative total variation penalty for the penalized
-    FPGW variant. Set `lambda = 0` to disable and use `rho` instead
-    (default: 0). NOTE: The TV penalty is experimental and may not
-    produce expected sparsity-inducing behavior due to its quadratic
-    formulation
+  - `lambda`: Retained for API compatibility and required to be zero.
+    The former `lambda > 0` route is withdrawn because it used a
+    balanced transport oracle and therefore could not produce a partial
+    coupling. Use `rho` instead (default: 0).
 
   - `rho`: Mass budget in (0, min(\|μ\|,\|ν\|)\] for the
-    mass-constrained variant. If `rho` is supplied, the solver runs the
-    mass-constrained variant; otherwise it uses the penalized variant
-    (\\\lambda \> 0\\) or classical FGW when both \\\lambda = 0\\ and
-    `rho` is `NULL`
+    mass-constrained variant. If `rho` is supplied, the solver
+    transports exactly that mass; otherwise it uses classical balanced
+    FGW.
 
   - `epsilon`: Initial entropic regularization for warm-start (default:
     0.01). Set to 0 to disable warm-start
@@ -74,7 +72,8 @@ fpgw(
 
 - lambda:
 
-  Non-negative total variation penalty. Default: 0
+  Compatibility parameter that must be zero. Use `rho` for partial
+  transport. Default: 0
 
 - rho:
 
@@ -118,7 +117,7 @@ An fpgw object (inheriting from multiblock_biprojector) containing:
 
 - `omega1`: Feature weight used
 
-- `lambda`: TV penalty (if penalized variant)
+- `lambda`: Compatibility field; always zero for new fits
 
 - `rho`: Mass budget (if mass-constrained variant)
 
@@ -130,27 +129,31 @@ An fpgw object (inheriting from multiblock_biprojector) containing:
 
 ## Details
 
-The FPGW distance combines feature and structural information through:
-\$\$L(\gamma) = \omega_1 \langle C, \gamma \rangle + \omega_2
-\sum\_{i,j,i',j'} \|C\_{X,ii'} - C\_{Y,jj'}\|^2 \gamma\_{ij}
-\gamma\_{i'j'} + \lambda(\|\mu\|^2 + \|\nu\|^2 - 2\|\gamma\|^2)\$\$
+The verified fixed-mass FPGW objective combines feature and structural
+information through: \$\$L(\gamma) = \omega_1 \langle C, \gamma
+\rangle + \omega_2 \sum\_{i,j,i',j'} \|C\_{X,ii'} - C\_{Y,jj'}\|^2
+\gamma\_{ij} \gamma\_{i'j'}\$\$
 
 where C is the feature cost matrix and C_X, C_Y are within-domain
-distance matrices.
+distance matrices. With `rho`, the coupling has row and column marginals
+bounded by the input masses and satisfies \\\|\gamma\| = \rho\\. Without
+`rho`, the coupling has the full balanced marginals.
 
-The algorithm supports two variants:
+The implementation supports two verified modes:
 
-- Mass-constrained: Transports exactly rho mass between domains
+- Mass-constrained FPGW: transports exactly `rho` mass
 
-- Penalized: Uses TV regularization with parameter lambda
+- Classical FGW: transports the full balanced mass
 
-The Frank-Wolfe algorithm is used with closed-form step sizes for
-efficiency.
+The former penalized mode selected balanced Frank-Wolfe vertices, fixing
+the transported mass at one and making `lambda` ineffective as a partial
+transport control. It is rejected rather than silently returning a
+balanced result. The Frank-Wolfe algorithm uses closed-form step sizes.
 
 ## References
 
-Bai et al. (2025). Fused-Partial Gromov-Wasserstein for Heterogeneous
-Domain Adaptation. arXiv preprint.
+Bai et al. (2025). Fused Partial Gromov-Wasserstein for Structured
+Objects. arXiv:2502.09934.
 
 ## Examples
 
@@ -212,7 +215,7 @@ result_partial <- fpgw(hd_noisy, omega1 = 0.3, rho = 0.75)
 # Check transported mass
 P <- result_partial$transport_plans[[1]]
 cat("Transported mass:", sum(P), "\n")
-#> Transported mass: 0.5528314 
+#> Transported mass: 0.75 
 
 # Example 3: Multi-domain alignment
 X3 <- matrix(rnorm(n * 4), n, 4)

@@ -23,6 +23,5 @@ List with memory usage statistics
 ``` r
 # \donttest{
 mem_profile <- profile_parrot_memory(n_nodes = 50)
-#> Warning: pryr package not available for memory profiling
 # }
 ```

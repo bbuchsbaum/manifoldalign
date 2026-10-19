@@ -7,11 +7,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Fused-Partial Gromov-Wasserstein for Domain Alignment • manifoldalign</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
-<script src="../extra.js"></script><meta property="og:title" content="Fused-Partial Gromov-Wasserstein for Domain Alignment">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><script src="../extra.js"></script><meta property="og:title" content="Fused-Partial Gromov-Wasserstein for Domain Alignment">
+<link href="../albers.css" rel="stylesheet">
+<script>window.albersdownDefaults = window.albersdownDefaults || { family: "red", preset: "homage", style: "minimal" };</script><script src="../albers.js"></script>
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -34,7 +35,8 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/cone-align-multiple.html">Multi-Domain Graph Alignment with cone_align_multiple</a></li>
+<li><a class="dropdown-item" href="../articles/benchmark-guidance.html">Benchmark Guidance by Problem Regime</a></li>
+    <li><a class="dropdown-item" href="../articles/cone-align-multiple.html">Multi-Domain Graph Alignment with cone_align_multiple</a></li>
     <li><a class="dropdown-item" href="../articles/cone-align.html">Pairwise Graph Alignment with cone_align</a></li>
     <li><a class="dropdown-item" href="../articles/coupled-diagonalization.html">Coupled Diagonalization across Modalities</a></li>
     <li><a class="dropdown-item" href="../articles/features-and-predictive-performance.html">Features, Correspondences, and Predictive Performance</a></li>
@@ -43,10 +45,12 @@
     <li><a class="dropdown-item" href="../articles/grasp-align.html">Spectral Graph Alignment with grasp</a></li>
     <li><a class="dropdown-item" href="../articles/kema-overview.html">Kernel Manifold Alignment with kema</a></li>
     <li><a class="dropdown-item" href="../articles/lowrank-align.html">Low-Rank Alignment with lowrank_align</a></li>
+    <li><a class="dropdown-item" href="../articles/method-selection-guide.html">Method Selection Guide</a></li>
     <li><a class="dropdown-item" href="../articles/mma-align.html">Multiset Manifold Alignment with mma_align_multiple</a></li>
     <li><a class="dropdown-item" href="../articles/parrot-align.html">Position-Aware OT Alignment with parrot</a></li>
     <li><a class="dropdown-item" href="../articles/performance-overview.html">Alignment Method Performance Overview</a></li>
     <li><a class="dropdown-item" href="../articles/quickstart-hyperdesign.html">Quickstart: Building a hyperdesign and running alignments</a></li>
+    <li><a class="dropdown-item" href="../articles/ssma-linear-constraints.html">SSMA with linear correspondence constraints</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -210,20 +214,18 @@ fraction of the mass:</p>
 <span><span class="co"># Check transported mass</span></span>
 <span><span class="va">P_partial</span> <span class="op">&lt;-</span> <span class="va">result_partial</span><span class="op">$</span><span class="va">transport_plans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Total transported mass:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">P_partial</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Total transported mass: 0.2564186</span></span></code></pre></div>
+<span><span class="co">#&gt; Total transported mass: 0.79999</span></span></code></pre></div>
 </div>
 <div class="section level3">
-<h3 id="tv-penalized-fpgw">TV-Penalized FPGW<a class="anchor" aria-label="anchor" href="#tv-penalized-fpgw"></a>
+<h3 id="selecting-transported-mass">Selecting transported mass<a class="anchor" aria-label="anchor" href="#selecting-transported-mass"></a>
 </h3>
-<p>The total variation penalty provides a soft constraint on transported
-mass:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Use TV penalty instead of hard mass constraint</span></span>
-<span><span class="va">result_tv</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fpgw.html">fpgw</a></span><span class="op">(</span><span class="va">hd_noisy</span>, omega1 <span class="op">=</span> <span class="fl">0.5</span>, lambda <span class="op">=</span> <span class="fl">0.1</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">P_tv</span> <span class="op">&lt;-</span> <span class="va">result_tv</span><span class="op">$</span><span class="va">transport_plans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Total transported mass with TV penalty:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">P_tv</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Total transported mass with TV penalty: 0.2564186</span></span></code></pre></div>
+<p>The supported partial-transport solver fixes the transported mass
+through <code>rho</code>. Set it explicitly according to the expected
+shared support. The former TV-penalized mode
+(<code>lambda &gt; 0</code>) is withdrawn and raises an error; it is not
+an alternative way to fit the current solver. The preceding
+<code>rho = 0.8</code> example uses the supported fixed-mass
+objective.</p>
 </div>
 </div>
 <div class="section level2">
@@ -231,7 +233,7 @@ mass:</p>
 </h2>
 <p>The <code>omega1</code> parameter controls the balance between
 feature and structural alignment:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Pure structural alignment (small omega1)</span></span>
 <span><span class="va">result_struct</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fpgw.html">fpgw</a></span><span class="op">(</span><span class="va">hd</span>, omega1 <span class="op">=</span> <span class="fl">0.01</span><span class="op">)</span></span>
 <span></span>
@@ -253,7 +255,7 @@ feature and structural alignment:</p>
 <h2 id="multi-domain-alignment">Multi-Domain Alignment<a class="anchor" aria-label="anchor" href="#multi-domain-alignment"></a>
 </h2>
 <p>FPGW can align multiple domains simultaneously:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create three domains with varying dimensions</span></span>
 <span><span class="va">X3</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">25</span> <span class="op">*</span> <span class="fl">4</span><span class="op">)</span>, <span class="fl">25</span>, <span class="fl">4</span><span class="op">)</span></span>
 <span><span class="va">X3</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">12</span>, <span class="op">]</span> <span class="op">&lt;-</span> <span class="va">X3</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">12</span>, <span class="op">]</span> <span class="op">+</span> <span class="fl">2</span></span>
@@ -282,7 +284,7 @@ feature and structural alignment:</p>
 <h2 id="performance-considerations">Performance Considerations<a class="anchor" aria-label="anchor" href="#performance-considerations"></a>
 </h2>
 <p>The FPGW implementation uses optimized C++ code for performance:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Compare performance for different problem sizes</span></span>
 <span><span class="va">sizes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">20</span>, <span class="fl">50</span>, <span class="fl">100</span><span class="op">)</span></span>
 <span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">sizes</span><span class="op">)</span><span class="op">)</span></span>
@@ -316,7 +318,7 @@ feature and structural alignment:</p>
 </h3>
 <p>You can use different distance metrics for within-domain
 distances:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Use Manhattan distance instead of Euclidean</span></span>
 <span><span class="va">result_manhattan</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fpgw.html">fpgw</a></span><span class="op">(</span><span class="va">hd</span>, omega1 <span class="op">=</span> <span class="fl">0.5</span>, metric <span class="op">=</span> <span class="st">"manhattan"</span><span class="op">)</span></span></code></pre></div>
 </div>
@@ -342,7 +344,7 @@ Foundations and Trends in Machine Learning.</li>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

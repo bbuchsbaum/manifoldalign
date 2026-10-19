@@ -16,7 +16,10 @@ aligner_capabilities(algo)
 
 ## Value
 
-A list with elements group (character) and supports_multi (logical)
+A list with elements group (character) and supports_multi (logical). Use
+\[alignment_method_info()\] for the complete capability and lifecycle
+contract; registry meta-tests verify that these adapter fields agree
+with that record.
 
 ## Examples
 

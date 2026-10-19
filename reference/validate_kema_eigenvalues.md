@@ -1,7 +1,10 @@
-# Validate KEMA Eigenvalues Against Paper Specifications
+# Withdrawn KEMA Paper-Eigenvalue Validator
 
-Tests whether KEMA produces eigenvalues matching those reported in
-Figure 2 of Tuia & Camps-Valls (2016).
+This compatibility shim is retained so historical callers receive an
+explicit failure. The former routine did not reproduce a documented
+paper fixture and solved a different generalized problem whose
+right-hand side was only \`lambda \* I\`; its claimed comparison with
+paper eigenvalues was therefore not valid accuracy evidence.
 
 ## Usage
 
@@ -17,27 +20,28 @@ validate_kema_eigenvalues(
 
 - expected_eigenvals:
 
-  Expected eigenvalue ratios from paper (default: c(0.82, 0.41))
+  Deprecated and ignored.
 
 - tolerance:
 
-  Numerical tolerance for comparison
+  Deprecated and ignored.
 
 - n_per_domain:
 
-  Number of samples per domain for test
+  Deprecated and ignored.
 
 ## Value
 
-List with validation results
+This function emits a deprecation warning and then errors.
+
+## See also
+
+\[run_kema_validation_suite()\]
 
 ## Examples
 
 ``` r
-# \donttest{
-result <- validate_kema_eigenvalues()
-#> Warning: Eigenvalue extraction failed: upper value must be greater than lower value
-print(result$success)
-#> [1] FALSE
-# }
+if (FALSE) { # \dontrun{
+validate_kema_eigenvalues()
+} # }
 ```

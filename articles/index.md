@@ -2,6 +2,8 @@
 
 ### All vignettes
 
+- [Benchmark Guidance by Problem
+  Regime](https://bbuchsbaum.github.io/manifoldalign/articles/benchmark-guidance.md):
 - [Multi-Domain Graph Alignment with
   cone_align_multiple](https://bbuchsbaum.github.io/manifoldalign/articles/cone-align-multiple.md):
 - [Pairwise Graph Alignment with
@@ -20,6 +22,8 @@
   kema](https://bbuchsbaum.github.io/manifoldalign/articles/kema-overview.md):
 - [Low-Rank Alignment with
   lowrank_align](https://bbuchsbaum.github.io/manifoldalign/articles/lowrank-align.md):
+- [Method Selection
+  Guide](https://bbuchsbaum.github.io/manifoldalign/articles/method-selection-guide.md):
 - [Multiset Manifold Alignment with
   mma_align_multiple](https://bbuchsbaum.github.io/manifoldalign/articles/mma-align.md):
 - [Position-Aware OT Alignment with
@@ -28,3 +32,5 @@
   Overview](https://bbuchsbaum.github.io/manifoldalign/articles/performance-overview.md):
 - [Quickstart: Building a hyperdesign and running
   alignments](https://bbuchsbaum.github.io/manifoldalign/articles/quickstart-hyperdesign.md):
+- [SSMA with linear correspondence
+  constraints](https://bbuchsbaum.github.io/manifoldalign/articles/ssma-linear-constraints.md):

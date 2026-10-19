@@ -1,7 +1,7 @@
 # Semi-Supervised Manifold Alignment (SSMA)
 
 Baseline SSMA implementation based on Wang et al. feature-level manifold
-alignment (\`Z^T L Z f = Z^T D Z f\`) solved in a reduced-rank space.
+alignment (\`Z^T L Z f = λ Z^T D Z f\`) solved in a reduced-rank space.
 
 ## Usage
 
@@ -17,6 +17,7 @@ ssma_align(
   preproc = multivarious::center(),
   ncomp = 20L,
   control = ssma_align_control(),
+  constraints = NULL,
   ...
 )
 
@@ -29,6 +30,7 @@ ssma_align(
   preproc = multivarious::center(),
   ncomp = 20L,
   control = ssma_align_control(),
+  constraints = NULL,
   ...
 )
 
@@ -49,23 +51,26 @@ ssma_align(data, ...)
 - y:
 
   Optional unquoted label column used for label-based correspondences
-  when explicit \`correspondences\` are not provided.
+  when explicit `correspondences` are not provided.
 
 - correspondences:
 
   Optional data.frame with columns
-  \`domain_i,index_i,domain_j,index_j\[,weight\]\`.
+  `domain_i,index_i,domain_j,index_j[,weight]`.
 
 - serial_index:
 
   Optional serial/time index specification used for within-domain graph
-  decontamination. Can be: 1) \`NULL\`, 2) a single design-column name,
-  or 3) a list with one numeric index vector per domain.
+  decontamination. Can be:
+
+  1.  `NULL`, 2) a single design-column name, or 3) a list with one
+      numeric index vector per domain.
 
 - preproc:
 
   Optional preprocessing function/preprocessor applied per domain.
-  Default: \`multivarious::center()\`.
+  Default:
+  [`multivarious::center()`](https://bbuchsbaum.github.io/multivarious/reference/center.html).
 
 - ncomp:
 
@@ -73,4 +78,17 @@ ssma_align(data, ...)
 
 - control:
 
-  Control settings from \[ssma_align_control()\].
+  Control settings from
+  [`ssma_align_control()`](https://bbuchsbaum.github.io/manifoldalign/reference/ssma_align_control.md).
+
+- constraints:
+
+  Optional list of
+  [`linear_correspondence()`](https://bbuchsbaum.github.io/manifoldalign/reference/linear_correspondence.md)
+  and
+  [`linear_penalty()`](https://bbuchsbaum.github.io/manifoldalign/reference/linear_penalty.md)
+  objects in processed feature coordinates. These extend the quadratic
+  objective without altering the observation graph or its normalization.
+  Inspect `constraint_diagnostics` for residuals and loss from rank
+  truncation. Returned `compression_bases` compose reduced coefficients
+  back to processed input features; NULL entries denote identity maps.

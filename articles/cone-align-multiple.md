@@ -14,6 +14,7 @@ This vignette demonstrates the workflow on the shared
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(multivarious)
@@ -25,6 +26,7 @@ library(ggplot2)
 ## Loading the Benchmark Domains
 
 ``` r
+
 alignment_benchmark <- manifoldalign::alignment_benchmark
 multi_domains <- lapply(alignment_benchmark$domains, function(dom) {
   multidesign::multidesign(dom$x, dom$design)
@@ -39,6 +41,7 @@ hd_multi <- multidesign::hyperdesign(multi_domains)
 ## Running `cone_align_multiple`
 
 ``` r
+
 cone_multi <- cone_align_multiple(
   hd_multi,
   ref_idx = 1,
@@ -71,6 +74,7 @@ pairs share the same latent class—again, labels were not used during
 optimisation and serve purely as a diagnostic.
 
 ``` r
+
 assignments <- cone_multi$assignment
 ref_labels <- multi_domains[[1]]$design$condition
 
@@ -94,6 +98,7 @@ accuracy_tbl
 ## Visualising All Domains
 
 ``` r
+
 # As with the pairwise vignette, class labels are only used for evaluation and
 # plotting; `cone_align_multiple()` itself is unsupervised.
 

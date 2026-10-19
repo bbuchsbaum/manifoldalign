@@ -190,6 +190,7 @@ Key features:
 
 The algorithm minimizes the objective
 
+
     F = sum_i ||A_i^T Lambda_i A_i - diag(A_i^T Lambda_i A_i)||_F^2 +
         mu_c sum_{i<j} ||F_i^T U_i A_i - F_j^T U_j A_j||_F^2
 

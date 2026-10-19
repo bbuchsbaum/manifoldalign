@@ -29,12 +29,12 @@ kema(
   kernel = coskern(),
   sample_frac = 1,
   use_laplacian = TRUE,
-  solver = "regression",
+  solver = "exact",
   backend = "auto",
   backend_control = NULL,
   dweight = 0.1,
   rweight = 0,
-  simfun = neighborweights::binary_label_matrix,
+  simfun = adjoin::binary_label_matrix,
   disfun = NULL,
   lambda = 1e-04,
   centre_kernel = FALSE,
@@ -53,12 +53,12 @@ kema(
   kernel = NULL,
   sample_frac = 1,
   use_laplacian = TRUE,
-  solver = "regression",
+  solver = "exact",
   backend = "auto",
   backend_control = NULL,
   dweight = 0.1,
   rweight = 0,
-  simfun = neighborweights::binary_label_matrix,
+  simfun = adjoin::binary_label_matrix,
   disfun = NULL,
   lambda = 1e-04,
   centre_kernel = FALSE,
@@ -82,7 +82,7 @@ kema(data, ...)
 
 - ...:
 
-  Additional arguments (currently unused)
+  No additional arguments are accepted; unknown arguments error.
 
 - subject:
 
@@ -119,47 +119,41 @@ kema(data, ...)
 
 - use_laplacian:
 
-  Deprecated compatibility argument; ignored.
+  Withdrawn compatibility argument. Supplying it now errors because
+  previous releases silently ignored it.
 
 - solver:
 
-  Deprecated compatibility argument; accepted values are
-  \`"regression"\` and \`"exact"\`, but both currently route to the
-  original KEMA solver.
+  Eigensolver contract. Only \`"exact"\` is supported. The former
+  \`"regression"\` value never selected a distinct implementation and is
+  now rejected.
 
 - backend:
 
   Backend for the original eigensolver. One of \`"auto"\`,
-  \`"full_exact"\`, \`"reduced_exact"\`, or \`"operator_exact"\`.
+  \`"full_exact"\`, \`"reduced_exact"\`, or \`"operator_exact"\`. The
+  legacy \`"operator_exact"\` name requests the certified partial
+  quotient solver, with a certified dense fallback for small quotients;
+  the quotient matrices are currently materialized.
 
 - backend_control:
 
   Optional list controlling auto backend thresholds and fidelity checks
   (passed through to \`kema_orig()\`).
 
-- dweight:
+- dweight, rweight, simfun, disfun:
 
-  Deprecated compatibility argument; ignored.
-
-- rweight:
-
-  Deprecated compatibility argument; ignored.
-
-- simfun:
-
-  Deprecated compatibility argument; ignored.
-
-- disfun:
-
-  Deprecated compatibility argument; ignored.
+  Withdrawn compatibility arguments. Supplying any of them errors
+  because they were previously ignored.
 
 - lambda:
 
-  Regularization parameter for matrix conditioning (default: 0.0001)
+  Strictly positive Tikhonov regularization for the generalized metric
+  (default: 0.0001).
 
 - centre_kernel:
 
-  Deprecated compatibility argument; ignored.
+  Withdrawn compatibility argument. Supplying it errors.
 
 ## Value
 
@@ -186,10 +180,11 @@ representation that preserves both the intrinsic geometry of each domain
 and the class structure across domains. It supports semi-supervised
 learning with missing labels (NA values).
 
-Current behavior routes \`kema()\` to a paper-faithful implementation
-(\`kema_orig\`) of the original Tuia & Camps-Valls generalized
-eigenproblems. Legacy extension arguments are still accepted for
-compatibility.
+\`kema()\` is the sole supported public entry point for the original
+Tuia & Camps-Valls generalized eigenproblems. Every returned fit must
+pass explicit generalized-eigen residual and B-orthogonality gates. The
+duplicate \`kema_orig()\` entry point is deprecated, and formerly
+ignored extension controls are rejected.
 
 KEMA solves the original paper objective: \$\$K(L+\mu L_s)K\Lambda =
 \lambda K L_d K\Lambda\$\$ and its reduced-rank REKEMA counterpart when
@@ -200,8 +195,8 @@ and solves the original generalized eigenproblems from Tuia &
 Camps-Valls (2016), including the reduced-rank REKEMA form when
 \`sample_frac \< 1\`.
 
-Legacy extension arguments remain in the API for backward compatibility
-but are ignored by the current implementation.
+Legacy extension arguments remain temporarily in the function signature
+so callers receive an actionable error. They are not silently ignored.
 
 ## References
 
@@ -254,18 +249,15 @@ hd <- hyperdesign(list(domain1 = md1, domain2 = md2))
 
 # Run KEMA with default settings
 result <- kema(hd, y = labels, ncomp = 2, knn = 3)
-#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=1, max_B_orth_offdiag=5.63e-11
 
 # Semi-supervised learning with missing labels
 design1$labels[1:4] <- NA  # Mark a few samples as unlabeled
 md1_semi <- multidesign(X1, design1)
 hd_semi <- hyperdesign(list(domain1 = md1_semi, domain2 = md2))
 result_semi <- kema(hd_semi, y = labels, ncomp = 2)
-#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=1, max_B_orth_offdiag=6.7e-11
 
 # Use exact solver for highest accuracy
 result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)
-#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.0252, max_B_orth_offdiag=1.15e-10
 
 # Use REKEMA for large datasets
 result_rekema <- kema(hd, y = labels, sample_frac = 0.5, ncomp = 2)
@@ -295,13 +287,11 @@ md <- multidesign(X, data_design)
 
 # Run KEMA alignment across subjects
 result <- kema(md, y = condition, subject = subject, ncomp = 2)
-#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.00307, max_B_orth_offdiag=1.01e-12
 
 # Semi-supervised learning with missing labels
 data_design$condition[sample(nrow(data_design), 20)] <- NA
 md_semi <- multidesign(X, data_design)
 result_semi <- kema(md_semi, y = condition, subject = subject, ncomp = 2)
-#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.0353, max_B_orth_offdiag=3.61e-13
 # }
 
 # \donttest{
@@ -320,17 +310,14 @@ hd <- structure(list(domain1 = domain1, domain2 = domain2), class = "hyperdesign
 
 # Run KEMA with default settings
 result <- kema(hd, y = labels, ncomp = 2)
-#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.986, max_B_orth_offdiag=3.47e-10
 
 # Semi-supervised learning with missing labels
 hd_semi <- hd
 hd_semi$domain1$design$labels[1:10] <- NA  # Mark some samples as unlabeled
 result_semi <- kema(hd_semi, y = labels, ncomp = 2)
-#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.907, max_B_orth_offdiag=5.75e-10
 
 # Use exact solver for highest accuracy
 result_exact <- kema(hd, y = labels, solver = "exact", ncomp = 2)
-#> Warning: KEMA fidelity checks failed for backend 'full_exact': max_rel_residual=0.986, max_B_orth_offdiag=3.47e-10
 
 # Use REKEMA for large datasets
 result_rekema <- kema(hd, y = labels, sample_frac = 0.5, ncomp = 2)

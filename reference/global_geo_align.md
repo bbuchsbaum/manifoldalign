@@ -57,7 +57,11 @@ global_geo_align(data, ...)
 
 - feature_correspondence:
 
-  Optional list specifying spatial anchor basis settings
+  Optional list specifying spatial anchor basis settings. Its
+  \`smoothness\` entry builds an undirected-union kNN graph of the
+  anchors. Anchors with no neighbor within \`3 \* sigma\` receive zero
+  smoothness penalty; the fitted object reports this policy and the
+  number of such isolates.
 
 - preproc:
 
@@ -74,6 +78,15 @@ global_geo_align(data, ...)
 ## Value
 
 A \`multiblock_biprojector\` object with subclass \`global_geo_align\`.
+
+## Lifecycle
+
+GlobalGeo is retained as a legacy/reference method. It completed 8 of 21
+intended frozen tournament cases; disconnected landmark graphs stopped
+all six small closed-world cases and seven of nine small partial-overlap
+cases. Partial-overlap support is therefore withdrawn until a
+connected-component policy passes the frozen suite. Failures are
+explicit rather than silently scored.
 
 ## Examples
 

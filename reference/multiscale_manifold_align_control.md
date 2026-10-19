@@ -28,6 +28,15 @@ multiscale_manifold_align_control(
   shift_invert_delta = 0.001,
   cg_tol = 1e-06,
   cg_max_iter = 500L,
+  scale_selection = c("energy", "supervised", "hybrid"),
+  supervision_weight = 0.5,
+  min_scale_weight = 0.05,
+  max_basis_per_scale = 32L,
+  regularization = 1e-06,
+  tune = FALSE,
+  candidate_cross_edge_weight = NULL,
+  candidate_rank_per_domain = NULL,
+  candidate_max_levels = NULL,
   seed = 1L,
   verbose = FALSE
 )
@@ -123,6 +132,50 @@ multiscale_manifold_align_control(
 - cg_max_iter:
 
   Integer maximum iterations for iterative solves.
+
+- scale_selection:
+
+  How to weight scales when assembling the multiscale dictionary. One of
+  \`"energy"\`, \`"supervised"\`, or \`"hybrid"\`.
+
+- supervision_weight:
+
+  Weight in \`\[0, 1\]\` used when \`scale_selection = "hybrid"\`.
+
+- min_scale_weight:
+
+  Relative threshold in \`\[0, 1)\` for keeping a scale in the final
+  dictionary.
+
+- max_basis_per_scale:
+
+  Integer cap on the number of basis vectors retained from each scale
+  after compression.
+
+- regularization:
+
+  Positive ridge regularization for the final dictionary generalized
+  eigenproblem.
+
+- tune:
+
+  Logical; whether to tune \`cross_edge_weight\`, \`rank_per_domain\`,
+  and \`max_levels\` over small candidate grids before the final fit.
+
+- candidate_cross_edge_weight:
+
+  Optional numeric vector of candidate cross-edge weights used when
+  \`tune = TRUE\`.
+
+- candidate_rank_per_domain:
+
+  Optional integer vector of candidate \`rank_per_domain\` values used
+  when \`tune = TRUE\`.
+
+- candidate_max_levels:
+
+  Optional integer vector of candidate \`max_levels\` values used when
+  \`tune = TRUE\`.
 
 - seed:
 

@@ -31,6 +31,7 @@ Main functions:
 
 Integration with KEMA:
 
+
     # Generate pseudolabels
     plabs <- assign_pseudolabels(similarity_matrix, min_clusters = 20)
 
@@ -73,6 +74,6 @@ result <- assign_pseudolabels(sim_matrix, min_clusters = 5)
 table(result$labels, useNA = "always")
 #> 
 #> anchor_001       <NA> 
-#>         98          2 
+#>         99          1 
 # }
 ```

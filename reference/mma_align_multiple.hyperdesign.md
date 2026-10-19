@@ -171,8 +171,8 @@ learns a shared template (consensus centers) along with per-domain
 orthogonal transforms; supports unequal node counts naturally.
 
 The implementation reuses shared helpers in this package: -
-neighborweights::graph_weights + adjacency for graph building -
-graph_laplacian (internal) for Laplacian construction - safe_compute,
+adjoin::graph_weights + adjacency for graph building - graph_laplacian
+(internal) for Laplacian construction - safe_compute,
 compute_block_indices, feature_block_indices, new_alignment_result
 
 ## Examples

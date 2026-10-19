@@ -11,6 +11,7 @@ under a minute.
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(ggplot2)
@@ -27,6 +28,7 @@ three domains with two latent classes and moderate domain-specific
 transformations.
 
 ``` r
+
 bench <- manifoldalign::alignment_benchmark
 
 domain_list <- lapply(bench$domains, function(dom) {
@@ -85,13 +87,14 @@ alignment. Pass the label column via `y` so the algorithm can build
 within- and between-class graphs.
 
 ``` r
+
 kema_fit <- kema(
   hd,
   y = condition,
   ncomp = 2,
   knn = 3,
   sigma = 0.8,
-  solver = "regression",
+  solver = "exact",
   preproc = multivarious::pass()
 )
 ```
@@ -116,6 +119,7 @@ embedding. It is faster than KEMA on large datasets where kernel
 matrices become expensive.
 
 ``` r
+
 gpca_fit <- gpca_align(
   hd,
   y = condition,
@@ -136,6 +140,7 @@ high-dimensional data.
 If you don’t have a packaged dataset, build one from plain matrices:
 
 ``` r
+
 set.seed(42)
 X1 <- matrix(rnorm(80 * 5), 80, 5)
 X2 <- matrix(rnorm(80 * 3), 80, 3)

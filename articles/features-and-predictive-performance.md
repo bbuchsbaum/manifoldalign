@@ -1,11 +1,11 @@
 # Features, Correspondences, and Predictive Performance
 
-Suppose domain $d$ has an observed matrix
-$X_{d} \in {\mathbb{R}}^{n_{d} \times p_{d}}$. Each **row** is a sample.
-Now suppose the same rows also have external feature vectors, collected
-in a second matrix $F_{d} \in {\mathbb{R}}^{n_{d} \times q}$. Those
-row-level features might come from text embeddings, anatomy, metadata,
-or another modality entirely.
+Suppose domain $`d`$ has an observed matrix
+$`X_d \in \mathbb{R}^{n_d \times p_d}`$. Each **row** is a sample. Now
+suppose the same rows also have external feature vectors, collected in a
+second matrix $`F_d \in \mathbb{R}^{n_d \times q}`$. Those row-level
+features might come from text embeddings, anatomy, metadata, or another
+modality entirely.
 
 That distinction matters:
 
@@ -32,6 +32,7 @@ features** are similar?
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(Matrix)
@@ -46,6 +47,7 @@ Those feature vectors are attached to the **rows** of each dataset and
 are only used for correspondence construction and evaluation.
 
 ``` r
+
 set.seed(20260420)
 n <- 72
 latent_dim <- 3
@@ -90,6 +92,7 @@ The observed matrices go into a `hyperdesign`. The feature matrices stay
 outside the fit.
 
 ``` r
+
 hd <- hyperdesign(list(
   a = multidesign(observed$a, data.frame(row_id = seq_len(n))),
   b = multidesign(observed$b, data.frame(row_id = seq_len(n))),
@@ -145,6 +148,7 @@ Nonzero entry `(i, j)` means: row `i` in domain `a` should be treated as
 semantically close to row `j` in domain `b`.
 
 ``` r
+
 W_ab <- feature_correspondence_matrix(
   features_true$a,
   features_true$b,
@@ -180,6 +184,7 @@ but the geometry is the same: a sparse **row-by-row** correspondence
 matrix.
 
 ``` r
+
 corr_full <- feature_correspondences(
   features_true,
   top_k = 3,
@@ -218,6 +223,7 @@ correspondences on the training rows only, fit SSMA, then project the
 held-out rows into the aligned space.
 
 ``` r
+
 fold1 <- multidesign::cv_rows(hd, rows = list(list(a = 1:8)))[[1]]
 analysis <- fold1$analysis
 assessment <- fold1$assessment
@@ -259,6 +265,7 @@ retrieve their nearest neighbours in the training rows of domains `b`
 and `c`, and score those matches in the external feature space.
 
 ``` r
+
 query_scores <- oos_predict(fit, assessment$a$x, side = "a")
 score_blocks <- score_row_blocks(analysis)
 
@@ -334,6 +341,7 @@ correspondence table must be rebuilt inside `fit_fn()` from the training
 rows only, so held-out rows never leak into the fit.
 
 ``` r
+
 rows <- list(
   list(a = 1:6),
   list(b = 7:12),
@@ -415,6 +423,7 @@ for scoring. If the metric is meaningful, held-out agreement should
 drop.
 
 ``` r
+
 set.seed(20260421)
 features_shuffled <- lapply(features_true, function(F) {
   F[sample(seq_len(nrow(F))), , drop = FALSE]

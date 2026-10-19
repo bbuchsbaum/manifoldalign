@@ -40,6 +40,6 @@ print(model)
 #> Final sigma_P: 3.162278
 #> Alpha_p: 0.100
 #> Convergence: SUCCESS
-#> Iterations: 2
+#> Iterations: 225
 # }
 ```

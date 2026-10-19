@@ -12,6 +12,7 @@ package.
 ## Setup
 
 ``` r
+
 library(manifoldalign)
 library(multidesign)
 library(multivarious)
@@ -27,6 +28,7 @@ contains 80 nodes, a 4-dimensional feature matrix, and a `design` data
 frame with the latent class label (`condition`).
 
 ``` r
+
 alignment_benchmark <- manifoldalign::alignment_benchmark
 pair_domains <- alignment_benchmark$domains[1:2]
 
@@ -43,6 +45,7 @@ hd_pair <- multidesign::hyperdesign(pair_multidesign)
 ## Running `cone_align`
 
 ``` r
+
 cone_fit <- cone_align(
   hd_pair,
   ncomp = 8,
@@ -75,6 +78,7 @@ a diagnostic to see how often the unsupervised alignment preserves the
 original classes.
 
 ``` r
+
 assignment <- cone_fit$assignment
 ref_labels <- pair_multidesign[[1]]$design$condition
 cmp_labels <- pair_multidesign[[2]]$design$condition
@@ -100,6 +104,7 @@ visualise the first two components and draw a handful of matching pairs
 to illustrate the assignments.
 
 ``` r
+
 # Note: class labels are only used for visual diagnostics below; `cone_align`
 # operates in a completely unsupervised manner and does not see `condition`.
 
