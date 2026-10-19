@@ -12,21 +12,8 @@
 }
 
 .real_sha256_file <- function(path) {
-  sha256sum <- Sys.which("sha256sum")
-  shasum <- Sys.which("shasum")
-  if (nzchar(sha256sum)) {
-    output <- system2(sha256sum, path, stdout = TRUE, stderr = TRUE)
-  } else if (nzchar(shasum)) {
-    output <- system2(
-      shasum, c("-a", "256", path), stdout = TRUE, stderr = TRUE
-    )
-  } else {
-    stop("A `sha256sum` or `shasum` executable is required.", call. = FALSE)
-  }
-  if (!length(output)) {
-    stop("SHA-256 command returned no output for ", path, ".", call. = FALSE)
-  }
-  tolower(strsplit(output[[1L]], "[[:space:]]+")[[1L]][[1L]])
+  # Hash the exact file bytes without shell quoting or escaped-filename output.
+  digest::digest(file = path, algo = "sha256", serialize = FALSE)
 }
 
 real_alignment_benchmark_registry <- function() {

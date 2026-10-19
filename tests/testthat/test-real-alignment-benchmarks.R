@@ -247,3 +247,17 @@ test_that("dataset and algorithm failures remain distinguishable", {
   expect_identical(algorithm$failure_class, "algorithm")
   expect_true(is.na(ok$failure_class))
 })
+
+
+test_that("file SHA-256 preserves exact bytes with portable paths", {
+  path <- file.path(tempdir(), "benchmark 'quoted' file.csv")
+  on.exit(unlink(path), add = TRUE)
+  hash <- manifoldalign:::.real_sha256_file
+  writeBin(charToRaw("abc"), path)
+  expected <- "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  expect_identical(hash(path), expected)
+  writeBin(charToRaw("abc\r\n"), path)
+  expect_false(identical(hash(path), expected))
+  unlink(path)
+  expect_error(hash(path))
+})

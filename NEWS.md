@@ -1,5 +1,8 @@
 # Development validation repairs
 
+- Preserve LF bytes in frozen text evidence on Windows and use native R
+  file hashing; exact checksum and byte-count checks remain enforced.
+
 - Remove redundant multiscale dictionary coordinates before its eigensolve,
   preserving the node kernel and coefficient ridge penalty; the method remains
   deprecated. Generate website files separately from tracked evidence.

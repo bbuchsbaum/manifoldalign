@@ -2,6 +2,7 @@
 ^\.Rproj\.user$
 ^\.git$
 ^\.gitignore$
+^\.gitattributes$
 ^\.github$
 ^\.DS_Store$
 ^\.omc$
