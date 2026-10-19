@@ -74,3 +74,4 @@ repomix-output.txt
 # Test strategy docs (not test code)
 tests/TESTING_GUIDE.md
 tests/testthat/COUPLED_DIAG_MATH_TESTS.md
+.albersdown.bak/
