@@ -1,4 +1,5 @@
 url: https://bbuchsbaum.github.io/manifoldalign/
+destination: _site
 template:
   bootstrap: 5
   package: albersdown

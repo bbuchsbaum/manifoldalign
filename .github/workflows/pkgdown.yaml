@@ -49,4 +49,4 @@ jobs:
         with:
           clean: false
           branch: gh-pages
-          folder: docs
+          folder: _site

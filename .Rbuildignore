@@ -12,6 +12,7 @@
 # pkgdown
 ^_pkgdown\.yml$
 ^docs$
+^_site$
 
 # Development directories
 ^experimental$
