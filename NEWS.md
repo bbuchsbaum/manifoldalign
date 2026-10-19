@@ -128,8 +128,13 @@ These fix defects found in a package review; several change fitted output.
   densifying; orthogonal maps stay orthogonal; the diffusion directedness rule
   changed, which alters default embeddings; outputs keep row names. Benchmark
   and validation runners no longer leak held-out labels and use shared metric
-  definitions; the evidence documents carry notes on which numbers need
-  regeneration.
+  definitions. The validation, ablation, matching and scaling evidence in
+  `docs/rapid-ma-*.md` has been regenerated with the frozen runners: the
+  headline accuracy claims hold, while the misleading-structure safety
+  result (now below the target-only baseline), the attribute and propagation
+  ablation effects, the small-n memory comparison with LeMA, and the
+  sparse-baseline runtime crossover do not and are corrected there. The
+  Chikusei blocked-inductive and million-node evidence was not rerun.
 * **`cv_alignment_rows()`**: targets are scored with the same projection as
   queries; folds are matched by name or position.
 * **Pseudolabelling**: greedy selection is farthest-first; the large-n path
