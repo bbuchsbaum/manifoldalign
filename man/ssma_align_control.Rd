@@ -23,7 +23,10 @@ ssma_align_control(
   verbose = FALSE,
   serial_control = ssma_serial_control(),
   compression = c("svd", "none"),
-  auto_correspondences = TRUE
+  auto_correspondences = TRUE,
+  normalization = c("global", "domain_scores"),
+  domain_tol = 1e-06,
+  domain_maxiter = 5000L
 )
 }
 \arguments{
@@ -76,6 +79,17 @@ In the latter mode rank_per_domain and svd_tol are inactive.}
 \item{auto_correspondences}{Whether to discover label/MNN links when no
 positive explicit sample links remain. Set FALSE for feature-constraint-only
 alignment or an explicitly unlinked sample graph.}
+
+\item{normalization}{\code{"global"} retains the generalized eigenproblem.
+\code{"domain_scores"} instead requires each processed-domain score Gram matrix
+to equal the identity. This prevents domain amplitude collapse but does not
+itself establish useful alignment. Uses a nonconvex product-Stiefel solver
+with \code{solver="auto"} or \code{"reduced"}; operator mode is unsupported.}
+
+\item{domain_tol}{Relative tangent-gradient tolerance for domain_scores.}
+
+\item{domain_maxiter}{Maximum domain_scores optimizer iterations. Failure to
+converge is an error; no unconverged embedding is returned.}
 }
 \value{
 A list of class \code{ssma_align_control}.
