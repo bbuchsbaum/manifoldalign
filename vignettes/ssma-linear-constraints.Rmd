@@ -142,3 +142,48 @@ feature spaces, null penalties, truncation, confidence splitting, contradictions
 and permutation/rotation invariants. Fitted domains can be transformed using their
 own learned projections. This extension does not create a new-domain adaptation
 protocol; any use of an unlabeled target during fitting must be declared.
+
+## Preventing domain amplitude collapse
+
+The usual generalized eigenproblem normalizes scores jointly. It does not
+require each domain to contribute to every dimension: a direction may be almost
+entirely supplied by one domain. Increasing correspondence strengths cannot
+exclude that feasible solution.
+
+The optional `ssma_align_control(normalization = "domain_scores")` instead
+minimizes the same graph-plus-constraint quadratic subject to
+
+\[
+W_i^\top X_i^\top X_i W_i=I_q \quad\text{for every domain }i.
+\]
+
+Here `X_i` denotes the processed data in the retained compression coordinates.
+The solver whitens each score Gram matrix and optimizes on a product of Stiefel
+manifolds with positive-diagonal Householder QR retractions, projected gradients, safeguarded spectral
+steps and monotone Armijo descent. Numerical score-null directions (relative
+Gram eigenvalue at most `1e-10`) are fixed to zero: optimization is restricted
+to the retained score-metric range. At least `ncomp` independent score directions
+are required in every domain. No ridge is used to manufacture score variance.
+
+Use preprocessing appropriate to the scientific estimand. The constraint is an
+uncentered score Gram identity; it is a covariance constraint only for centered
+processed data. Different sample counts are allowed, with equal **total** score
+energy per domain rather than equal per-observation variance.
+
+This is an experimental nonconvex alternative to the global eigenproblem, not
+post-hoc normalization of its answer. `solver="operator"` is rejected. The
+optimizer errors if `domain_tol` is not reached within `domain_maxiter`; increase
+the computational budget explicitly rather than treating a stopped iterate as
+a converged fit. Inspect `fit$domain_diagnostics` for tangent-gradient norm,
+monotone objective history, score-Gram error and retained score ranks.
+`generalized_eigenvalues` is `NULL` because this fit is not a generalized
+eigendecomposition. The stationary point has no global-optimum guarantee, and a
+common orthogonal rotation of all domains remains unidentified.
+
+Equal score energy is imposed by construction. It does not show that
+correspondences are correct, that within-domain geometry is preserved in full,
+or that transfer to a held-out domain succeeds. Qualify those properties with
+independent correspondences, negative controls and application-specific
+held-out evaluation. Keep feature-map composition unchanged: covariance-pattern
+features still require `C P W`, rather than interpreting projection weights
+`P W` as activation patterns.

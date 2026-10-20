@@ -165,3 +165,20 @@ MIT
 ## Albers theme
 This package uses the albersdown theme. Existing vignette theme hooks are replaced so `albers.css` and local `albers.js` render consistently on CRAN and GitHub Pages. The palette family is provided via `params$family` (default 'red'). The pkgdown site uses `template: { package: albersdown }`.
 <!-- albersdown:theme-note:end -->
+
+
+### Experimental per-domain SSMA normalization
+
+`ssma_align_control(normalization = "domain_scores")` replaces the single global
+normalization with `crossprod(scores_i) = I` for **each** processed domain. It
+uses the same graph and linear-constraint quadratic, solved on a product of
+Stiefel manifolds. It can prevent one domain from supplying almost all score
+energy; equal energy is an imposed constraint, not evidence of meaningful
+alignment. The reduced solver checks rank, monotone descent, tangent-gradient
+convergence and score normalization, and errors on failure. This is a nonconvex
+stationary-point method, with no global optimum guarantee. The default remains
+`normalization = "global"`. Eigenvalues are unavailable in domain mode; inspect
+`fit$domain_diagnostics` and correspondence residuals instead. Normalization is
+on uncentered processed score Grams: use appropriate preprocessing when centered
+covariance is intended. This option does not preserve all within-domain geometry
+or supply an unseen-domain encoder.
