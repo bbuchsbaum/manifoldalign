@@ -419,7 +419,7 @@ ci_contract:
       known_gaps: [exact_oracle_missing, adversarial_coverage_missing, approximation_budget_missing]
     - method: ssma_align
       families: [contract, oracle, invariant, metamorphic, adversarial, regression, approximation]
-      pr_files: [tests/testthat/test-ssma-align.R, tests/testthat/test-ssma-linear-constraints.R]
+      pr_files: [tests/testthat/test-ssma-align.R, tests/testthat/test-ssma-linear-constraints.R, tests/testthat/test-ssma-domain-normalization.R]
       nightly_files: []
       mandatory_tests: ["tests/testthat/test-ssma-align.R::ssma_align operator solver matches reduced-solver subspace on same fixture", "tests/testthat/test-ssma-linear-constraints.R::linear constraint quadratic and operator match an independent outer-product oracle", "tests/testthat/test-ssma-linear-constraints.R::SSMA constrained eigenproblem matches a tiny independently assembled oracle", "tests/testthat/test-ssma-linear-constraints.R::SSMA constrained dense and operator solvers agree on unequal domains", "tests/testthat/test-ssma-linear-constraints.R::SSMA base eigen fallback returns the smallest spectrum before truncation"]
       release_evidence: [docs/evidence/alignment-tournament-v2/raw_results.csv]

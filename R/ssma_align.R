@@ -119,6 +119,14 @@ resolve_ssma_serial_control <- function(serial_control = NULL) {
 #' @param operator_maxiter Maximum ARPACK iterations for operator eigensolve.
 #' @param operator_power_iter Number of power-iterations used to estimate
 #'   operator spectral scale.
+#' @param normalization `"global"` retains the generalized eigenproblem.
+#'   `"domain_scores"` instead requires each processed-domain score Gram matrix
+#'   to equal the identity. This prevents domain amplitude collapse but does not
+#'   itself establish useful alignment. Uses a nonconvex product-Stiefel solver
+#'   with `solver="auto"` or `"reduced"`; operator mode is unsupported.
+#' @param domain_tol Relative tangent-gradient tolerance for domain_scores.
+#' @param domain_maxiter Maximum domain_scores optimizer iterations. Failure to
+#'   converge is an error; no unconverged embedding is returned.
 #' @param seed Integer random seed used in correspondence sampling.
 #' @param verbose Logical progress toggle.
 #' @param serial_control Serial-correlation handling settings from
@@ -146,9 +154,16 @@ ssma_align_control <- function(
   verbose = FALSE,
   serial_control = ssma_serial_control(),
   compression = c("svd", "none"),
-  auto_correspondences = TRUE
+  auto_correspondences = TRUE,
+  normalization = c("global", "domain_scores"),
+  domain_tol = 1e-6,
+  domain_maxiter = 5000L
 ) {
+  normalization <- match.arg(normalization)
+  if (!is.numeric(domain_tol) || length(domain_tol) != 1L || !is.finite(domain_tol) || domain_tol <= 0) stop("domain_tol must be a positive finite scalar.", call. = FALSE)
+  if (!is.numeric(domain_maxiter) || length(domain_maxiter) != 1L || !is.finite(domain_maxiter) || domain_maxiter < 1 || domain_maxiter > .Machine$integer.max || domain_maxiter != as.integer(domain_maxiter)) stop("domain_maxiter must be a positive integer.", call. = FALSE)
   solver <- match.arg(solver)
+  if (normalization == "domain_scores" && solver == "operator") stop("domain_scores normalization does not support solver='operator'.", call. = FALSE)
   compression <- match.arg(compression)
   if (!is.logical(auto_correspondences) || length(auto_correspondences) != 1L || is.na(auto_correspondences)) {
     stop("`auto_correspondences` must be TRUE or FALSE.", call. = FALSE)
@@ -217,6 +232,9 @@ ssma_align_control <- function(
       eig_tol = as.numeric(eig_tol),
       regularization = as.numeric(regularization),
       solver = solver,
+      normalization = normalization,
+      domain_tol = domain_tol,
+      domain_maxiter = as.integer(domain_maxiter),
       operator_tol = as.numeric(operator_tol),
       operator_maxiter = as.integer(operator_maxiter),
       operator_power_iter = as.integer(operator_power_iter),
@@ -1128,7 +1146,9 @@ ssma_align.hyperdesign <- function(
     constraints = constraints
   )
 
-  solved <- if (solver_used == "reduced") {
+  solved <- if (ctrl$normalization == "domain_scores") {
+    .ssma_solve_domain_scores(reduced, as.integer(ncomp), ctrl$domain_tol, ctrl$domain_maxiter)
+  } else if (solver_used == "reduced") {
     .ssma_solve_reduced_geigen(
       A_r = reduced$A_r,
       B_r = reduced$B_r,
@@ -1193,7 +1213,9 @@ ssma_align.hyperdesign <- function(
       domain_names = domain_names,
       solver = solver_used,
       control = ctrl,
-      regularization_applied = solved$ridge
+      regularization_applied = solved$ridge,
+      normalization = ctrl$normalization,
+      domain_diagnostics = solved$domain_diagnostics
     )
   )
 }
