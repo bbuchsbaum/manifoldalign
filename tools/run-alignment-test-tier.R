@@ -56,7 +56,7 @@ missing_mandatory_rows <- function(detail, contract, tier) {
       observed <- detail$method == method &
         detail$file == parts$path &
         detail$test == parts$test
-      if (!any(observed)) {
+      if (!any(observed, na.rm = TRUE)) {
         rows[[length(rows) + 1L]] <- data.frame(
           tier = tier,
           method = method,
@@ -225,5 +225,7 @@ main <- function() {
   if (any(detail$severity == "critical")) 1L else 0L
 }
 
-status <- main()
-quit(save = "no", status = status, runLast = FALSE)
+if (sys.nframe() == 0L) {
+  status <- main()
+  quit(save = "no", status = status, runLast = FALSE)
+}

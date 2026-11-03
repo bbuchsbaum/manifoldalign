@@ -50,8 +50,9 @@ correspondences.}
 
 \item{svd_tol}{Relative singular-value tolerance used in compression.}
 
-\item{eig_tol}{Non-negative threshold for filtering trivial generalized
-eigenvalues.}
+\item{eig_tol}{Non-negative relative tolerance for materially negative
+generalized eigenvalues. Zero-cost directions are retained; there is no
+implicit constant-mode deflation.}
 
 \item{regularization}{Positive ridge regularizer added to reduced \code{B} matrix
 before whitening.}
@@ -84,9 +85,12 @@ alignment or an explicitly unlinked sample graph.}
 \code{"domain_scores"} instead requires each processed-domain score Gram matrix
 to equal the identity. This prevents domain amplitude collapse but does not
 itself establish useful alignment. Uses a nonconvex product-Stiefel solver
-with \code{solver="auto"} or \code{"reduced"}; operator mode is unsupported.}
+with \code{solver="auto"} or \code{"reduced"}; operator mode is unsupported.
+Stationarity is not a guarantee of a global optimum or useful alignment.}
 
-\item{domain_tol}{Relative tangent-gradient tolerance for domain_scores.}
+\item{domain_tol}{Relative tangent-gradient tolerance for domain_scores,
+after removing feasible-set constants and normalizing the remaining cost.
+Full-rank blocks also receive exact conditional orientation checks.}
 
 \item{domain_maxiter}{Maximum domain_scores optimizer iterations. Failure to
 converge is an error; no unconverged embedding is returned.}

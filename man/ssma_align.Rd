@@ -18,6 +18,7 @@ ssma_align(data, ...)
   ncomp = 20L,
   control = ssma_align_control(),
   constraints = NULL,
+  within_graphs = NULL,
   ...
 )
 
@@ -30,6 +31,7 @@ ssma_align(data, ...)
   ncomp = 20L,
   control = ssma_align_control(),
   constraints = NULL,
+  within_graphs = NULL,
   ...
 )
 
@@ -44,7 +46,10 @@ ssma_align(data, ...)
 when explicit \code{correspondences} are not provided.}
 
 \item{correspondences}{Optional data.frame with columns
-\verb{domain_i,index_i,domain_j,index_j[,weight]}.}
+\verb{domain_i,index_i,domain_j,index_j[,weight]}.
+Indices must be finite positive in-range integers connecting different
+domains. Invalid indices and nonfinite or negative weights are errors;
+zero-weight links are omitted.}
 
 \item{serial_index}{Optional serial/time index specification used for
 within-domain graph decontamination. Can be:
@@ -66,6 +71,17 @@ the quadratic objective without altering the observation graph or its
 normalization. Inspect \code{constraint_diagnostics} for residuals and loss from
 rank truncation. Returned \code{compression_bases} compose reduced coefficients
 back to processed input features; NULL entries denote identity maps.}
+
+\item{within_graphs}{Optional list of symmetric, nonnegative, finite sample
+adjacency matrices with zero diagonals, one per domain. Sparse matrices are
+preserved. Named lists are matched by domain name; unnamed lists use domain
+order. Any matrix dimnames must match the corresponding data row names in
+order. Supplied graphs bypass feature-derived kNN construction; \code{knn} and
+\code{sigma} do not construct or reweight them. Floating symmetry differences up
+to relative 1e-12 are averaged. Serial adjustments must be disabled and
+\code{serial_index} must be NULL: encode those decisions in the supplied graphs.
+Isolated nodes are allowed and reported. The existing reduced/operator
+solvers, normalization, correspondences and constraints are unchanged.}
 }
 \description{
 Baseline SSMA implementation based on Wang et al. feature-level manifold

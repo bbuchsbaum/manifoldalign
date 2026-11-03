@@ -37,20 +37,14 @@
 #' @keywords internal
 safe_compute <- function(expr, error_msg, warning_fn = NULL) {
   tryCatch(
-    expr,
-    error = function(e) {
-      stop(error_msg, " Original error: ", e$message, call. = FALSE)
-    },
-    warning = function(w) {
+    withCallingHandlers(expr, warning = function(w) {
       if (!is.null(warning_fn)) {
         warning_fn(w)
-      } else {
-        warning(w)
+        tryInvokeRestart("muffleWarning")
       }
-      restart <- findRestart("muffleWarning")
-      if (!is.null(restart)) {
-        invokeRestart(restart)
-      }
+    }),
+    error = function(e) {
+      stop(error_msg, " Original error: ", e$message, call. = FALSE)
     }
   )
 }

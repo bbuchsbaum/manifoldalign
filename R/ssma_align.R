@@ -110,8 +110,9 @@ resolve_ssma_serial_control <- function(serial_control = NULL) {
 #'   In the latter mode rank_per_domain and svd_tol are inactive.
 #' @param rank_per_domain Integer rank cap for per-domain compression basis.
 #' @param svd_tol Relative singular-value tolerance used in compression.
-#' @param eig_tol Non-negative threshold for filtering trivial generalized
-#'   eigenvalues.
+#' @param eig_tol Non-negative relative tolerance for materially negative
+#'   generalized eigenvalues. Zero-cost directions are retained; there is no
+#'   implicit constant-mode deflation.
 #' @param regularization Positive ridge regularizer added to reduced `B` matrix
 #'   before whitening.
 #' @param solver One of `"auto"`, `"reduced"`, or `"operator"`.
@@ -124,7 +125,10 @@ resolve_ssma_serial_control <- function(serial_control = NULL) {
 #'   to equal the identity. This prevents domain amplitude collapse but does not
 #'   itself establish useful alignment. Uses a nonconvex product-Stiefel solver
 #'   with `solver="auto"` or `"reduced"`; operator mode is unsupported.
-#' @param domain_tol Relative tangent-gradient tolerance for domain_scores.
+#'   Stationarity is not a guarantee of a global optimum or useful alignment.
+#' @param domain_tol Relative tangent-gradient tolerance for domain_scores,
+#'   after removing feasible-set constants and normalizing the remaining cost.
+#'   Full-rank blocks also receive exact conditional orientation checks.
 #' @param domain_maxiter Maximum domain_scores optimizer iterations. Failure to
 #'   converge is an error; no unconverged embedding is returned.
 #' @param seed Integer random seed used in correspondence sampling.
@@ -318,8 +322,8 @@ resolve_ssma_align_control <- function(control = NULL) {
         n_take <- min(length(idx_i), length(idx_j), as.integer(max_pairs_per_label))
         if (n_take < 1L) next
 
-        ii <- sample(idx_i, size = n_take, replace = FALSE)
-        jj <- sample(idx_j, size = n_take, replace = FALSE)
+        ii <- idx_i[sample.int(length(idx_i), size = n_take)]
+        jj <- idx_j[sample.int(length(idx_j), size = n_take)]
 
         ptr <- ptr + 1L
         rows[[ptr]] <- data.frame(
@@ -421,29 +425,31 @@ resolve_ssma_align_control <- function(control = NULL) {
     stop("`correspondences` must be a data.frame with columns domain_i,index_i,domain_j,index_j.", call. = FALSE)
   }
 
+  # Validate before integer conversion: malformed links must not silently
+  # change sample identity or trigger automatic correspondence replacement.
+  for (name in req) {
+    x <- corr[[name]]
+    if (!is.numeric(x) || any(!is.finite(x)) ||
+        any(x != floor(x)) || any(x < 1 | x > .Machine$integer.max)) {
+      stop("Correspondence indices must be finite positive integers: ", name, ".", call. = FALSE)
+    }
+  }
   out <- corr
-  out$domain_i <- as.integer(out$domain_i)
-  out$domain_j <- as.integer(out$domain_j)
-  out$index_i <- as.integer(out$index_i)
-  out$index_j <- as.integer(out$index_j)
-  out$weight <- if ("weight" %in% names(out)) as.numeric(out$weight) else rep(default_weight, nrow(out))
-  if (!("source" %in% names(out))) out$source <- "provided"
-
+  for (name in req) out[[name]] <- as.integer(out[[name]])
   m <- length(domain_sizes)
-  keep <- is.finite(out$weight) & out$weight > 0 &
-    out$domain_i >= 1L & out$domain_i <= m &
-    out$domain_j >= 1L & out$domain_j <= m &
-    out$domain_i != out$domain_j
-
-  out <- out[keep, , drop = FALSE]
-  if (!nrow(out)) return(out)
-
-  valid_idx <- vapply(seq_len(nrow(out)), function(r) {
-    out$index_i[r] >= 1L && out$index_i[r] <= domain_sizes[out$domain_i[r]] &&
-      out$index_j[r] >= 1L && out$index_j[r] <= domain_sizes[out$domain_j[r]]
-  }, logical(1))
-
-  out[valid_idx, , drop = FALSE]
+  if (any(out$domain_i > m | out$domain_j > m | out$domain_i == out$domain_j)) {
+    stop("Correspondence domain indices must be in range and refer to different domains.", call. = FALSE)
+  }
+  if (any(out$index_i > domain_sizes[out$domain_i] |
+          out$index_j > domain_sizes[out$domain_j])) {
+    stop("Correspondence sample indices must be in range for their domains.", call. = FALSE)
+  }
+  out$weight <- if ("weight" %in% names(out)) out$weight else rep(default_weight, nrow(out))
+  if (!is.numeric(out$weight) || any(!is.finite(out$weight)) || any(out$weight < 0)) {
+    stop("Correspondence weights must be finite and non-negative.", call. = FALSE)
+  }
+  if (!("source" %in% names(out))) out$source <- "provided"
+  out[out$weight > 0, , drop = FALSE]
 }
 
 .ssma_build_joint_laplacian <- function(within_graphs, correspondences, domain_sizes) {
@@ -603,6 +609,54 @@ resolve_ssma_align_control <- function(control = NULL) {
       masked_fraction = if (total_edges > 0) as.numeric(masked_edges / total_edges) else 0
     )
   )
+}
+
+# Resolve caller-supplied sample graphs before any reduced-system assembly.
+.ssma_resolve_within_graphs <- function(graphs, domains, domain_names) {
+  if (!is.list(graphs) || length(graphs) != length(domains)) {
+    stop("`within_graphs` must be a list with one adjacency matrix per domain.", call. = FALSE)
+  }
+  if (!is.null(names(graphs))) {
+    if (anyNA(names(graphs)) || any(!nzchar(names(graphs))) ||
+        anyDuplicated(names(graphs)) || !setequal(names(graphs), domain_names)) {
+      stop("Named `within_graphs` must match the data domain names exactly.", call. = FALSE)
+    }
+    graphs <- graphs[domain_names]
+  }
+  lapply(seq_along(domains), function(i) {
+    A <- graphs[[i]]
+    n <- nrow(domains[[i]]$x)
+    if (!(is.matrix(A) || inherits(A, "Matrix")) ||
+        !identical(as.integer(dim(A)), c(n, n))) {
+      stop("within_graphs adjacency size mismatch in domain ", domain_names[i], ".", call. = FALSE)
+    }
+    if (is.matrix(A) && !(is.numeric(A) || is.logical(A))) {
+      stop("within_graphs adjacency must be numeric in domain ", domain_names[i], ".", call. = FALSE)
+    }
+    dn <- dimnames(A)
+    if (!is.null(dn[[1]]) || !is.null(dn[[2]])) {
+      expected <- rownames(domains[[i]]$x)
+      if (is.null(expected) || !identical(dn[[1]], expected) ||
+          !identical(dn[[2]], expected)) {
+        stop("within_graphs row/column names must match data row order in domain ", domain_names[i], ".", call. = FALSE)
+      }
+    }
+    A <- methods::as(Matrix::Matrix(A, sparse = TRUE), "dMatrix")
+    if (any(!is.finite(A@x)) || any(A@x < 0)) {
+      stop("within_graphs weights must be finite and nonnegative in domain ", domain_names[i], ".", call. = FALSE)
+    }
+    if (any(Matrix::diag(A) != 0)) {
+      stop("within_graphs adjacency must have a zero diagonal in domain ", domain_names[i], ".", call. = FALSE)
+    }
+    delta <- A - Matrix::t(A)
+    scale <- if (length(A@x)) max(1, max(abs(A@x))) else 1
+    if (length(delta@x) && max(abs(delta@x)) > 1e-12 * scale) {
+      stop("within_graphs adjacency must be symmetric in domain ", domain_names[i], ".", call. = FALSE)
+    }
+    A <- Matrix::drop0(methods::as((A + Matrix::t(A)) / 2, "CsparseMatrix"))
+    list(A = A, degree = as.numeric(Matrix::rowSums(A)),
+         serial = list(enabled = FALSE, source = "provided"))
+  })
 }
 
 .ssma_build_within_graph <- function(X, knn, sigma = NULL, serial_idx = NULL, serial_ctrl = ssma_serial_control()) {
@@ -776,6 +830,59 @@ resolve_ssma_align_control <- function(control = NULL) {
   )
 }
 
+.ssma_eigenpair_indices <- function(values, ncomp, eig_tol, spectral_scale,
+                                    score_energy = NULL,
+                                    score_tol = sqrt(.Machine$double.eps)) {
+  if (!length(values) || any(!is.finite(values))) {
+    stop("SSMA eigensolver returned nonfinite or empty eigenvalues.", call. = FALSE)
+  }
+  if (any(values < -eig_tol * spectral_scale)) {
+    stop("SSMA generalized eigenproblem has materially negative eigenvalues; inspect the objective or eigensolver tolerance.", call. = FALSE)
+  }
+  admissible <- seq_along(values)
+  if (!is.null(score_energy)) {
+    if (length(score_energy) != length(values) || any(!is.finite(score_energy))) {
+      stop("SSMA score-energy diagnostics do not match the eigenpairs.", call. = FALSE)
+    }
+    # Eigenvectors are normalized against the ridge-regularized B. Directions
+    # admitted only by the ridge (feature-null or zero-degree directions) have
+    # no unregularized score energy and must not displace usable embeddings.
+    admissible <- which(score_energy > score_tol)
+  }
+  admissible[seq_len(min(as.integer(ncomp), length(admissible)))]
+}
+
+# Restrict each domain's reduced coordinates to the range of its score-norm
+# block B_i = T_i' D_i T_i. Null directions (e.g. zero feature columns) carry
+# no sample scores; the ridge would otherwise admit them as exact zero-cost
+# eigenpairs. Returns NULL when every block is already full rank.
+.ssma_restrict_score_range <- function(reduced, tol = sqrt(.Machine$double.eps)) {
+  E <- lapply(reduced$B_blocks, function(Bi) {
+    Bi <- as.matrix(Bi); Bi <- 0.5 * (Bi + t(Bi))
+    ev <- eigen(Bi, symmetric = TRUE)
+    scale <- max(abs(ev$values), 0)
+    keep <- if (scale > 0) ev$values > tol * scale else rep(FALSE, length(ev$values))
+    if (all(keep)) NULL else ev$vectors[, keep, drop = FALSE]
+  })
+  if (all(vapply(E, is.null, logical(1)))) return(NULL)
+  E <- Map(function(e, r) if (is.null(e)) diag(r) else e, E, reduced$ranks)
+  ranks <- vapply(E, ncol, integer(1))
+  if (any(ranks < 1L)) {
+    stop("A domain has no directions with nonzero score energy; check for constant or empty features.", call. = FALSE)
+  }
+  out <- reduced
+  out$basis <- Map(function(b, e) { b$T <- b$T %*% e; b$P <- if (is.null(b$P)) e else b$P %*% e; b }, reduced$basis, E)
+  out$B_blocks <- Map(function(Bi, e) crossprod(e, as.matrix(Bi) %*% e), reduced$B_blocks, E)
+  out$ranks <- ranks
+  out$constraints <- lapply(reduced$constraints, function(term) {
+    term$maps <- lapply(seq_along(term$maps), function(j) term$maps[[j]] %*% E[[term$ids[j]]]); term
+  })
+  Eb <- as.matrix(Matrix::bdiag(E))
+  if (!is.null(reduced$A_r)) out$A_r <- crossprod(Eb, reduced$A_r %*% Eb)
+  if (!is.null(reduced$B_r)) out$B_r <- crossprod(Eb, reduced$B_r %*% Eb)
+  list(reduced = out, E = Eb)
+}
+
 .ssma_solve_reduced_geigen <- function(A_r, B_r, ncomp, eig_tol, regularization) {
   r <- nrow(A_r)
   if (r < 1L) {
@@ -819,15 +926,16 @@ resolve_ssma_align_control <- function(control = NULL) {
   vals <- vals[ord]
   vecs <- vecs[, ord, drop = FALSE]
 
-  keep <- which(is.finite(vals) & vals > eig_tol)
-  if (!length(keep)) {
-    keep <- seq_len(min(as.integer(ncomp), length(vals)))
-  }
+  # Zero-cost directions can carry exact, nonconstant alignment.
+  alpha_all <- W %*% vecs
+  energy <- colSums(alpha_all * (B_r %*% alpha_all))
+  keep <- .ssma_eigenpair_indices(vals, ncomp, eig_tol, max(rowSums(abs(S))),
+                                  score_energy = energy)
 
   k_out <- min(as.integer(ncomp), length(keep))
   keep <- keep[seq_len(k_out)]
 
-  alpha <- W %*% vecs[, keep, drop = FALSE]
+  alpha <- alpha_all[, keep, drop = FALSE]
 
   list(
     alpha = alpha,
@@ -966,7 +1074,14 @@ resolve_ssma_align_control <- function(control = NULL) {
     stop("Insufficient reduced rank for operator eigendecomposition.", call. = FALSE)
   }
 
-  if (requireNamespace("RSpectra", quietly = TRUE)) {
+  if (as.integer(ncomp) + 5L >= r_total - 1L) {
+    # RSpectra cannot return r - 1 or more pairs; materialize the small operator.
+    S_dense <- as.matrix(S_op(diag(r_total)))
+    eig <- eigen(0.5 * (S_dense + t(S_dense)), symmetric = TRUE)
+    smallest <- order(eig$values)[seq_len(min(as.integer(ncomp) + 5L, r_total))]
+    vals <- as.numeric(eig$values[smallest])
+    vecs <- as.matrix(eig$vectors[, smallest, drop = FALSE])
+  } else if (requireNamespace("RSpectra", quietly = TRUE)) {
     eig <- RSpectra::eigs_sym(
       shifted_op,
       k = k_req,
@@ -984,16 +1099,19 @@ resolve_ssma_align_control <- function(control = NULL) {
   vals <- vals[ord]
   vecs <- vecs[, ord, drop = FALSE]
 
-  keep <- which(is.finite(vals) & vals > eig_tol)
-  if (!length(keep)) {
-    keep <- seq_len(min(as.integer(ncomp), length(vals)))
-  }
+  # Zero-cost directions can carry exact, nonconstant alignment.
+  alpha_all <- as.matrix(apply_inv_half(vecs))
+  if (is.null(dim(alpha_all))) alpha_all <- matrix(alpha_all, ncol = ncol(vecs))
+  alpha_blocks <- .ssma_split_blocks(alpha_all, ranks)
+  energy <- Reduce(`+`, lapply(seq_along(alpha_blocks), function(i) {
+    colSums(alpha_blocks[[i]] * (as.matrix(B_blocks[[i]]) %*% alpha_blocks[[i]]))
+  }))
+  keep <- .ssma_eigenpair_indices(vals, ncomp, eig_tol, c_shift,
+                                  score_energy = energy)
   k_out <- min(as.integer(ncomp), length(keep))
   keep <- keep[seq_len(k_out)]
 
-  q <- vecs[, keep, drop = FALSE]
-  alpha <- apply_inv_half(q)
-  if (is.null(dim(alpha))) alpha <- matrix(alpha, ncol = k_out)
+  alpha <- alpha_all[, keep, drop = FALSE]
 
   list(
     alpha = as.matrix(alpha),
@@ -1021,6 +1139,9 @@ ssma_align <- function(data, ...) {
 #'   when explicit `correspondences` are not provided.
 #' @param correspondences Optional data.frame with columns
 #'   `domain_i,index_i,domain_j,index_j[,weight]`.
+#'   Indices must be finite positive in-range integers connecting different
+#'   domains. Invalid indices and nonfinite or negative weights are errors;
+#'   zero-weight links are omitted.
 #' @param serial_index Optional serial/time index specification used for
 #'   within-domain graph decontamination. Can be:
 #'   1) `NULL`, 2) a single design-column name, or 3) a list with one numeric
@@ -1029,6 +1150,16 @@ ssma_align <- function(data, ...) {
 #'   domain. Default: `multivarious::center()`.
 #' @param ncomp Number of aligned components.
 #' @param control Control settings from [ssma_align_control()].
+#' @param within_graphs Optional list of symmetric, nonnegative, finite sample
+#'   adjacency matrices with zero diagonals, one per domain. Sparse matrices are
+#'   preserved. Named lists are matched by domain name; unnamed lists use domain
+#'   order. Any matrix dimnames must match the corresponding data row names in
+#'   order. Supplied graphs bypass feature-derived kNN construction; `knn` and
+#'   `sigma` do not construct or reweight them. Floating symmetry differences up
+#'   to relative 1e-12 are averaged. Serial adjustments must be disabled and
+#'   `serial_index` must be NULL: encode those decisions in the supplied graphs.
+#'   Isolated nodes are allowed and reported. The existing reduced/operator
+#'   solvers, normalization, correspondences and constraints are unchanged.
 #' @param constraints Optional list of [linear_correspondence()] and
 #'   [linear_penalty()] objects in processed feature coordinates. These extend
 #'   the quadratic objective without altering the observation graph or its
@@ -1046,6 +1177,7 @@ ssma_align.hyperdesign <- function(
   ncomp = 20L,
   control = ssma_align_control(),
   constraints = NULL,
+  within_graphs = NULL,
   ...
 ) {
   ctrl <- resolve_ssma_align_control(control)
@@ -1074,21 +1206,26 @@ ssma_align.hyperdesign <- function(
 
   constraints <- .resolve_linear_constraints(constraints, domains, domain_names)
 
+  if (!is.null(within_graphs) &&
+      (!is.null(serial_index) || isTRUE(ctrl$serial_control$enabled))) {
+    stop("Supplied `within_graphs` cannot be combined with serial_index or enabled serial adjustments.", call. = FALSE)
+  }
   serial_idx <- .ssma_resolve_serial_indices(domains, serial_index = serial_index)
 
   if (verbose) {
     message("ssma_align: building within-domain graphs for ", n_domains, " domains")
   }
 
-  within <- lapply(seq_len(n_domains), function(i) {
-    .ssma_build_within_graph(
-      X = domains[[i]]$x,
-      knn = ctrl$knn,
-      sigma = ctrl$sigma,
-      serial_idx = serial_idx[[i]],
-      serial_ctrl = ctrl$serial_control
-    )
-  })
+  within <- if (is.null(within_graphs)) {
+    lapply(seq_len(n_domains), function(i) {
+      .ssma_build_within_graph(
+        X = domains[[i]]$x, knn = ctrl$knn, sigma = ctrl$sigma,
+        serial_idx = serial_idx[[i]], serial_ctrl = ctrl$serial_control
+      )
+    })
+  } else {
+    .ssma_resolve_within_graphs(within_graphs, domains, domain_names)
+  }
 
   domain_sizes <- vapply(domains, function(d) nrow(d$x), integer(1))
 
@@ -1146,19 +1283,22 @@ ssma_align.hyperdesign <- function(
     constraints = constraints
   )
 
+  restricted <- if (ctrl$normalization == "domain_scores") NULL else .ssma_restrict_score_range(reduced)
+  solve_reduced <- if (is.null(restricted)) reduced else restricted$reduced
+
   solved <- if (ctrl$normalization == "domain_scores") {
     .ssma_solve_domain_scores(reduced, as.integer(ncomp), ctrl$domain_tol, ctrl$domain_maxiter)
   } else if (solver_used == "reduced") {
     .ssma_solve_reduced_geigen(
-      A_r = reduced$A_r,
-      B_r = reduced$B_r,
+      A_r = solve_reduced$A_r,
+      B_r = solve_reduced$B_r,
       ncomp = as.integer(ncomp),
       eig_tol = ctrl$eig_tol,
       regularization = ctrl$regularization
     )
   } else if (solver_used == "operator") {
     .ssma_solve_operator_geigen(
-      reduced = reduced,
+      reduced = solve_reduced,
       L_joint = L_joint,
       ncomp = as.integer(ncomp),
       eig_tol = ctrl$eig_tol,
@@ -1171,6 +1311,7 @@ ssma_align.hyperdesign <- function(
   } else {
     stop("Unknown solver: ", solver_used, call. = FALSE)
   }
+  if (!is.null(restricted)) solved$alpha <- restricted$E %*% solved$alpha
 
   rank_offsets <- c(0L, cumsum(reduced$ranks))
 
@@ -1206,6 +1347,11 @@ ssma_align.hyperdesign <- function(
       generalized_eigenvalues_all = solved$eigenvalues_all,
       correspondences = corr_df,
       serial = serial_diag,
+      within_graphs_source = if (is.null(within_graphs)) "feature_knn" else "provided",
+      within_graphs_diagnostics = lapply(within, function(g) list(
+        nodes = nrow(g$A), undirected_edges = Matrix::nnzero(g$A) / 2,
+        isolated_nodes = sum(g$degree == 0),
+        hash = digest::digest(g$A, algo = "sha256"))),
       reduced_ranks = reduced$ranks,
       compression_bases = lapply(reduced$basis, `[[`, "P"),
       constraint_diagnostics = .linear_constraint_diagnostics(
@@ -1232,6 +1378,7 @@ ssma_align.list <- function(
   ncomp = 20L,
   control = ssma_align_control(),
   constraints = NULL,
+  within_graphs = NULL,
   ...
 ) {
   if (!length(data) || !all(vapply(data, function(x) is.matrix(x) || is.data.frame(x), logical(1)))) {
@@ -1252,6 +1399,7 @@ ssma_align.list <- function(
       ncomp = ncomp,
       control = control,
       constraints = constraints,
+      within_graphs = within_graphs,
       ...
     ))
   }
@@ -1266,6 +1414,7 @@ ssma_align.list <- function(
     ncomp = ncomp,
     control = control,
     constraints = constraints,
+    within_graphs = within_graphs,
     ...
   ))
 }

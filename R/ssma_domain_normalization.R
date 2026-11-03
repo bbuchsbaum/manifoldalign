@@ -1,8 +1,8 @@
 # Product-Stiefel alternative to SSMA's globally normalized eigenproblem.
 # This is a different, nonconvex objective constraint, not an eigenvector rescale.
 .ssma_retract <- function(x) {
-  # A positive-diagonal, unpivoted Householder QR is a smooth Stiefel
-  # retraction. Scaling prevents large rejected trial steps overflowing QR.
+  # Positive-diagonal, unpivoted QR is a smooth Stiefel retraction.
+  # Scaling prevents large rejected trial steps overflowing QR.
   scale <- max(abs(x))
   if (!is.finite(scale) || scale == 0) stop("Nonfinite or zero Stiefel trial.", call. = FALSE)
   z <- qr(x / scale, tol = 0, LAPACK = FALSE)
@@ -23,6 +23,27 @@
   }))
 }
 
+# Square Stiefel blocks have two disconnected orthogonal components. Their
+# diagonal quadratic is constant, so a polar update solves a block exactly,
+# allowing reflections that tangent steps cannot reach.
+.ssma_update_square_blocks <- function(Y, H, ii) {
+  updates <- 0L
+  for (j in ii) {
+    if (length(j) != ncol(Y)) next
+    other <- setdiff(seq_len(nrow(Y)), j)
+    C <- H[j, other, drop = FALSE] %*% Y[other, , drop = FALSE]
+    sv <- svd(-C)
+    candidate <- sv$u %*% t(sv$v)
+    old <- sum(Y[j, , drop = FALSE] * C)
+    new <- sum(candidate * C)
+    if (old - new > 32 * .Machine$double.eps * max(1, abs(old), abs(new))) {
+      Y[j, ] <- candidate
+      updates <- updates + 1L
+    }
+  }
+  list(Y = Y, updates = updates)
+}
+
 .ssma_solve_domain_scores <- function(reduced, ncomp, tol, maxiter) {
   q <- as.integer(ncomp)
   metric <- lapply(reduced$basis, function(b) {
@@ -37,14 +58,31 @@
   Q <- as.matrix(Matrix::bdiag(metric))
   H <- crossprod(Q, reduced$A_r %*% Q)
   H <- (H + t(H)) / 2
-  scale <- max(1, max(rowSums(abs(H))))
-  H <- H / scale
   ranks <- vapply(metric, ncol, integer(1))
   offsets <- c(0L, cumsum(ranks))
   ii <- lapply(seq_along(ranks), function(i) seq.int(offsets[i] + 1L, offsets[i + 1L]))
+
+  # Remove feasible-set constants before scaling or measuring stationarity.
+  # Their contribution remains in all reported objective values.
+  constant <- 0
+  for (j in ii) {
+    block <- H[j, j, drop = FALSE]
+    if (length(j) == q) {
+      constant <- constant + sum(diag(block))
+      H[j, j] <- 0
+    } else {
+      shift <- mean(diag(block))
+      constant <- constant + q * shift
+      diag(block) <- diag(block) - shift
+      H[j, j] <- block
+    }
+  }
+  scale <- max(rowSums(abs(H)))
+  if (!is.finite(scale)) stop("Nonfinite domain_scores objective.", call. = FALSE)
+  if (scale == 0) scale <- 1
+  H <- H / scale
   retract <- function(Y) do.call(rbind, lapply(ii, function(j) .ssma_retract(Y[j, , drop = FALSE])))
-  # Smallest unconstrained directions supply orientation only. Each domain is
-  # retracted BEFORE evaluating the constrained objective.
+  # Spectral directions supply orientation; retract before evaluating cost.
   e <- eigen(H, symmetric = TRUE)
   seed <- e$vectors[, order(e$values)[seq_len(q)], drop = FALSE]
   for (j in ii) {
@@ -60,11 +98,20 @@
   history <- f
   step <- 1
   converged <- FALSE
+  square_updates <- 0L
   for (iter in seq_len(maxiter)) {
     G <- .ssma_domain_gradient(Y, 2 * HY, ii)
     gnorm <- sqrt(sum(G^2))
     relative_gradient <- gnorm / max(1, sqrt(sum((2 * HY)^2)))
-    if (relative_gradient <= tol) { converged <- TRUE; break }
+    if (relative_gradient <= tol) {
+      candidate <- .ssma_update_square_blocks(Y, H, ii)
+      if (candidate$updates == 0L) { converged <- TRUE; break }
+      Y <- candidate$Y; HY <- H %*% Y; f <- sum(Y * HY)
+      square_updates <- square_updates + candidate$updates
+      history <- c(history, f)
+      step <- 1
+      next
+    }
     accepted <- FALSE
     for (ls in seq_len(60L)) {
       next_Y <- tryCatch(retract(Y - step * G), error = function(e) NULL)
@@ -80,14 +127,13 @@
     next_G <- .ssma_domain_gradient(next_Y, 2 * next_HY, ii)
     delta <- next_Y - Y; dg <- next_G - G
     sy <- sum(delta * dg)
-    # Safeguarded Barzilai-Borwein trial; Armijo always enforces descent.
+    # Safeguarded Barzilai-Borwein trial; Armijo enforces descent.
     step <- if (sy > 0) min(1e8, max(1e-8, sum(delta^2) / sy)) else 1
     Y <- next_Y; HY <- next_HY; f <- next_f
     history <- c(history, f)
   }
   G <- .ssma_domain_gradient(Y, 2 * HY, ii)
   relative_gradient <- sqrt(sum(G^2)) / max(1, sqrt(sum((2 * HY)^2)))
-  converged <- relative_gradient <= tol
   if (!converged) {
     stop(sprintf("domain_scores SSMA did not converge (relative tangent gradient %.3g after %d iterations).", relative_gradient, iter), call. = FALSE)
   }
@@ -100,7 +146,9 @@
   list(alpha = alpha, eigenvalues = NULL, eigenvalues_all = NULL, ridge = 0,
        domain_diagnostics = list(converged = converged, iterations = iter,
          relative_tangent_gradient = relative_gradient, score_gram_max_error = error,
-         objective = f * scale, initial_objective = initial * scale,
-         objective_history = history * scale, retained_score_ranks = ranks,
-         interpretation = "Stationary point on a product of score-normalized Stiefel manifolds; no global-optimum guarantee."))
+         objective = f * scale + constant, initial_objective = initial * scale + constant,
+         objective_history = history * scale + constant, retained_score_ranks = ranks,
+         objective_scale = scale, objective_constant = constant,
+         square_block_updates = square_updates,
+         interpretation = "Stationary point on a product of score-normalized Stiefel manifolds with full-rank block orientation checks; no global-optimum guarantee."))
 }
