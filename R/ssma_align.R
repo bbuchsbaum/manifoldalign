@@ -110,8 +110,9 @@ resolve_ssma_serial_control <- function(serial_control = NULL) {
 #'   In the latter mode rank_per_domain and svd_tol are inactive.
 #' @param rank_per_domain Integer rank cap for per-domain compression basis.
 #' @param svd_tol Relative singular-value tolerance used in compression.
-#' @param eig_tol Non-negative threshold for filtering trivial generalized
-#'   eigenvalues.
+#' @param eig_tol Non-negative relative tolerance for materially negative
+#'   generalized eigenvalues. Zero-cost directions are retained; there is no
+#'   implicit constant-mode deflation.
 #' @param regularization Positive ridge regularizer added to reduced `B` matrix
 #'   before whitening.
 #' @param solver One of `"auto"`, `"reduced"`, or `"operator"`.
@@ -124,7 +125,10 @@ resolve_ssma_serial_control <- function(serial_control = NULL) {
 #'   to equal the identity. This prevents domain amplitude collapse but does not
 #'   itself establish useful alignment. Uses a nonconvex product-Stiefel solver
 #'   with `solver="auto"` or `"reduced"`; operator mode is unsupported.
-#' @param domain_tol Relative tangent-gradient tolerance for domain_scores.
+#'   Stationarity is not a guarantee of a global optimum or useful alignment.
+#' @param domain_tol Relative tangent-gradient tolerance for domain_scores,
+#'   after removing feasible-set constants and normalizing the remaining cost.
+#'   Full-rank blocks also receive exact conditional orientation checks.
 #' @param domain_maxiter Maximum domain_scores optimizer iterations. Failure to
 #'   converge is an error; no unconverged embedding is returned.
 #' @param seed Integer random seed used in correspondence sampling.
@@ -318,8 +322,8 @@ resolve_ssma_align_control <- function(control = NULL) {
         n_take <- min(length(idx_i), length(idx_j), as.integer(max_pairs_per_label))
         if (n_take < 1L) next
 
-        ii <- sample(idx_i, size = n_take, replace = FALSE)
-        jj <- sample(idx_j, size = n_take, replace = FALSE)
+        ii <- idx_i[sample.int(length(idx_i), size = n_take)]
+        jj <- idx_j[sample.int(length(idx_j), size = n_take)]
 
         ptr <- ptr + 1L
         rows[[ptr]] <- data.frame(
@@ -421,29 +425,31 @@ resolve_ssma_align_control <- function(control = NULL) {
     stop("`correspondences` must be a data.frame with columns domain_i,index_i,domain_j,index_j.", call. = FALSE)
   }
 
+  # Validate before integer conversion: malformed links must not silently
+  # change sample identity or trigger automatic correspondence replacement.
+  for (name in req) {
+    x <- corr[[name]]
+    if (!is.numeric(x) || any(!is.finite(x)) ||
+        any(x != floor(x)) || any(x < 1 | x > .Machine$integer.max)) {
+      stop("Correspondence indices must be finite positive integers: ", name, ".", call. = FALSE)
+    }
+  }
   out <- corr
-  out$domain_i <- as.integer(out$domain_i)
-  out$domain_j <- as.integer(out$domain_j)
-  out$index_i <- as.integer(out$index_i)
-  out$index_j <- as.integer(out$index_j)
-  out$weight <- if ("weight" %in% names(out)) as.numeric(out$weight) else rep(default_weight, nrow(out))
-  if (!("source" %in% names(out))) out$source <- "provided"
-
+  for (name in req) out[[name]] <- as.integer(out[[name]])
   m <- length(domain_sizes)
-  keep <- is.finite(out$weight) & out$weight > 0 &
-    out$domain_i >= 1L & out$domain_i <= m &
-    out$domain_j >= 1L & out$domain_j <= m &
-    out$domain_i != out$domain_j
-
-  out <- out[keep, , drop = FALSE]
-  if (!nrow(out)) return(out)
-
-  valid_idx <- vapply(seq_len(nrow(out)), function(r) {
-    out$index_i[r] >= 1L && out$index_i[r] <= domain_sizes[out$domain_i[r]] &&
-      out$index_j[r] >= 1L && out$index_j[r] <= domain_sizes[out$domain_j[r]]
-  }, logical(1))
-
-  out[valid_idx, , drop = FALSE]
+  if (any(out$domain_i > m | out$domain_j > m | out$domain_i == out$domain_j)) {
+    stop("Correspondence domain indices must be in range and refer to different domains.", call. = FALSE)
+  }
+  if (any(out$index_i > domain_sizes[out$domain_i] |
+          out$index_j > domain_sizes[out$domain_j])) {
+    stop("Correspondence sample indices must be in range for their domains.", call. = FALSE)
+  }
+  out$weight <- if ("weight" %in% names(out)) out$weight else rep(default_weight, nrow(out))
+  if (!is.numeric(out$weight) || any(!is.finite(out$weight)) || any(out$weight < 0)) {
+    stop("Correspondence weights must be finite and non-negative.", call. = FALSE)
+  }
+  if (!("source" %in% names(out))) out$source <- "provided"
+  out[out$weight > 0, , drop = FALSE]
 }
 
 .ssma_build_joint_laplacian <- function(within_graphs, correspondences, domain_sizes) {
@@ -824,6 +830,16 @@ resolve_ssma_align_control <- function(control = NULL) {
   )
 }
 
+.ssma_eigenpair_indices <- function(values, ncomp, eig_tol, spectral_scale) {
+  if (!length(values) || any(!is.finite(values))) {
+    stop("SSMA eigensolver returned nonfinite or empty eigenvalues.", call. = FALSE)
+  }
+  if (any(values < -eig_tol * spectral_scale)) {
+    stop("SSMA generalized eigenproblem has materially negative eigenvalues; inspect the objective or eigensolver tolerance.", call. = FALSE)
+  }
+  seq_len(min(as.integer(ncomp), length(values)))
+}
+
 .ssma_solve_reduced_geigen <- function(A_r, B_r, ncomp, eig_tol, regularization) {
   r <- nrow(A_r)
   if (r < 1L) {
@@ -867,10 +883,8 @@ resolve_ssma_align_control <- function(control = NULL) {
   vals <- vals[ord]
   vecs <- vecs[, ord, drop = FALSE]
 
-  keep <- which(is.finite(vals) & vals > eig_tol)
-  if (!length(keep)) {
-    keep <- seq_len(min(as.integer(ncomp), length(vals)))
-  }
+  # Zero-cost directions can carry exact, nonconstant alignment.
+  keep <- .ssma_eigenpair_indices(vals, ncomp, eig_tol, max(rowSums(abs(S))))
 
   k_out <- min(as.integer(ncomp), length(keep))
   keep <- keep[seq_len(k_out)]
@@ -1032,10 +1046,8 @@ resolve_ssma_align_control <- function(control = NULL) {
   vals <- vals[ord]
   vecs <- vecs[, ord, drop = FALSE]
 
-  keep <- which(is.finite(vals) & vals > eig_tol)
-  if (!length(keep)) {
-    keep <- seq_len(min(as.integer(ncomp), length(vals)))
-  }
+  # Zero-cost directions can carry exact, nonconstant alignment.
+  keep <- .ssma_eigenpair_indices(vals, ncomp, eig_tol, c_shift)
   k_out <- min(as.integer(ncomp), length(keep))
   keep <- keep[seq_len(k_out)]
 
@@ -1069,6 +1081,9 @@ ssma_align <- function(data, ...) {
 #'   when explicit `correspondences` are not provided.
 #' @param correspondences Optional data.frame with columns
 #'   `domain_i,index_i,domain_j,index_j[,weight]`.
+#'   Indices must be finite positive in-range integers connecting different
+#'   domains. Invalid indices and nonfinite or negative weights are errors;
+#'   zero-weight links are omitted.
 #' @param serial_index Optional serial/time index specification used for
 #'   within-domain graph decontamination. Can be:
 #'   1) `NULL`, 2) a single design-column name, or 3) a list with one numeric

@@ -1,3 +1,14 @@
+# SSMA correctness repairs
+
+- Make domain-score convergence invariant to positive objective rescaling and
+  feasible-set constants; check full-rank block orientations before accepting
+  stationarity. The solver still does not promise a general global optimum.
+- Retain valid zero-cost SSMA eigenvectors, preserve singleton label identities,
+  and reject malformed explicit correspondence indices.
+- Preserve successful results after warnings; correct held-out retrieval
+  denominators and keep missing PR evidence reportable after unnamed errors.
+- See docs/SSMA_CORRECTNESS_REPAIRS.md for behavior and validation boundaries.
+
 # Development validation repairs
 
 - Match native constructor initializer lists to member declaration order,

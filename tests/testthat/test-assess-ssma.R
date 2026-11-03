@@ -73,3 +73,17 @@ test_that("assess_ssma reports subspace distance when both solvers succeed", {
   expect_true(any(is.finite(dvals)))
   expect_true(all(dvals[is.finite(dvals)] >= 0))
 })
+
+test_that("held-out retrieval retains original target IDs and the full denominator", {
+  truth <- 1:8
+  expect_equal(.ssma_evaluate_top1(truth, truth, c(4, 7)), 1)
+  pred <- truth; pred[4] <- 1
+  expect_equal(.ssma_evaluate_top1(pred, truth, c(4, 7)), .5)
+  pred[4] <- NA
+  expect_equal(.ssma_evaluate_top1(pred, truth, c(4, 7)), .5)
+  pred[4] <- 9
+  expect_equal(.ssma_evaluate_top1(pred, truth, c(4, 7)), .5)
+  pred[4] <- 4.5
+  expect_equal(.ssma_evaluate_top1(pred, truth, c(4, 7)), .5)
+  expect_true(is.na(.ssma_evaluate_top1(rep(NA_integer_, 8), truth, c(4, 7))))
+})

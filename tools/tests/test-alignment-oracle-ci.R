@@ -159,3 +159,16 @@ test_that("release status exposes checked evidence and remaining named gaps", {
       status$item == "position_gated_fusion_missing"
   ))
 })
+
+test_that("missing mandatory evidence survives unnamed test errors", {
+  env <- new.env(parent = environment())
+  sys.source(file.path(alignment_ci_root, "tools", "run-alignment-test-tier.R"), env)
+  contract <- read_ci_contract()
+  detail <- data.frame(tier = "pr", method = "ssma_align", file = "tests/testthat/test-ssma-align.R",
+                       test = NA_character_, status = "error", severity = "critical", mandatory = FALSE,
+                       failed = 0L, errors = 1L, warnings = 0L, skipped = 0L, passed = 0L, duration_sec = 0)
+  missing <- env$missing_mandatory_rows(detail, contract, "pr")
+  expect_gt(nrow(missing), 0)
+  expect_true(all(missing$status == "missing"))
+  expect_true(all(missing$severity == "critical"))
+})
