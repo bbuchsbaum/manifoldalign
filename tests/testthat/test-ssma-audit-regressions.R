@@ -80,6 +80,31 @@ test_that("global SSMA retains exact nonconstant zero-cost correspondence modes"
   }
 })
 
+test_that("global SSMA excludes ridge-only feature-null directions before truncation", {
+  # Zero feature columns create exact zero-cost eigenpairs that are admissible
+  # only through the B ridge; they have no score energy and must not displace
+  # usable embedding directions (PR #37 review).
+  complete <- function(n) { a <- matrix(1, n, n); diag(a) <- 0; Matrix::Matrix(a, sparse = TRUE) }
+  corr <- data.frame(domain_i = 1L, index_i = 1:8, domain_j = 2L, index_j = 1:8)
+  cases <- list(one_null = cbind(1:8, 0), many_null = cbind(1:8, (1:8)^2, matrix(0, 8, 10)))
+  for (nm in names(cases)) {
+    X <- cases[[nm]]; x <- list(a = X, b = X)
+    for (solver in c("reduced", "operator")) {
+      for (q in 1:2) {
+        f <- ssma_align(x, preproc = NULL, correspondences = corr,
+              within_graphs = lapply(x, function(z) complete(nrow(z))), ncomp = q,
+              control = ssma_align_control(compression = "none", auto_correspondences = FALSE,
+                                           solver = solver, operator_tol = 1e-10))
+        s <- as.matrix(f$s)
+        expect_equal(ncol(s), q, info = paste(nm, solver, q))
+        expect_true(all(sqrt(colSums(s^2)) > 1e-6), info = paste(nm, solver, q))
+      }
+    }
+  }
+  expect_identical(.ssma_eigenpair_indices(c(0, 0, 1), 2, 1e-8, 1,
+                                           score_energy = c(1e-20, 1, 1)), 2:3)
+})
+
 test_that("singleton labels retain their true sample identity through the public API", {
   set.seed(777)
   x <- list(a = matrix(rnorm(32), 8, 4), b = matrix(rnorm(32), 8, 4))

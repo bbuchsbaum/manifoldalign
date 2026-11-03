@@ -830,14 +830,57 @@ resolve_ssma_align_control <- function(control = NULL) {
   )
 }
 
-.ssma_eigenpair_indices <- function(values, ncomp, eig_tol, spectral_scale) {
+.ssma_eigenpair_indices <- function(values, ncomp, eig_tol, spectral_scale,
+                                    score_energy = NULL,
+                                    score_tol = sqrt(.Machine$double.eps)) {
   if (!length(values) || any(!is.finite(values))) {
     stop("SSMA eigensolver returned nonfinite or empty eigenvalues.", call. = FALSE)
   }
   if (any(values < -eig_tol * spectral_scale)) {
     stop("SSMA generalized eigenproblem has materially negative eigenvalues; inspect the objective or eigensolver tolerance.", call. = FALSE)
   }
-  seq_len(min(as.integer(ncomp), length(values)))
+  admissible <- seq_along(values)
+  if (!is.null(score_energy)) {
+    if (length(score_energy) != length(values) || any(!is.finite(score_energy))) {
+      stop("SSMA score-energy diagnostics do not match the eigenpairs.", call. = FALSE)
+    }
+    # Eigenvectors are normalized against the ridge-regularized B. Directions
+    # admitted only by the ridge (feature-null or zero-degree directions) have
+    # no unregularized score energy and must not displace usable embeddings.
+    admissible <- which(score_energy > score_tol)
+  }
+  admissible[seq_len(min(as.integer(ncomp), length(admissible)))]
+}
+
+# Restrict each domain's reduced coordinates to the range of its score-norm
+# block B_i = T_i' D_i T_i. Null directions (e.g. zero feature columns) carry
+# no sample scores; the ridge would otherwise admit them as exact zero-cost
+# eigenpairs. Returns NULL when every block is already full rank.
+.ssma_restrict_score_range <- function(reduced, tol = sqrt(.Machine$double.eps)) {
+  E <- lapply(reduced$B_blocks, function(Bi) {
+    Bi <- as.matrix(Bi); Bi <- 0.5 * (Bi + t(Bi))
+    ev <- eigen(Bi, symmetric = TRUE)
+    scale <- max(abs(ev$values), 0)
+    keep <- if (scale > 0) ev$values > tol * scale else rep(FALSE, length(ev$values))
+    if (all(keep)) NULL else ev$vectors[, keep, drop = FALSE]
+  })
+  if (all(vapply(E, is.null, logical(1)))) return(NULL)
+  E <- Map(function(e, r) if (is.null(e)) diag(r) else e, E, reduced$ranks)
+  ranks <- vapply(E, ncol, integer(1))
+  if (any(ranks < 1L)) {
+    stop("A domain has no directions with nonzero score energy; check for constant or empty features.", call. = FALSE)
+  }
+  out <- reduced
+  out$basis <- Map(function(b, e) { b$T <- b$T %*% e; b$P <- if (is.null(b$P)) e else b$P %*% e; b }, reduced$basis, E)
+  out$B_blocks <- Map(function(Bi, e) crossprod(e, as.matrix(Bi) %*% e), reduced$B_blocks, E)
+  out$ranks <- ranks
+  out$constraints <- lapply(reduced$constraints, function(term) {
+    term$maps <- lapply(seq_along(term$maps), function(j) term$maps[[j]] %*% E[[term$ids[j]]]); term
+  })
+  Eb <- as.matrix(Matrix::bdiag(E))
+  if (!is.null(reduced$A_r)) out$A_r <- crossprod(Eb, reduced$A_r %*% Eb)
+  if (!is.null(reduced$B_r)) out$B_r <- crossprod(Eb, reduced$B_r %*% Eb)
+  list(reduced = out, E = Eb)
 }
 
 .ssma_solve_reduced_geigen <- function(A_r, B_r, ncomp, eig_tol, regularization) {
@@ -884,12 +927,15 @@ resolve_ssma_align_control <- function(control = NULL) {
   vecs <- vecs[, ord, drop = FALSE]
 
   # Zero-cost directions can carry exact, nonconstant alignment.
-  keep <- .ssma_eigenpair_indices(vals, ncomp, eig_tol, max(rowSums(abs(S))))
+  alpha_all <- W %*% vecs
+  energy <- colSums(alpha_all * (B_r %*% alpha_all))
+  keep <- .ssma_eigenpair_indices(vals, ncomp, eig_tol, max(rowSums(abs(S))),
+                                  score_energy = energy)
 
   k_out <- min(as.integer(ncomp), length(keep))
   keep <- keep[seq_len(k_out)]
 
-  alpha <- W %*% vecs[, keep, drop = FALSE]
+  alpha <- alpha_all[, keep, drop = FALSE]
 
   list(
     alpha = alpha,
@@ -1028,7 +1074,14 @@ resolve_ssma_align_control <- function(control = NULL) {
     stop("Insufficient reduced rank for operator eigendecomposition.", call. = FALSE)
   }
 
-  if (requireNamespace("RSpectra", quietly = TRUE)) {
+  if (as.integer(ncomp) + 5L >= r_total - 1L) {
+    # RSpectra cannot return r - 1 or more pairs; materialize the small operator.
+    S_dense <- as.matrix(S_op(diag(r_total)))
+    eig <- eigen(0.5 * (S_dense + t(S_dense)), symmetric = TRUE)
+    smallest <- order(eig$values)[seq_len(min(as.integer(ncomp) + 5L, r_total))]
+    vals <- as.numeric(eig$values[smallest])
+    vecs <- as.matrix(eig$vectors[, smallest, drop = FALSE])
+  } else if (requireNamespace("RSpectra", quietly = TRUE)) {
     eig <- RSpectra::eigs_sym(
       shifted_op,
       k = k_req,
@@ -1047,13 +1100,18 @@ resolve_ssma_align_control <- function(control = NULL) {
   vecs <- vecs[, ord, drop = FALSE]
 
   # Zero-cost directions can carry exact, nonconstant alignment.
-  keep <- .ssma_eigenpair_indices(vals, ncomp, eig_tol, c_shift)
+  alpha_all <- as.matrix(apply_inv_half(vecs))
+  if (is.null(dim(alpha_all))) alpha_all <- matrix(alpha_all, ncol = ncol(vecs))
+  alpha_blocks <- .ssma_split_blocks(alpha_all, ranks)
+  energy <- Reduce(`+`, lapply(seq_along(alpha_blocks), function(i) {
+    colSums(alpha_blocks[[i]] * (as.matrix(B_blocks[[i]]) %*% alpha_blocks[[i]]))
+  }))
+  keep <- .ssma_eigenpair_indices(vals, ncomp, eig_tol, c_shift,
+                                  score_energy = energy)
   k_out <- min(as.integer(ncomp), length(keep))
   keep <- keep[seq_len(k_out)]
 
-  q <- vecs[, keep, drop = FALSE]
-  alpha <- apply_inv_half(q)
-  if (is.null(dim(alpha))) alpha <- matrix(alpha, ncol = k_out)
+  alpha <- alpha_all[, keep, drop = FALSE]
 
   list(
     alpha = as.matrix(alpha),
@@ -1225,19 +1283,22 @@ ssma_align.hyperdesign <- function(
     constraints = constraints
   )
 
+  restricted <- if (ctrl$normalization == "domain_scores") NULL else .ssma_restrict_score_range(reduced)
+  solve_reduced <- if (is.null(restricted)) reduced else restricted$reduced
+
   solved <- if (ctrl$normalization == "domain_scores") {
     .ssma_solve_domain_scores(reduced, as.integer(ncomp), ctrl$domain_tol, ctrl$domain_maxiter)
   } else if (solver_used == "reduced") {
     .ssma_solve_reduced_geigen(
-      A_r = reduced$A_r,
-      B_r = reduced$B_r,
+      A_r = solve_reduced$A_r,
+      B_r = solve_reduced$B_r,
       ncomp = as.integer(ncomp),
       eig_tol = ctrl$eig_tol,
       regularization = ctrl$regularization
     )
   } else if (solver_used == "operator") {
     .ssma_solve_operator_geigen(
-      reduced = reduced,
+      reduced = solve_reduced,
       L_joint = L_joint,
       ncomp = as.integer(ncomp),
       eig_tol = ctrl$eig_tol,
@@ -1250,6 +1311,7 @@ ssma_align.hyperdesign <- function(
   } else {
     stop("Unknown solver: ", solver_used, call. = FALSE)
   }
+  if (!is.null(restricted)) solved$alpha <- restricted$E %*% solved$alpha
 
   rank_offsets <- c(0L, cumsum(reduced$ranks))
 

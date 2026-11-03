@@ -5,6 +5,9 @@
   stationarity. The solver still does not promise a general global optimum.
 - Retain valid zero-cost SSMA eigenvectors, preserve singleton label identities,
   and reject malformed explicit correspondence indices.
+- Restrict global SSMA eigensolves to directions with nonzero score energy,
+  so feature-null directions admitted only by the ridge no longer displace
+  usable embeddings; small operator problems use a dense eigensolve.
 - Preserve successful results after warnings; correct held-out retrieval
   denominators and keep missing PR evidence reportable after unnamed errors.
 - See docs/SSMA_CORRECTNESS_REPAIRS.md for behavior and validation boundaries.
