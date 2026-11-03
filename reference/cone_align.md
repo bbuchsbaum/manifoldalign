@@ -325,7 +325,7 @@ X2 <- matrix(rnorm(100), 50, 2)  # 50 nodes, 2 features
 
 # Run CONE-Align directly on matrices
 result <- cone_align(list(X1, X2), ncomp = 5)
-#> Converged after 6 iterations.
+#> Converged after 4 iterations.
 
 # Access results
 assignments <- result$assignment

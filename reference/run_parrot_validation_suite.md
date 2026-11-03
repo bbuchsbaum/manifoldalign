@@ -373,6 +373,6 @@ results <- run_parrot_validation_suite(output_dir = tempdir(), n_replications = 
   |                                                                            
   |======================================================================| 100%
 #> 
-#> Validation report saved to: /tmp/RtmpXrjsiy/parrot_validation_report_20261103_174049.txt 
+#> Validation report saved to: /tmp/RtmpCGesZU/parrot_validation_report_20261103_220747.txt 
 # }
 ```

@@ -72,7 +72,9 @@ ssma_align_control(
 
 - eig_tol:
 
-  Non-negative threshold for filtering trivial generalized eigenvalues.
+  Non-negative relative tolerance for materially negative generalized
+  eigenvalues. Zero-cost directions are retained; there is no implicit
+  constant-mode deflation.
 
 - regularization:
 
@@ -127,10 +129,14 @@ ssma_align_control(
   identity. This prevents domain amplitude collapse but does not itself
   establish useful alignment. Uses a nonconvex product-Stiefel solver
   with `solver="auto"` or `"reduced"`; operator mode is unsupported.
+  Stationarity is not a guarantee of a global optimum or useful
+  alignment.
 
 - domain_tol:
 
-  Relative tangent-gradient tolerance for domain_scores.
+  Relative tangent-gradient tolerance for domain_scores, after removing
+  feasible-set constants and normalizing the remaining cost. Full-rank
+  blocks also receive exact conditional orientation checks.
 
 - domain_maxiter:
 

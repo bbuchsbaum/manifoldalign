@@ -18,6 +18,7 @@ ssma_align(
   ncomp = 20L,
   control = ssma_align_control(),
   constraints = NULL,
+  within_graphs = NULL,
   ...
 )
 
@@ -31,6 +32,7 @@ ssma_align(
   ncomp = 20L,
   control = ssma_align_control(),
   constraints = NULL,
+  within_graphs = NULL,
   ...
 )
 
@@ -56,7 +58,10 @@ ssma_align(data, ...)
 - correspondences:
 
   Optional data.frame with columns
-  `domain_i,index_i,domain_j,index_j[,weight]`.
+  `domain_i,index_i,domain_j,index_j[,weight]`. Indices must be finite
+  positive in-range integers connecting different domains. Invalid
+  indices and nonfinite or negative weights are errors; zero-weight
+  links are omitted.
 
 - serial_index:
 
@@ -92,3 +97,17 @@ ssma_align(data, ...)
   Inspect `constraint_diagnostics` for residuals and loss from rank
   truncation. Returned `compression_bases` compose reduced coefficients
   back to processed input features; NULL entries denote identity maps.
+
+- within_graphs:
+
+  Optional list of symmetric, nonnegative, finite sample adjacency
+  matrices with zero diagonals, one per domain. Sparse matrices are
+  preserved. Named lists are matched by domain name; unnamed lists use
+  domain order. Any matrix dimnames must match the corresponding data
+  row names in order. Supplied graphs bypass feature-derived kNN
+  construction; `knn` and `sigma` do not construct or reweight them.
+  Floating symmetry differences up to relative 1e-12 are averaged.
+  Serial adjustments must be disabled and `serial_index` must be NULL:
+  encode those decisions in the supplied graphs. Isolated nodes are
+  allowed and reported. The existing reduced/operator solvers,
+  normalization, correspondences and constraints are unchanged.

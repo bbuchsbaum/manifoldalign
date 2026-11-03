@@ -93,7 +93,7 @@ str(mma_ref, max.level = 1)
 #> List of 15
 #>  $ v              : num [1:12, 1:8] -44.57 -54.31 -42.32 -34.32 6.87 ...
 #>  $ s              : num [1:240, 1:8] -0.736 -0.711 -0.936 -0.656 -0.74 ...
-#>  $ sdev           : num [1:8] 0.582 0.515 0.269 0.261 0.307 ...
+#>  $ sdev           : num [1:8] 0.538 0.515 0.251 0.283 0.302 ...
 #>  $ preproc        : NULL
 #>  $ block_indices  :List of 3
 #>  $ rotations      :List of 3
@@ -117,16 +117,16 @@ tibble::as_tibble(quality_ref$per_domain)
 #> # A tibble: 3 × 9
 #>   domain     n    mse mse_soft matched coverage mean_confidence converged
 #>    <int> <int>  <dbl>    <dbl>   <int>    <dbl>           <dbl> <lgl>    
-#> 1      1    80 NA      NA           NA       NA          NA     TRUE     
-#> 2      2    80  0.265   0.0117      80        1           0.486 FALSE    
-#> 3      3    80  0.168   0.0101      80        1           0.517 FALSE    
+#> 1      1    80 NA     NA            NA       NA          NA     TRUE     
+#> 2      2    80  0.265  0.0117       80        1           0.486 FALSE    
+#> 3      3    80  0.186  0.00474      80        1           0.517 FALSE    
 #> # ℹ 1 more variable: iterations <int>
 
 tibble::as_tibble(quality_ref$global)
 #> # A tibble: 1 × 6
 #>   mse_weighted mse_soft_weighted     K ref_idx mean_confidence all_converged
 #>          <dbl>             <dbl> <int>   <dbl>           <dbl> <lgl>        
-#> 1        0.216           0.00726     8       1           0.501 FALSE
+#> 1        0.225           0.00549     8       1           0.501 FALSE
 ```
 
 The per-domain diagnostics expose EM convergence, average eigensignature

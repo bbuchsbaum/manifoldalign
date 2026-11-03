@@ -73,6 +73,7 @@ alignment (`Z^T L Z f = λ Z^T D Z f`) solved in a reduced-rank space.</p>
 <span>  ncomp <span class="op">=</span> <span class="fl">20L</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="ssma_align_control.html">ssma_align_control</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  constraints <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  within_graphs <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -86,6 +87,7 @@ alignment (`Z^T L Z f = λ Z^T D Z f`) solved in a reduced-rank space.</p>
 <span>  ncomp <span class="op">=</span> <span class="fl">20L</span>,</span>
 <span>  control <span class="op">=</span> <span class="fu"><a href="ssma_align_control.html">ssma_align_control</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  constraints <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  within_graphs <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -112,7 +114,10 @@ when explicit <code>correspondences</code> are not provided.</p></dd>
 
 <dt id="arg-correspondences">correspondences<a class="anchor" aria-label="anchor" href="#arg-correspondences"></a></dt>
 <dd><p>Optional data.frame with columns
-<code>domain_i,index_i,domain_j,index_j[,weight]</code>.</p></dd>
+<code>domain_i,index_i,domain_j,index_j[,weight]</code>.
+Indices must be finite positive in-range integers connecting different
+domains. Invalid indices and nonfinite or negative weights are errors;
+zero-weight links are omitted.</p></dd>
 
 
 <dt id="arg-serial-index">serial_index<a class="anchor" aria-label="anchor" href="#arg-serial-index"></a></dt>
@@ -142,6 +147,19 @@ the quadratic objective without altering the observation graph or its
 normalization. Inspect <code>constraint_diagnostics</code> for residuals and loss from
 rank truncation. Returned <code>compression_bases</code> compose reduced coefficients
 back to processed input features; NULL entries denote identity maps.</p></dd>
+
+
+<dt id="arg-within-graphs">within_graphs<a class="anchor" aria-label="anchor" href="#arg-within-graphs"></a></dt>
+<dd><p>Optional list of symmetric, nonnegative, finite sample
+adjacency matrices with zero diagonals, one per domain. Sparse matrices are
+preserved. Named lists are matched by domain name; unnamed lists use domain
+order. Any matrix dimnames must match the corresponding data row names in
+order. Supplied graphs bypass feature-derived kNN construction; <code>knn</code> and
+<code>sigma</code> do not construct or reweight them. Floating symmetry differences up
+to relative 1e-12 are averaged. Serial adjustments must be disabled and
+<code>serial_index</code> must be NULL: encode those decisions in the supplied graphs.
+Isolated nodes are allowed and reported. The existing reduced/operator
+solvers, normalization, correspondences and constraints are unchanged.</p></dd>
 
 </dl></div>
 

@@ -125,8 +125,9 @@ correspondences.</p></dd>
 
 
 <dt id="arg-eig-tol">eig_tol<a class="anchor" aria-label="anchor" href="#arg-eig-tol"></a></dt>
-<dd><p>Non-negative threshold for filtering trivial generalized
-eigenvalues.</p></dd>
+<dd><p>Non-negative relative tolerance for materially negative
+generalized eigenvalues. Zero-cost directions are retained; there is no
+implicit constant-mode deflation.</p></dd>
 
 
 <dt id="arg-regularization">regularization<a class="anchor" aria-label="anchor" href="#arg-regularization"></a></dt>
@@ -181,11 +182,14 @@ alignment or an explicitly unlinked sample graph.</p></dd>
 <code>"domain_scores"</code> instead requires each processed-domain score Gram matrix
 to equal the identity. This prevents domain amplitude collapse but does not
 itself establish useful alignment. Uses a nonconvex product-Stiefel solver
-with <code>solver="auto"</code> or <code>"reduced"</code>; operator mode is unsupported.</p></dd>
+with <code>solver="auto"</code> or <code>"reduced"</code>; operator mode is unsupported.
+Stationarity is not a guarantee of a global optimum or useful alignment.</p></dd>
 
 
 <dt id="arg-domain-tol">domain_tol<a class="anchor" aria-label="anchor" href="#arg-domain-tol"></a></dt>
-<dd><p>Relative tangent-gradient tolerance for domain_scores.</p></dd>
+<dd><p>Relative tangent-gradient tolerance for domain_scores,
+after removing feasible-set constants and normalizing the remaining cost.
+Full-rank blocks also receive exact conditional orientation checks.</p></dd>
 
 
 <dt id="arg-domain-maxiter">domain_maxiter<a class="anchor" aria-label="anchor" href="#arg-domain-maxiter"></a></dt>

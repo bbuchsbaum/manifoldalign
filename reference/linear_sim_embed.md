@@ -176,7 +176,7 @@ result <- linear_sim_embed(X, ncomp = 3, verbose = TRUE)
 #>   sigma=1.00e+00, spread=0.0418
 #>   Early stopping: spread decreasing
 #> Selected sigma_P = 10.000000
-#> it=0001  obj=2.571296e-02  Js=2.8570e-02  Jp=7.5028e-32
+#> it=0001  obj=2.571296e-02  Js=2.8570e-02  Jp=2.5397e-31
 #> it=0021  obj=2.115490e-02  Js=2.1070e-02  Jp=2.1915e-02
 #> it=0041  obj=2.003754e-02  Js=2.0820e-02  Jp=1.2995e-02
 #> it=0061  obj=1.936702e-02  Js=1.9814e-02  Jp=1.5341e-02
