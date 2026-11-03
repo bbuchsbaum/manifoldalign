@@ -25,7 +25,10 @@ ssma_align_control(
   verbose = FALSE,
   serial_control = ssma_serial_control(),
   compression = c("svd", "none"),
-  auto_correspondences = TRUE
+  auto_correspondences = TRUE,
+  normalization = c("global", "domain_scores"),
+  domain_tol = 1e-06,
+  domain_maxiter = 5000L
 )
 ```
 
@@ -116,6 +119,23 @@ ssma_align_control(
   Whether to discover label/MNN links when no positive explicit sample
   links remain. Set FALSE for feature-constraint-only alignment or an
   explicitly unlinked sample graph.
+
+- normalization:
+
+  `"global"` retains the generalized eigenproblem. `"domain_scores"`
+  instead requires each processed-domain score Gram matrix to equal the
+  identity. This prevents domain amplitude collapse but does not itself
+  establish useful alignment. Uses a nonconvex product-Stiefel solver
+  with `solver="auto"` or `"reduced"`; operator mode is unsupported.
+
+- domain_tol:
+
+  Relative tangent-gradient tolerance for domain_scores.
+
+- domain_maxiter:
+
+  Maximum domain_scores optimizer iterations. Failure to converge is an
+  error; no unconverged embedding is returned.
 
 ## Value
 

@@ -83,10 +83,10 @@ exact_fit$fidelity[c("passed", "max_rel_residual", "max_b_orth_offdiag")]
 #> [1] TRUE
 #> 
 #> $max_rel_residual
-#> [1] 1.399623e-14
+#> [1] 1.9685e-14
 #> 
 #> $max_b_orth_offdiag
-#> [1] 3.608842e-16
+#> [1] 2.359224e-16
 ```
 
 ``` r
@@ -211,10 +211,10 @@ operator_fit$fidelity[c("passed", "eigensolver", "max_rel_residual")]
 #> [1] TRUE
 #> 
 #> $eigensolver
-#> [1] "eigencore_lobpcg_deflated"
+#> [1] "eigencore_dense_full"
 #> 
 #> $max_rel_residual
-#> [1] 3.56976e-10
+#> [1] 2.365783e-15
 ```
 
 ``` r

@@ -146,7 +146,7 @@ str(lowrank_fit, max.level = 1)
 #>   ..- attr(*, "names")= chr [1:240] "domain11" "domain12" "domain13" "domain14" ...
 #>  $ mu           : num 0.35
 #>  - attr(*, "class")= chr [1:5] "lowrank_align" "multiblock_biprojector" "multiblock_projector" "bi_projector" ...
-#>  - attr(*, ".cache")=<environment: 0x558ae43a3890>
+#>  - attr(*, ".cache")=<environment: 0x561f6ddecd10>
 lowrank_fit$sdev
 #> [1] 0.06468462 0.06468462 0.06468462
 ```
