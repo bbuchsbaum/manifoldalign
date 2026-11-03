@@ -182,3 +182,19 @@ stationary-point method, with no global optimum guarantee. The default remains
 on uncentered processed score Grams: use appropriate preprocessing when centered
 covariance is intended. This option does not preserve all within-domain geometry
 or supply an unseen-domain encoder.
+
+## Supplying sample graphs to SSMA
+
+`ssma_align(..., within_graphs = graphs)` accepts one symmetric, finite,
+nonnegative adjacency matrix with a zero diagonal per domain. This supports
+run-aware or externally qualified neighborhoods while retaining the native SSMA
+objective, normalization and solvers. Named lists match domain names; optional
+matrix dimnames must match data row order. Sparse graphs stay sparse. Supplied
+graphs bypass kNN/heat-bandwidth construction and cannot be combined with
+`serial_index` or enabled serial adjustments. Isolated nodes are allowed and
+reported in `within_graphs_diagnostics`; this does not guarantee identifiability.
+
+The default `within_graphs = NULL` preserves feature-derived graph construction.
+Caller-supplied graphs are defined on the same samples as `data`, independently
+of any feature compression. Learned graph construction belongs inside the
+permitted training/adaptation partition.
