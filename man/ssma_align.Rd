@@ -46,7 +46,10 @@ ssma_align(data, ...)
 when explicit \code{correspondences} are not provided.}
 
 \item{correspondences}{Optional data.frame with columns
-\verb{domain_i,index_i,domain_j,index_j[,weight]}.}
+\verb{domain_i,index_i,domain_j,index_j[,weight]}.
+Indices must be finite positive in-range integers connecting different
+domains. Invalid indices and nonfinite or negative weights are errors;
+zero-weight links are omitted.}
 
 \item{serial_index}{Optional serial/time index specification used for
 within-domain graph decontamination. Can be:

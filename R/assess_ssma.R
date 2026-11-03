@@ -1,3 +1,20 @@
+.ssma_evaluate_top1 <- function(pred, truth, idx = NULL) {
+  target_size <- length(truth)
+  stopifnot(length(pred) == target_size, all(is.finite(truth)),
+            all(truth == floor(truth)), all(truth >= 1 & truth <= target_size))
+  if (!is.null(idx)) {
+    stopifnot(all(is.finite(idx)), all(idx == floor(idx)),
+              all(idx >= 1 & idx <= length(truth)))
+    pred <- pred[idx]
+    truth <- truth[idx]
+  }
+  # Entirely unavailable retrieval remains NA. Partial invalid predictions
+  # count as misses rather than selectively disappearing from the denominator.
+  if (!length(truth) || all(is.na(pred))) return(NA_real_)
+  valid <- is.finite(pred) & pred == floor(pred) & pred >= 1 & pred <= target_size
+  mean(valid & !is.na(pred) & pred == truth)
+}
+
 #' Assess SSMA Alignment Quality on Synthetic Paired Domains
 #'
 #' Runs `ssma_align()` on synthetic paired-domain problems and reports diagnostics
@@ -248,17 +265,6 @@ assess_ssma <- function(
     sqrt(sum(1 - pmin(sv, 1)^2))
   }
 
-  evaluate_top1 <- function(pred, truth, idx = NULL) {
-    pred <- as.integer(pred)
-    truth <- as.integer(truth)
-    if (!is.null(idx)) {
-      pred <- pred[idx]
-      truth <- truth[idx]
-    }
-    ok <- !is.na(pred) & pred >= 1L & pred <= length(truth)
-    if (!any(ok)) return(NA_real_)
-    mean(pred[ok] == truth[ok])
-  }
 
   rows <- list()
   ptr <- 0L
@@ -435,7 +441,7 @@ assess_ssma <- function(
           E2 <- scores[n + seq_len(n), , drop = FALSE]
 
           pred_raw <- top1_from_scores(E1, E2)
-          top1_raw <- evaluate_top1(pred_raw, map12)
+          top1_raw <- .ssma_evaluate_top1(pred_raw, map12)
           topk_raw <- recall_at_k(E1, E2, map12, k = as.integer(decode_k))
           mse_raw <- mean(rowSums((E1 - E2[map12, , drop = FALSE])^2))
 
@@ -473,18 +479,18 @@ assess_ssma <- function(
             pred_pnn <- top1_from_scores(E1, E2p)
             pred_lap <- lap_assignment(E1, E2p)
 
-            top1_pnn <- evaluate_top1(pred_pnn, map12)
+            top1_pnn <- .ssma_evaluate_top1(pred_pnn, map12)
             topk_pnn <- recall_at_k(E1, E2p, map12, k = as.integer(decode_k))
-            top1_lap <- evaluate_top1(pred_lap, map12)
+            top1_lap <- .ssma_evaluate_top1(pred_lap, map12)
             mse_p <- mean(rowSums((E1 - E2p[map12, , drop = FALSE])^2))
 
             if (length(holdout_idx)) {
-              hold_raw <- evaluate_top1(pred_raw, map12, idx = holdout_idx)
-              hold_pnn <- evaluate_top1(pred_pnn, map12, idx = holdout_idx)
-              hold_lap <- evaluate_top1(pred_lap, map12, idx = holdout_idx)
+              hold_raw <- .ssma_evaluate_top1(pred_raw, map12, idx = holdout_idx)
+              hold_pnn <- .ssma_evaluate_top1(pred_pnn, map12, idx = holdout_idx)
+              hold_lap <- .ssma_evaluate_top1(pred_lap, map12, idx = holdout_idx)
             }
           } else if (length(holdout_idx)) {
-            hold_raw <- evaluate_top1(pred_raw, map12, idx = holdout_idx)
+            hold_raw <- .ssma_evaluate_top1(pred_raw, map12, idx = holdout_idx)
           }
 
           eigvals <- fit$generalized_eigenvalues
