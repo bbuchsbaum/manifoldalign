@@ -129,7 +129,11 @@ gpca_align <- function(data, ...) {
 #'   across domains. The metric is passed unchanged to [genpca::genpca()].
 #' @param ... Additional arguments passed to the method (unused).
 #'
-#' @return A multiblock_biprojector object with aligned scores, loadings, and preprocessing info
+#' @return A multiblock_biprojector object with loadings and fitted preprocessing.
+#'   The `s` field contains the original generalized PCA scores. The
+#'   `forward_scores` field contains the training blocks projected with their
+#'   own loading rows, in the same coordinates as held observations from
+#'   `multivarious::project_block(..., least_squares = FALSE)`.
 #'
 #' @examples
 #' \donttest{
@@ -617,48 +621,10 @@ gpca_align.hyperdesign <- function(
     preproc = proc,
     block_indices = feature_block_idx,
     labels = labels,
-    classes = "gpca_align",
-    block_preproc = proclist,
-    A = ret$A
+    classes = "gpca_align"
   )
   fit$forward_scores <- forward_scores
   fit
-}
-
-#' @exportS3Method multivarious::project_block
-project_block.gpca_align <- function(x, new_data, block,
-                                     least_squares = TRUE,
-                                     lambda = 1e-6, ...) {
-  nb <- length(x$block_indices)
-  if (length(block) != 1L || is.na(block) || block < 1L || block > nb) {
-    stop("Block index out of range.", call. = FALSE)
-  }
-  if (is.vector(new_data)) {
-    new_data <- matrix(new_data, nrow = 1L)
-  }
-  if (!is.matrix(new_data) && !inherits(new_data, "Matrix")) {
-    stop("`new_data` must be a matrix or Matrix object.", call. = FALSE)
-  }
-
-  ind <- x$block_indices[[block]]
-  if (ncol(new_data) != length(ind)) {
-    stop("`new_data` has an incompatible number of features for this block.", call. = FALSE)
-  }
-  ## Objects serialized before the block preprocessing field was added retain
-  ## the established multiblock projection implementation.
-  if (is.null(x$block_preproc)) {
-    return(NextMethod())
-  }
-  block_proc <- x$block_preproc[[block]]
-  transformed <- if (is.null(block_proc)) new_data else {
-    multivarious::transform(block_proc, new_data)
-  }
-  loadings <- x$v[ind, , drop = FALSE]
-  scores <- transformed %*% loadings
-  if (isTRUE(least_squares)) {
-    scores <- scores %*% multivarious:::robust_inv_vTv(loadings, lambda = lambda)
-  }
-  scores
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

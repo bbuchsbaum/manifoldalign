@@ -47,7 +47,11 @@ across domains. The metric is passed unchanged to [genpca::genpca()].}
 \item{...}{Additional arguments passed to the method (unused).}
 }
 \value{
-A multiblock_biprojector object with aligned scores, loadings, and preprocessing info
+A multiblock_biprojector object with loadings and fitted preprocessing.
+  The `s` field contains the original generalized PCA scores. The
+  `forward_scores` field contains the training blocks projected with their
+  own loading rows, in the same coordinates as held observations from
+  `multivarious::project_block(..., least_squares = FALSE)`.
 }
 \description{
 Performs GPCA alignment on multi-domain data by constructing label-based similarity

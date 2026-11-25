@@ -153,6 +153,16 @@ test_that("gpca_align forwards a block feature metric and preserves standard pro
     expect_equal(projected, trained, tolerance = 1e-8)
   }
 
+  # Cross-domain metric entries must affect the fit. Compare the subspaces,
+  # which are invariant to sign changes and rotations of the components.
+  metric <- as.matrix(Matrix::bdiag(A_blocks))
+  linked <- metric
+  linked[1, 5] <- linked[5, 1] <- 0.75
+  full_fit <- gpca_align(hd, y = lbl, ncomp = 2, A = linked,
+                         control = gpca_align_control(verbose = FALSE))
+  project_span <- function(v) tcrossprod(qr.Q(qr(v)))
+  expect_gt(norm(project_span(fit$v) - project_span(full_fit$v), "F"), 1e-5)
+
   expect_error(gpca_align(hd, y = lbl, ncomp = 2, A = A_blocks[-1]),
                "one feature metric per domain")
   expect_error(gpca_align(hd, y = lbl, ncomp = 2, A = diag(3)),
