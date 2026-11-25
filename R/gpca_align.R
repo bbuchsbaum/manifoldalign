@@ -120,6 +120,11 @@ gpca_align <- function(data, ...) {
 #' @param u Trade-off parameter between within-domain and between-domain similarity (0-1)
 #' @param lambda Ridge regularisation added to the metric matrix
 #' @param row_metric_scale Scaling applied to the assembled row metric before GPCA
+#' @param A Optional feature metric for the concatenated feature space. Supply either
+#'   one symmetric positive-semidefinite matrix with dimension equal to the sum of
+#'   feature counts across domains, or a list of one such matrix per domain. A list
+#'   is assembled block-diagonally, so it cannot introduce feature correspondences
+#'   across domains. The metric is passed unchanged to [genpca::genpca()].
 #' @param control A list created by [gpca_align_control()] that tunes sparsification,
 #'   balancing, normalisation, and memory safeguards
 #' @param ... Additional arguments passed to the method (unused).
@@ -150,6 +155,7 @@ gpca_align.hyperdesign <- function(
   u = 0.5,
   lambda = 0.1,
   row_metric_scale = 1,
+  A = NULL,
   control = gpca_align_control(),
   ...
 ) {
@@ -493,6 +499,38 @@ gpca_align.hyperdesign <- function(
   names(feature_block_idx) <- names(pdata)
   proc <- multivarious::concat_pre_processors(proclist, feature_block_idx)
 
+  ## -------------------------- feature metric --------------------------
+  ## A metric may be supplied directly in the concatenated feature coordinates,
+  ## or one metric per domain. The latter is intentionally block diagonal:
+  ## gpca_align has no implicit cross-domain feature correspondence.
+  p_total <- sum(feat_per_block)
+  if (is.list(A) && !inherits(A, "Matrix")) {
+    if (length(A) != nb) {
+      stop("When `A` is a list, it must contain one feature metric per domain.", call. = FALSE)
+    }
+    if (!is.null(names(A)) && !is.null(names(pdata)) &&
+        !identical(names(A), names(pdata))) {
+      stop("Named `A` metrics must be in the same domain order as `data`.", call. = FALSE)
+    }
+    for (i in seq_len(nb)) {
+      Ai <- A[[i]]
+      if (!is.matrix(Ai) && !inherits(Ai, "Matrix")) {
+        stop("Feature metric `A[[", i, "]]` must be a matrix or Matrix object.", call. = FALSE)
+      }
+      if (!all(dim(Ai) == feat_per_block[i])) {
+        stop("Feature metric `A[[", i, "]]` has incompatible dimensions.", call. = FALSE)
+      }
+    }
+    A <- Matrix::bdiag(A)
+  } else if (!is.null(A)) {
+    if (!is.matrix(A) && !inherits(A, "Matrix")) {
+      stop("`A` must be a matrix, a Matrix object, or a list of domain metrics.", call. = FALSE)
+    }
+    if (!all(dim(A) == p_total)) {
+      stop("`A` has incompatible dimensions for the concatenated feature space.", call. = FALSE)
+    }
+  }
+
   ## -------------------------- assemble X (block-diagonal) --------------------------
   X_block <- Matrix::bdiag(lapply(pdata, function(b) {
     if (inherits(b$x, "Matrix")) {
@@ -556,20 +594,64 @@ gpca_align.hyperdesign <- function(
   ## -------------------------- run GPCA --------------------------
   ret <- genpca::genpca(
     X_block_dense,
+    A = A,
     M = row_metric_scale * M,
     ncomp = ncomp,
     preproc = multivarious::pass()
   )
 
-  multivarious::multiblock_biprojector(
+  ## `genpca` returns its global row scores. For a block-diagonal design those
+  ## are not, in general, the score obtained by presenting one native domain to
+  ## its fitted loading block when a non-identity row metric is used. The latter
+  ## is the out-of-sample convention supplied by gpca_align, so store it for the
+  ## training rows as well. With a feature metric, `ret$v` is A %*% V and hence
+  ## is exactly the right standard (non-least-squares) forward projector.
+  forward_scores <- do.call(rbind, lapply(seq_len(nb), function(i) {
+    pdata[[i]]$x %*% ret$v[feature_block_idx[[i]], , drop = FALSE]
+  }))
+
+  fit <- multivarious::multiblock_biprojector(
     v = ret$v,
-    s = ret$s,
+    s = forward_scores,
     sdev = ret$sdev,
     preproc = proc,
     block_indices = feature_block_idx,
     labels = labels,
-    classes = "gpca_align"
+    classes = "gpca_align",
+    block_preproc = proclist,
+    A = ret$A
   )
+  fit$genpca_scores <- ret$s
+  fit
+}
+
+#' @exportS3Method multivarious::project_block
+project_block.gpca_align <- function(x, new_data, block,
+                                     least_squares = FALSE,
+                                     lambda = 1e-6, ...) {
+  nb <- length(x$block_indices)
+  if (length(block) != 1L || is.na(block) || block < 1L || block > nb) {
+    stop("Block index out of range.", call. = FALSE)
+  }
+  if (!is.matrix(new_data) && !inherits(new_data, "Matrix")) {
+    stop("`new_data` must be a matrix or Matrix object.", call. = FALSE)
+  }
+
+  ind <- x$block_indices[[block]]
+  if (ncol(new_data) != length(ind)) {
+    stop("`new_data` has an incompatible number of features for this block.", call. = FALSE)
+  }
+  block_proc <- x$block_preproc[[block]]
+  transformed <- if (is.null(block_proc)) new_data else {
+    multivarious::transform(block_proc, new_data)
+  }
+  loadings <- x$v[ind, , drop = FALSE]
+  scores <- transformed %*% loadings
+  if (isTRUE(least_squares)) {
+    scores <- scores %*% solve(crossprod(loadings) +
+      diag(lambda, ncol(loadings)))
+  }
+  scores
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

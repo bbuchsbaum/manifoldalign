@@ -126,6 +126,38 @@ test_that("gpca_align control argument customises advanced settings", {
   expect_s3_class(result_list_ctrl, "multiblock_biprojector")
 })
 
+test_that("gpca_align forwards a block feature metric and preserves standard projection", {
+  skip_if_not_installed("genpca")
+  skip_if_not_installed("PRIMME")
+
+  dat <- create_test_hyperdesign(n_per_domain = 18, n_domains = 3, n_features = 4)
+  hd <- dat$hd
+  # Each block is positive definite, non-identity, and deliberately differs.
+  A_blocks <- lapply(seq_len(3), function(i) {
+    Matrix::Diagonal(4, x = c(1, 2 + i, 4, 7)) +
+      Matrix::sparseMatrix(i = c(1, 2), j = c(2, 1), x = c(0.1, 0.1), dims = c(4, 4))
+  })
+
+  fit <- gpca_align(hd, y = lbl, ncomp = 2, A = A_blocks,
+                    control = gpca_align_control(verbose = FALSE))
+  expect_s3_class(fit, "multiblock_biprojector")
+  expect_true(all(is.finite(fit$s)))
+
+  offsets <- cumsum(c(0L, vapply(hd, function(block) nrow(block$x), integer(1))))
+  for (i in seq_along(hd)) {
+    projected <- multivarious::project_block(
+      fit, hd[[i]]$x, block = i, least_squares = FALSE
+    )
+    trained <- fit$s[(offsets[i] + 1L):offsets[i + 1L], , drop = FALSE]
+    expect_equal(projected, trained, tolerance = 1e-8)
+  }
+
+  expect_error(gpca_align(hd, y = lbl, ncomp = 2, A = A_blocks[-1]),
+               "one feature metric per domain")
+  expect_error(gpca_align(hd, y = lbl, ncomp = 2, A = diag(3)),
+               "incompatible dimensions")
+})
+
 # Test 2: Multi-domain alignment quality and cross-domain relationships
 test_that("gpca_align correctly handles cross-domain alignment", {
   skip_if_not_installed("genpca")
