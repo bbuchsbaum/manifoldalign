@@ -150,27 +150,20 @@ new_alignment_result <- function(scores,
   sdev <- if (ncol(scores) > 0) apply(scores, 2, stats::sd) else numeric(0)
 
   if (is.null(preproc)) {
-    result <- c(list(
-      v = loadings,
-      s = scores,
-      sdev = sdev,
-      preproc = NULL,
-      block_indices = feature_blocks
-    ), extras)
-    class(result) <- unique(c(subclass, "multiblock_biprojector"))
-  } else {
-    result <- multivarious::multiblock_biprojector(
-      v = loadings,
-      s = scores,
-      sdev = sdev,
-      preproc = preproc,
-      block_indices = feature_blocks
-    )
-    for (nm in names(extras)) {
-      result[[nm]] <- extras[[nm]]
-    }
-    class(result) <- unique(c(subclass, class(result)))
+    # An explicit identity preprocessor keeps partial and block projection
+    # available for inputs already transformed by the caller.
+    preproc <- multivarious::fit(multivarious::pass(), matrix(0, 1L, nrow(loadings)))
   }
-
+  result <- multivarious::multiblock_biprojector(
+    v = loadings,
+    s = scores,
+    sdev = sdev,
+    preproc = preproc,
+    block_indices = feature_blocks
+  )
+  for (nm in names(extras)) {
+    result[[nm]] <- extras[[nm]]
+  }
+  class(result) <- unique(c(subclass, class(result)))
   result
 }

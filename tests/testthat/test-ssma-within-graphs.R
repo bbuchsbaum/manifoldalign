@@ -96,3 +96,19 @@ test_that('supplied SSMA graphs reject malformed weights and serial conflicts', 
   ctrl$serial_control <- ssma_serial_control(enabled = TRUE)
   expect_error(ssma_align(x, within_graphs = g, control = ctrl), 'cannot be combined')
 })
+
+test_that("SSMA without preprocessing projects new rows in each feature block", {
+  set.seed(612)
+  x <- list(a = matrix(rnorm(60), 12, 5), b = matrix(rnorm(72), 12, 6))
+  fit <- ssma_align(x, preproc = NULL, ncomp = 2,
+                    control = ssma_align_control(knn = 3, auto_correspondences = FALSE))
+  rows <- split(seq_len(nrow(fit$s)), rep(seq_along(x), vapply(x, nrow, integer(1))))
+  for (i in seq_along(x)) {
+    new_x <- x[[i]][1:2, , drop = FALSE] + 0.4
+    w <- fit$v[fit$block_indices[[i]], , drop = FALSE]
+    expect_equal(multivarious::project_block(fit, new_x, i, least_squares = FALSE),
+                 new_x %*% w, ignore_attr = TRUE)
+    expect_equal(multivarious::project_block(fit, x[[i]], i, least_squares = FALSE),
+                 fit$s[rows[[i]], , drop = FALSE], ignore_attr = TRUE)
+  }
+})
