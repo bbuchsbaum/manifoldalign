@@ -911,11 +911,19 @@ resolve_ssma_align_control <- function(control = NULL) {
 
   k_req <- min(max(as.integer(ncomp) + 5L, as.integer(ncomp)), r)
 
+  eig <- NULL
   if (requireNamespace("RSpectra", quietly = TRUE) && k_req < (r - 1L)) {
-    eig <- RSpectra::eigs_sym(S, k = k_req, which = "SA")
+    eig <- tryCatch(RSpectra::eigs_sym(S, k = k_req, which = "SA"),
+                    error = function(e) NULL)
+  }
+  if (!is.null(eig) && length(eig$values) == k_req &&
+      identical(dim(eig$vectors), c(r, k_req)) &&
+      all(is.finite(eig$values)) && all(is.finite(eig$vectors))) {
     vals <- as.numeric(eig$values)
     vecs <- as.matrix(eig$vectors)
   } else {
+    # S is already dense. A clustered low spectrum can exhaust ARPACK's
+    # iterations, including a warning-only return with zero converged pairs.
     eig <- eigen(S, symmetric = TRUE)
     smallest <- order(eig$values)[seq_len(k_req)]
     vals <- as.numeric(eig$values[smallest])
