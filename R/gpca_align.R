@@ -120,13 +120,13 @@ gpca_align <- function(data, ...) {
 #' @param u Trade-off parameter between within-domain and between-domain similarity (0-1)
 #' @param lambda Ridge regularisation added to the metric matrix
 #' @param row_metric_scale Scaling applied to the assembled row metric before GPCA
+#' @param control A list created by [gpca_align_control()] that tunes sparsification,
+#'   balancing, normalisation, and memory safeguards
 #' @param A Optional feature metric for the concatenated feature space. Supply either
 #'   one symmetric positive-semidefinite matrix with dimension equal to the sum of
 #'   feature counts across domains, or a list of one such matrix per domain. A list
 #'   is assembled block-diagonally, so it cannot introduce feature correspondences
 #'   across domains. The metric is passed unchanged to [genpca::genpca()].
-#' @param control A list created by [gpca_align_control()] that tunes sparsification,
-#'   balancing, normalisation, and memory safeguards
 #' @param ... Additional arguments passed to the method (unused).
 #'
 #' @return A multiblock_biprojector object with aligned scores, loadings, and preprocessing info
@@ -155,8 +155,8 @@ gpca_align.hyperdesign <- function(
   u = 0.5,
   lambda = 0.1,
   row_metric_scale = 1,
-  A = NULL,
   control = gpca_align_control(),
+  A = NULL,
   ...
 ) {
   ## -------------------------- control --------------------------
@@ -600,19 +600,19 @@ gpca_align.hyperdesign <- function(
     preproc = multivarious::pass()
   )
 
-  ## `genpca` returns its global row scores. For a block-diagonal design those
+  ## `genpca` returns global row scores. For a block-diagonal design those
   ## are not, in general, the score obtained by presenting one native domain to
   ## its fitted loading block when a non-identity row metric is used. The latter
-  ## is the out-of-sample convention supplied by gpca_align, so store it for the
-  ## training rows as well. With a feature metric, `ret$v` is A %*% V and hence
-  ## is exactly the right standard (non-least-squares) forward projector.
+  ## are retained in $s for compatibility. With a feature metric, `ret$v` is
+  ## A %*% V and hence is exactly the right standard (non-least-squares) forward
+  ## projector. Expose those scores separately for held-out decoding.
   forward_scores <- do.call(rbind, lapply(seq_len(nb), function(i) {
     pdata[[i]]$x %*% ret$v[feature_block_idx[[i]], , drop = FALSE]
   }))
 
   fit <- multivarious::multiblock_biprojector(
     v = ret$v,
-    s = forward_scores,
+    s = ret$s,
     sdev = ret$sdev,
     preproc = proc,
     block_indices = feature_block_idx,
@@ -621,17 +621,20 @@ gpca_align.hyperdesign <- function(
     block_preproc = proclist,
     A = ret$A
   )
-  fit$genpca_scores <- ret$s
+  fit$forward_scores <- forward_scores
   fit
 }
 
 #' @exportS3Method multivarious::project_block
 project_block.gpca_align <- function(x, new_data, block,
-                                     least_squares = FALSE,
+                                     least_squares = TRUE,
                                      lambda = 1e-6, ...) {
   nb <- length(x$block_indices)
   if (length(block) != 1L || is.na(block) || block < 1L || block > nb) {
     stop("Block index out of range.", call. = FALSE)
+  }
+  if (is.vector(new_data)) {
+    new_data <- matrix(new_data, nrow = 1L)
   }
   if (!is.matrix(new_data) && !inherits(new_data, "Matrix")) {
     stop("`new_data` must be a matrix or Matrix object.", call. = FALSE)
@@ -641,6 +644,11 @@ project_block.gpca_align <- function(x, new_data, block,
   if (ncol(new_data) != length(ind)) {
     stop("`new_data` has an incompatible number of features for this block.", call. = FALSE)
   }
+  ## Objects serialized before the block preprocessing field was added retain
+  ## the established multiblock projection implementation.
+  if (is.null(x$block_preproc)) {
+    return(NextMethod())
+  }
   block_proc <- x$block_preproc[[block]]
   transformed <- if (is.null(block_proc)) new_data else {
     multivarious::transform(block_proc, new_data)
@@ -648,8 +656,7 @@ project_block.gpca_align <- function(x, new_data, block,
   loadings <- x$v[ind, , drop = FALSE]
   scores <- transformed %*% loadings
   if (isTRUE(least_squares)) {
-    scores <- scores %*% solve(crossprod(loadings) +
-      diag(lambda, ncol(loadings)))
+    scores <- scores %*% multivarious:::robust_inv_vTv(loadings, lambda = lambda)
   }
   scores
 }

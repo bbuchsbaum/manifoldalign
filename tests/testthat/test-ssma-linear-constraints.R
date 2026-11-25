@@ -361,3 +361,18 @@ test_that("constraints compose additively across three domains and honor process
   b <- .lc_fit(h)
   expect_equal(.lc_projector(a$s), .lc_projector(b$s), tolerance = 1e-9)
 })
+
+test_that("incomplete iterative eigenpairs retry the dense reduced problem", {
+  calls <- 0L
+  local_mocked_bindings(
+    eigs_sym = function(...) {
+      calls <<- calls + 1L
+      list(values = numeric(), vectors = matrix(numeric(), 20, 0), nconv = 0L)
+    },
+    .package = "RSpectra"
+  )
+  fit <- .ssma_solve_reduced_geigen(diag(1:20), diag(20), 3L, 1e-8, 1e-6)
+  expect_equal(calls, 1L)
+  expect_equal(fit$eigenvalues, (1:3)/(1+1e-6), tolerance=1e-12)
+  expect_equal(diag(crossprod(fit$alpha))*(1+1e-6), rep(1,3), tolerance=1e-12)
+})

@@ -142,13 +142,14 @@ test_that("gpca_align forwards a block feature metric and preserves standard pro
                     control = gpca_align_control(verbose = FALSE))
   expect_s3_class(fit, "multiblock_biprojector")
   expect_true(all(is.finite(fit$s)))
+  expect_true(all(is.finite(fit$forward_scores)))
 
   offsets <- cumsum(c(0L, vapply(hd, function(block) nrow(block$x), integer(1))))
   for (i in seq_along(hd)) {
     projected <- multivarious::project_block(
       fit, hd[[i]]$x, block = i, least_squares = FALSE
     )
-    trained <- fit$s[(offsets[i] + 1L):offsets[i + 1L], , drop = FALSE]
+    trained <- fit$forward_scores[(offsets[i] + 1L):offsets[i + 1L], , drop = FALSE]
     expect_equal(projected, trained, tolerance = 1e-8)
   }
 
@@ -156,6 +157,17 @@ test_that("gpca_align forwards a block feature metric and preserves standard pro
                "one feature metric per domain")
   expect_error(gpca_align(hd, y = lbl, ncomp = 2, A = diag(3)),
                "incompatible dimensions")
+})
+
+test_that("gpca_align keeps the positional control argument", {
+  skip_if_not_installed("genpca")
+  skip_if_not_installed("PRIMME")
+  dat <- create_test_hyperdesign(n_per_domain = 10, n_domains = 2, n_features = 3)
+  fit <- gpca_align.hyperdesign(
+    dat$hd, lbl, center(), 2, adjoin::binary_label_matrix,
+    0.5, 0.1, 1, gpca_align_control(verbose = FALSE)
+  )
+  expect_s3_class(fit, "gpca_align")
 })
 
 # Test 2: Multi-domain alignment quality and cross-domain relationships

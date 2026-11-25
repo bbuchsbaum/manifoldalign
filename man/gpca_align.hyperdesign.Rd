@@ -13,8 +13,8 @@
   u = 0.5,
   lambda = 0.1,
   row_metric_scale = 1,
-  A = NULL,
   control = gpca_align_control(),
+  A = NULL,
   ...
 )
 }
@@ -35,14 +35,14 @@
 
 \item{row_metric_scale}{Scaling applied to the assembled row metric before GPCA}
 
+\item{control}{A list created by [gpca_align_control()] that tunes sparsification,
+balancing, normalisation, and memory safeguards}
+
 \item{A}{Optional feature metric for the concatenated feature space. Supply either
 one symmetric positive-semidefinite matrix with dimension equal to the sum of
 feature counts across domains, or a list of one such matrix per domain. A list
 is assembled block-diagonally, so it cannot introduce feature correspondences
 across domains. The metric is passed unchanged to [genpca::genpca()].}
-
-\item{control}{A list created by [gpca_align_control()] that tunes sparsification,
-balancing, normalisation, and memory safeguards}
 
 \item{...}{Additional arguments passed to the method (unused).}
 }
